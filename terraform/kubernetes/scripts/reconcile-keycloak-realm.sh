@@ -31,6 +31,10 @@ require_cmd() {
   }
 }
 
+warn() {
+  echo "WARN $*" >&2
+}
+
 decode_b64() {
   if base64 --decode >/dev/null 2>&1 <<<""; then
     base64 --decode
@@ -55,6 +59,7 @@ require_cmd jq
 
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "${tmpdir}"' EXIT
+KCADM_RELOGIN_IN_PROGRESS=0
 
 realm_file="${tmpdir}/realm.json"
 kubectl -n "${KEYCLOAK_NAMESPACE}" get configmap "${KEYCLOAK_REALM_CONFIGMAP}" -o json |
@@ -84,11 +89,110 @@ secret_field() {
 }
 
 kcadm() {
-  kubectl -n "${KEYCLOAK_NAMESPACE}" exec "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@"
+  local stderr_file status retry_stderr_file retry_status restore_errexit
+
+  stderr_file="$(mktemp "${tmpdir}/kcadm.stderr.XXXXXX")"
+  restore_errexit=0
+  case "$-" in
+    *e*)
+      restore_errexit=1
+      set +e
+      ;;
+  esac
+  kubectl -n "${KEYCLOAK_NAMESPACE}" exec "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@" 2>"${stderr_file}"
+  status=$?
+  if [[ "${restore_errexit}" -eq 1 ]]; then
+    set -e
+  fi
+  if [[ "${status}" -eq 0 ]]; then
+    rm -f "${stderr_file}"
+    return 0
+  fi
+
+  if [[ "${KCADM_RELOGIN_IN_PROGRESS}" -eq 0 ]] && grep -Fq "HTTP 401" "${stderr_file}"; then
+    warn "Keycloak admin token returned HTTP 401; re-authenticating and retrying kcadm once"
+    if relogin_keycloak_admin_after_401; then
+      retry_stderr_file="$(mktemp "${tmpdir}/kcadm.retry.stderr.XXXXXX")"
+      restore_errexit=0
+      case "$-" in
+        *e*)
+          restore_errexit=1
+          set +e
+          ;;
+      esac
+      kubectl -n "${KEYCLOAK_NAMESPACE}" exec "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@" 2>"${retry_stderr_file}"
+      retry_status=$?
+      if [[ "${restore_errexit}" -eq 1 ]]; then
+        set -e
+      fi
+      if [[ "${retry_status}" -eq 0 ]]; then
+        rm -f "${stderr_file}" "${retry_stderr_file}"
+        return 0
+      fi
+      cat "${retry_stderr_file}" >&2
+      rm -f "${stderr_file}" "${retry_stderr_file}"
+      return "${retry_status}"
+    fi
+  fi
+
+  cat "${stderr_file}" >&2
+  rm -f "${stderr_file}"
+  return "${status}"
 }
 
 kcadm_stdin() {
-  kubectl -n "${KEYCLOAK_NAMESPACE}" exec -i "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@"
+  local stdin_file stderr_file status retry_stderr_file retry_status restore_errexit
+
+  stdin_file="$(mktemp "${tmpdir}/kcadm.stdin.XXXXXX")"
+  cat >"${stdin_file}"
+
+  stderr_file="$(mktemp "${tmpdir}/kcadm.stderr.XXXXXX")"
+  restore_errexit=0
+  case "$-" in
+    *e*)
+      restore_errexit=1
+      set +e
+      ;;
+  esac
+  kubectl -n "${KEYCLOAK_NAMESPACE}" exec -i "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@" <"${stdin_file}" 2>"${stderr_file}"
+  status=$?
+  if [[ "${restore_errexit}" -eq 1 ]]; then
+    set -e
+  fi
+  if [[ "${status}" -eq 0 ]]; then
+    rm -f "${stdin_file}" "${stderr_file}"
+    return 0
+  fi
+
+  if [[ "${KCADM_RELOGIN_IN_PROGRESS}" -eq 0 ]] && grep -Fq "HTTP 401" "${stderr_file}"; then
+    warn "Keycloak admin token returned HTTP 401; re-authenticating and retrying kcadm once"
+    if relogin_keycloak_admin_after_401; then
+      retry_stderr_file="$(mktemp "${tmpdir}/kcadm.retry.stderr.XXXXXX")"
+      restore_errexit=0
+      case "$-" in
+        *e*)
+          restore_errexit=1
+          set +e
+          ;;
+      esac
+      kubectl -n "${KEYCLOAK_NAMESPACE}" exec -i "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@" <"${stdin_file}" 2>"${retry_stderr_file}"
+      retry_status=$?
+      if [[ "${restore_errexit}" -eq 1 ]]; then
+        set -e
+      fi
+      if [[ "${retry_status}" -eq 0 ]]; then
+        rm -f "${stdin_file}" "${stderr_file}" "${retry_stderr_file}"
+        return 0
+      fi
+      cat "${retry_stderr_file}" >&2
+      rm -f "${stdin_file}" "${stderr_file}" "${retry_stderr_file}"
+      return "${retry_status}"
+    fi
+  fi
+
+  cat "${stderr_file}" >&2
+  rm -f "${stdin_file}" "${stderr_file}"
+  return "${status}"
 }
 
 permanent_admin_user="$(secret_field "${KEYCLOAK_PERMANENT_ADMIN_SECRET}" username)"
@@ -99,13 +203,19 @@ bootstrap_admin_password="$(secret_field "${KEYCLOAK_BOOTSTRAP_ADMIN_SECRET}" pa
 login_keycloak_admin() {
   local username="$1"
   local password="$2"
+  local previous_relogin_state status
 
   [[ -n "${username}" && -n "${password}" ]] || return 1
+  previous_relogin_state="${KCADM_RELOGIN_IN_PROGRESS}"
+  KCADM_RELOGIN_IN_PROGRESS=1
   kcadm config credentials \
     --server "${KEYCLOAK_ADMIN_SERVER}" \
     --realm master \
     --user "${username}" \
     --password "${password}" >/dev/null 2>&1
+  status=$?
+  KCADM_RELOGIN_IN_PROGRESS="${previous_relogin_state}"
+  return "${status}"
 }
 
 if login_keycloak_admin "${permanent_admin_user}" "${permanent_admin_password}"; then
@@ -124,7 +234,27 @@ login_permanent_keycloak_admin() {
   fi
 
   echo "Could not re-authenticate to Keycloak with permanent admin credentials" >&2
-  exit 1
+  return 1
+}
+
+relogin_keycloak_admin_after_401() {
+  local status
+
+  KCADM_RELOGIN_IN_PROGRESS=1
+  if login_permanent_keycloak_admin; then
+    KCADM_RELOGIN_IN_PROGRESS=0
+    return 0
+  fi
+
+  status=1
+  if [[ -n "${bootstrap_admin_user}" && -n "${bootstrap_admin_password}" ]] &&
+    login_keycloak_admin "${bootstrap_admin_user}" "${bootstrap_admin_password}"; then
+    echo "Keycloak admin re-authenticated with bootstrap admin: ${bootstrap_admin_user}"
+    status=0
+  fi
+
+  KCADM_RELOGIN_IN_PROGRESS=0
+  return "${status}"
 }
 
 group_id_for_name() {
@@ -213,21 +343,21 @@ ensure_master_admin() {
       -s "username=${username}" \
       -s "email=${email}" \
       -s "enabled=true" \
-      -s "emailVerified=true" >/dev/null
+      -s "emailVerified=true" >/dev/null || exit $?
     user_id="$(user_id_for_username_in_realm master "${username}")"
     echo "Keycloak permanent master admin created: ${username}"
   else
     kcadm update "users/${user_id}" -r master \
       -s "email=${email}" \
       -s "enabled=true" \
-      -s "emailVerified=true" >/dev/null
+      -s "emailVerified=true" >/dev/null || exit $?
     echo "Keycloak permanent master admin reconciled: ${username}"
   fi
 
-  kcadm set-password -r master --userid "${user_id}" --new-password "${password}" >/dev/null
+  kcadm set-password -r master --userid "${user_id}" --new-password "${password}" >/dev/null || exit $?
 
   if ! user_has_realm_role master "${user_id}" admin; then
-    kcadm add-roles -r master --uusername "${username}" --rolename admin >/dev/null
+    kcadm add-roles -r master --uusername "${username}" --rolename admin >/dev/null || exit $?
   fi
 }
 
@@ -242,13 +372,13 @@ delete_bootstrap_admins_from_master() {
     user_id="$(user_id_for_username_in_realm master "${username}")"
     [[ -n "${user_id}" ]] || continue
 
-    kcadm delete "users/${user_id}" -r master >/dev/null
+    kcadm delete "users/${user_id}" -r master >/dev/null || exit $?
     echo "Keycloak bootstrap admin deleted from master realm: ${username}"
   done
 }
 
 ensure_master_admin
-login_permanent_keycloak_admin
+login_permanent_keycloak_admin || exit 1
 
 ensure_client_scope() {
   local scope_json="$1"
@@ -259,12 +389,12 @@ ensure_client_scope() {
   scope_payload="$(jq -c 'del(.id)' <<<"${scope_json}")"
 
   if [[ -z "${scope_id}" ]]; then
-    printf '%s' "${scope_payload}" | kcadm_stdin create client-scopes -r "${KEYCLOAK_REALM}" -f - >/dev/null
+    printf '%s' "${scope_payload}" | kcadm_stdin create client-scopes -r "${KEYCLOAK_REALM}" -f - >/dev/null || exit $?
     echo "Keycloak client scope created: ${scope_name}"
     return 0
   fi
 
-  printf '%s' "${scope_payload}" | kcadm_stdin update "client-scopes/${scope_id}" -r "${KEYCLOAK_REALM}" -f - --merge >/dev/null
+  printf '%s' "${scope_payload}" | kcadm_stdin update "client-scopes/${scope_id}" -r "${KEYCLOAK_REALM}" -f - --merge >/dev/null || exit $?
   echo "Keycloak client scope reconciled: ${scope_name}"
 }
 
@@ -291,7 +421,7 @@ ensure_client_scope_attachment() {
     -s "realm=${KEYCLOAK_REALM}" \
     -s "client=${client_uuid}" \
     -s "clientScopeId=${scope_id}" \
-    -n >/dev/null
+    -n >/dev/null || exit $?
 }
 
 detach_client_scope_attachment() {
@@ -308,7 +438,7 @@ detach_client_scope_attachment() {
   fi
 
   kcadm delete "clients/${client_uuid}/${scope_kind}-client-scopes/${scope_id}" \
-    -r "${KEYCLOAK_REALM}" >/dev/null
+    -r "${KEYCLOAK_REALM}" >/dev/null || exit $?
   echo "Keycloak client scope detached: ${scope_kind}:${scope_name}"
 }
 
@@ -347,7 +477,7 @@ ensure_group() {
     return 0
   fi
 
-  kcadm create groups -r "${KEYCLOAK_REALM}" -s "name=${group_name}" >/dev/null
+  kcadm create groups -r "${KEYCLOAK_REALM}" -s "name=${group_name}" >/dev/null || exit $?
   echo "Keycloak group created: ${group_name}"
 }
 
@@ -374,7 +504,7 @@ ensure_group_client_role() {
   kcadm add-roles -r "${KEYCLOAK_REALM}" \
     --gid "${group_id}" \
     --cclientid "${client_id}" \
-    --rolename "${role_name}" >/dev/null
+    --rolename "${role_name}" >/dev/null || exit $?
   echo "Keycloak group client role added: ${group_name} -> ${client_id}:${role_name}"
 }
 
@@ -387,11 +517,11 @@ ensure_client() {
   client_payload="$(jq -c 'del(.id, .defaultClientScopes, .optionalClientScopes)' <<<"${client_json}")"
 
   if [[ -z "${client_uuid}" ]]; then
-    printf '%s' "${client_payload}" | kcadm_stdin create clients -r "${KEYCLOAK_REALM}" -f - >/dev/null
+    printf '%s' "${client_payload}" | kcadm_stdin create clients -r "${KEYCLOAK_REALM}" -f - >/dev/null || exit $?
     client_uuid="$(client_id_for_client_id "${client_name}")"
     echo "Keycloak client created: ${client_name}"
   else
-    printf '%s' "${client_payload}" | kcadm_stdin update "clients/${client_uuid}" -r "${KEYCLOAK_REALM}" -f - --merge >/dev/null
+    printf '%s' "${client_payload}" | kcadm_stdin update "clients/${client_uuid}" -r "${KEYCLOAK_REALM}" -f - --merge >/dev/null || exit $?
     echo "Keycloak client reconciled: ${client_name}"
   fi
 
@@ -421,11 +551,11 @@ ensure_user() {
   user_payload="$(jq -c 'del(.id, .credentials, .groups)' <<<"${user_json}")"
 
   if [[ -z "${user_id}" ]]; then
-    printf '%s' "${user_payload}" | kcadm_stdin create users -r "${KEYCLOAK_REALM}" -f - >/dev/null
+    printf '%s' "${user_payload}" | kcadm_stdin create users -r "${KEYCLOAK_REALM}" -f - >/dev/null || exit $?
     user_id="$(user_id_for_username "${username}")"
     echo "Keycloak user created: ${username}"
   else
-    printf '%s' "${user_payload}" | kcadm_stdin update "users/${user_id}" -r "${KEYCLOAK_REALM}" -f - --merge >/dev/null
+    printf '%s' "${user_payload}" | kcadm_stdin update "users/${user_id}" -r "${KEYCLOAK_REALM}" -f - --merge >/dev/null || exit $?
     echo "Keycloak user reconciled: ${username}"
   fi
 
@@ -433,9 +563,9 @@ ensure_user() {
   temporary="$(jq -r '.credentials[0].temporary // false' <<<"${user_json}")"
   if [[ -n "${password}" ]]; then
     if [[ "${temporary}" == "true" ]]; then
-      kcadm set-password -r "${KEYCLOAK_REALM}" --userid "${user_id}" --new-password "${password}" --temporary >/dev/null
+      kcadm set-password -r "${KEYCLOAK_REALM}" --userid "${user_id}" --new-password "${password}" --temporary >/dev/null || exit $?
     else
-      kcadm set-password -r "${KEYCLOAK_REALM}" --userid "${user_id}" --new-password "${password}" >/dev/null
+      kcadm set-password -r "${KEYCLOAK_REALM}" --userid "${user_id}" --new-password "${password}" >/dev/null || exit $?
     fi
   fi
 
@@ -449,7 +579,7 @@ ensure_user() {
         -s "realm=${KEYCLOAK_REALM}" \
         -s "userId=${user_id}" \
         -s "groupId=${group_id}" \
-        -n >/dev/null
+        -n >/dev/null || exit $?
     fi
   done < <(jq -r '.groups[]? // empty' <<<"${user_json}")
 }
