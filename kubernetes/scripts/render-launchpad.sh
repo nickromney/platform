@@ -73,4 +73,4 @@ if [[ ! -x "${launchpad_script}" ]]; then
   exit 1
 fi
 
-STACK_DIR="${stack_dir}" "${launchpad_script}" "${mode_flag}" "${targets[@]}"
+STACK_DIR="${stack_dir}" "${launchpad_script}" "${mode_flag}" ${targets[@]+"${targets[@]}"}

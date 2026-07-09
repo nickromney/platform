@@ -24,8 +24,10 @@ EOF
   run "${HELPER}" \
     "${source_manifest}" \
     "${rendered_manifest}" \
+    "https://dex.example.test/dex" \
     "headlamp" \
     "/etc/kubernetes/pki/mkcert-rootCA.pem" \
+    "dex.example.test" \
     "10.0.0.25"
 
   [ "${status}" -eq 0 ]
@@ -70,6 +72,7 @@ EOF
   [[ "${output}" == *"    - keycloak.example.test"* ]]
 }
 
+@test "render-kind-apiserver-oidc-manifest replaces empty existing host aliases" {
   source_manifest="${BATS_TEST_TMPDIR}/kube-apiserver.yaml"
   rendered_manifest="${BATS_TEST_TMPDIR}/kube-apiserver.rendered.yaml"
 
@@ -125,8 +128,10 @@ EOF
   run "${HELPER}" \
     "${source_manifest}" \
     "${rendered_manifest}" \
+    "https://dex.example.test/dex" \
     "headlamp" \
     "/etc/kubernetes/pki/mkcert-rootCA.pem" \
+    "dex.example.test" \
     "10.0.0.25"
 
   [ "${status}" -eq 1 ]

@@ -68,7 +68,7 @@ spec:
           logsCollection:
             enabled: true
             includeCollectorLogs: false
-            storeCheckpoints: true
+            storeCheckpoints: false
 
         resources:
           requests:

@@ -1387,7 +1387,7 @@ spec:
         image:
           registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
-          tag: 7.15.2-debian13
+          tag: 7.15.3-debian13
         config:
           existingSecret: oauth2-proxy-oidc
           cookieName: ${local.admin_sso_cookie_name}
@@ -1494,7 +1494,7 @@ spec:
         image:
           registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
-          tag: 7.15.2-debian13
+          tag: 7.15.3-debian13
         config:
           existingSecret: oauth2-proxy-oidc
           cookieName: ${local.admin_sso_cookie_name}
@@ -1601,7 +1601,7 @@ spec:
         image:
           registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
-          tag: 7.15.2-debian13
+          tag: 7.15.3-debian13
         config:
           existingSecret: oauth2-proxy-oidc
           cookieName: ${local.admin_sso_cookie_name}
@@ -1707,7 +1707,7 @@ spec:
         image:
           registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
-          tag: 7.15.2-debian13
+          tag: 7.15.3-debian13
         config:
           existingSecret: oauth2-proxy-oidc
           cookieName: ${local.admin_sso_cookie_name}
@@ -1813,7 +1813,7 @@ spec:
         image:
           registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
-          tag: 7.15.2-debian13
+          tag: 7.15.3-debian13
         config:
           existingSecret: oauth2-proxy-oidc
           cookieName: ${local.dev_sso_cookie_name}
@@ -1928,7 +1928,7 @@ spec:
         image:
           registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
-          tag: 7.15.2-debian13
+          tag: 7.15.3-debian13
         config:
           existingSecret: oauth2-proxy-oidc
           cookieName: ${local.uat_sso_cookie_name}
@@ -2043,7 +2043,7 @@ spec:
         image:
           registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
-          tag: 7.15.2-debian13
+          tag: 7.15.3-debian13
         config:
           existingSecret: oauth2-proxy-oidc
           cookieName: ${local.dev_sso_cookie_name}
@@ -2157,7 +2157,7 @@ spec:
         image:
           registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
-          tag: 7.15.2-debian13
+          tag: 7.15.3-debian13
         config:
           existingSecret: oauth2-proxy-oidc
           cookieName: ${local.uat_sso_cookie_name}
@@ -2280,7 +2280,7 @@ spec:
         image:
           registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
-          tag: 7.15.2-debian13
+          tag: 7.15.3-debian13
         config:
           existingSecret: oauth2-proxy-oidc
           cookieName: ${each.value.cookie_name}

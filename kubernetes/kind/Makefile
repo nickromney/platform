@@ -207,7 +207,7 @@ help:
 	@echo "  make check-security                           WireGuard, gateway TLS, policy enforcement, config integrity"
 	@echo "  make"
 	@echo "  make check-sso"
-	@echo "  make check-sso-e2e                            Host-side browser SSO end-to-end app checks (Playwright)"
+	@echo "  make check-sso-e2e                            Docker-backed browser SSO end-to-end app checks (Playwright)"
 	@echo "  make exercise-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=nginx-rollout]"
 	@echo "  make check-stage-monotonicity"
 	@echo "  make check-version [CHECK_VERSION_FORMAT=text|json] [CHECK_VERSION_INCLUDE_CANARY=1] [CHECK_VERSION_INCLUDE_ALPHA=1] [CHECK_VERSION_INCLUDE_PRERELEASE=1]"
@@ -1202,8 +1202,31 @@ prereqs:
 		exit 1; \
 	fi; \
 	echo ""; \
-	echo "Playwright browser cache:"; \
-	"$(ENSURE_PLAYWRIGHT_BROWSERS)" --check --execute; \
+	playwright_mode="$${PLATFORM_PLAYWRIGHT_MODE:-docker}"; \
+	case "$$playwright_mode" in \
+		native) \
+			echo "Playwright browser cache:"; \
+			"$(ENSURE_PLAYWRIGHT_BROWSERS)" --check --execute; \
+			;; \
+		docker) \
+			echo "Playwright Docker image cache:"; \
+			playwright_version="$$(sed -nE 's/^[[:space:]]*"playwright-core": \["playwright-core@([^"]+)".*/\1/p' "$(REPO_ROOT)/tests/kubernetes/sso/bun.lock" | head -n 1)"; \
+			if [ -z "$$playwright_version" ]; then \
+				echo "WARN unable to resolve playwright-core version from tests/kubernetes/sso/bun.lock"; \
+			else \
+				playwright_image="mcr.microsoft.com/playwright:v$${playwright_version}-noble"; \
+				if docker image inspect "$$playwright_image" >/dev/null 2>&1; then \
+					echo "OK   $$playwright_image cached"; \
+				else \
+					echo "WARN $$playwright_image not cached yet; preload-images-pull-only or check-sso-e2e will pull it"; \
+				fi; \
+			fi; \
+			;; \
+		*) \
+			echo "FAIL PLATFORM_PLAYWRIGHT_MODE must be native or docker, got: $$playwright_mode" >&2; \
+			exit 1; \
+			;; \
+	esac; \
 	echo ""; \
 	$(MAKE) check-conflicting-clusters-stopped; \
 	echo ""; \

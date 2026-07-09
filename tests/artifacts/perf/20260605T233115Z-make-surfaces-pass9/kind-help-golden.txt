@@ -27,7 +27,7 @@ Targets (workflow syntax above is preferred):
   make check-security                           WireGuard, gateway TLS, policy enforcement, config integrity
   make check-lima-stopped
   make check-sso
-  make check-sso-e2e                            Host-side browser SSO end-to-end app checks (Playwright)
+  make check-sso-e2e                            Docker-backed browser SSO end-to-end app checks (Playwright)
   make exercise-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=nginx-rollout]
   make check-stage-monotonicity
   make check-version [CHECK_VERSION_FORMAT=text|json] [CHECK_VERSION_INCLUDE_CANARY=1] [CHECK_VERSION_INCLUDE_ALPHA=1] [CHECK_VERSION_INCLUDE_PRERELEASE=1]

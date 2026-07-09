@@ -453,6 +453,7 @@ render_custom_overrides() {
   local key=""
   local value=""
 
+  [[ "${#CUSTOM_OVERRIDES[@]}" -gt 0 ]] || return 0
   for override in "${CUSTOM_OVERRIDES[@]}"; do
     key="${override%%=*}"
     value="${override#*=}"
@@ -505,13 +506,15 @@ warnings_json() {
   if [[ "${PRESET_RESOURCE_PROFILE}" = "airplane" || "${PRESET_IMAGE_DISTRIBUTION}" = "airplane" ]]; then
     warnings+=("Airplane mode currently prefers local cache/preload paths; strict fail-closed cache validation is still a future readiness check.")
   fi
-  for override in "${CUSTOM_OVERRIDES[@]}"; do
-    case "${override%%=*}" in
-      worker_count|node_image)
-        warnings+=("Changing ${override%%=*} may recreate or restart the cluster because it changes the stage 100 substrate boundary.")
-        ;;
-    esac
-  done
+  if [[ "${#CUSTOM_OVERRIDES[@]}" -gt 0 ]]; then
+    for override in "${CUSTOM_OVERRIDES[@]}"; do
+      case "${override%%=*}" in
+        worker_count|node_image)
+          warnings+=("Changing ${override%%=*} may recreate or restart the cluster because it changes the stage 100 substrate boundary.")
+          ;;
+      esac
+    done
+  fi
 
   if [[ "${#warnings[@]}" -eq 0 ]]; then
     printf '[]'
@@ -539,11 +542,13 @@ render_tfvars() {
   printf '# Variant: %s, stage: %s\n' "${TARGET}" "${STAGE}"
   printf '\n'
   render_preset_tfvars
-  for override in "${APP_OVERRIDES[@]}"; do
-    app="${override%%=*}"
-    value="${override#*=}"
-    render_assignment "$(app_tfvar_name "${app}")" "${value}" "custom app override"
-  done
+  if [[ "${#APP_OVERRIDES[@]}" -gt 0 ]]; then
+    for override in "${APP_OVERRIDES[@]}"; do
+      app="${override%%=*}"
+      value="${override#*=}"
+      render_assignment "$(app_tfvar_name "${app}")" "${value}" "custom app override"
+    done
+  fi
   render_custom_overrides
 }
 
@@ -699,12 +704,16 @@ build_workflow_script_args() {
   append_workflow_script_preset_arg identity-stack "${PRESET_IDENTITY_STACK}"
   append_workflow_script_preset_arg app-set "${PRESET_APP_SET}"
 
-  for override in "${CUSTOM_OVERRIDES[@]}"; do
-    WORKFLOW_SCRIPT_ARGS+=(--set "${override}")
-  done
-  for override in "${APP_OVERRIDES[@]}"; do
-    WORKFLOW_SCRIPT_ARGS+=(--app "${override}")
-  done
+  if [[ "${#CUSTOM_OVERRIDES[@]}" -gt 0 ]]; then
+    for override in "${CUSTOM_OVERRIDES[@]}"; do
+      WORKFLOW_SCRIPT_ARGS+=(--set "${override}")
+    done
+  fi
+  if [[ "${#APP_OVERRIDES[@]}" -gt 0 ]]; then
+    for override in "${APP_OVERRIDES[@]}"; do
+      WORKFLOW_SCRIPT_ARGS+=(--app "${override}")
+    done
+  fi
   if has_tfvars_overrides; then
     WORKFLOW_SCRIPT_ARGS+=(--tfvars-file "${TFVARS_FILE}")
   fi

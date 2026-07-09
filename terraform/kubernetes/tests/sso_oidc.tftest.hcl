@@ -55,15 +55,18 @@ run "sso_enabled_argocd_oidc_disabled" {
             "${local.subnetcalc_uat_public_url}/oauth2/callback",
           ],
           [for app in values(local.sso_idp_proxy_apps) : "${app.public_url}/oauth2/callback"],
+          [for app in values(local.sso_apim_proxy_apps) : "${app.public_url}/oauth2/callback"],
           [for app in values(local.sso_mcp_console_proxy_apps) : "${app.public_url}/oauth2/callback"],
+          [for app in values(local.sso_auth_chat_proxy_apps) : "${app.public_url}/oauth2/callback"],
           [for app in values(local.sso_chatgpt_sim_proxy_apps) : "${app.public_url}/oauth2/callback"],
+          [for app in values(local.sso_langfuse_proxy_apps) : "${app.public_url}/oauth2/callback"],
+          [for app in values(local.sso_langfuse_demo_proxy_apps) : "${app.public_url}/oauth2/callback"],
         )),
         toset(local.sso_oauth2_proxy_redirect_uris),
       )) == 0,
       contains(local.sso_oauth2_proxy_redirect_uris, "${local.chatgpt_sim_public_url}/oauth2/callback"),
       contains(local.sso_oauth2_proxy_redirect_uris, "${local.mcp_console_public_url}/oauth2/callback"),
       strcontains(file("${path.module}/sso.tf"), "redirectUris              = local.sso_oauth2_proxy_redirect_uris"),
-      strcontains(file("${path.module}/sso.tf"), "local.sso_oauth2_proxy_redirect_uris : \"- $${uri}\""),
     ])
     error_message = "Expected every oauth2-proxy callback URL, including future map-backed endpoints, to be present in the Keycloak oauth2-proxy client redirectUris"
   }
@@ -229,7 +232,7 @@ run "sso_enabled_argocd_oidc_enabled" {
   }
 
   assert {
-    condition     = strcontains(file("${path.module}/sso.tf"), "    null_resource.wait_for_platform_gateway_tls,\n    null_resource.reconcile_keycloak_realm,\n    kubectl_manifest.argocd_app_dex,")
+    condition     = strcontains(file("${path.module}/sso.tf"), "    null_resource.wait_for_platform_gateway_tls,\n    null_resource.reconcile_keycloak_realm,\n    kubectl_manifest.keycloak,\n    kubectl_manifest.keycloak_service,")
     error_message = "Expected kind apiserver OIDC configuration to wait for Keycloak realm reconciliation before restarting the apiserver"
   }
 
@@ -287,7 +290,7 @@ run "app_sso_cookies_are_environment_scoped" {
       strcontains(kubectl_manifest.argocd_app_oauth2_proxy_sentiment[0].yaml_body, "cookieName: kind-v2-sso-dev"),
       strcontains(kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc[0].yaml_body, "cookieName: kind-v2-sso-dev"),
       strcontains(kubectl_manifest.argocd_app_oauth2_proxy_idp["chatgpt"].yaml_body, "cookieName: kind-v2-sso-dev"),
-      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_idp["chatgpt"].yaml_body, "skip-auth-regex: ^/(signed-out\\.html|style\\.css|favicon\\.svg)$"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_idp["chatgpt"].yaml_body, "skip-auth-regex: ^/(signed-out\\.html|style\\.css|app-shell\\.css|favicon\\.svg|favicon\\.ico)$"),
       strcontains(kubectl_manifest.argocd_app_oauth2_proxy_sentiment_uat[0].yaml_body, "cookieName: kind-v2-sso-uat"),
       strcontains(kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat[0].yaml_body, "cookieName: kind-v2-sso-uat"),
       strcontains(kubectl_manifest.argocd_app_oauth2_proxy_idp["api"].yaml_body, "cookieName: kind-v2-sso-portal"),

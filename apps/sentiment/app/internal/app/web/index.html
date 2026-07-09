@@ -31,11 +31,12 @@
           <label for="comment-text">Comment</label>
           <textarea id="comment-text" name="comment" rows="5" placeholder="Write a short comment" required></textarea>
           <div class="comment-actions">
-            <div class="samples" aria-label="Sample comments">
+            <fieldset class="samples">
+              <legend>Sample comments</legend>
               <button type="button" data-sample="positive">Positive sample</button>
               <button type="button" data-sample="mixed">Mixed sample</button>
               <button type="button" data-sample="negative">Negative sample</button>
-            </div>
+            </fieldset>
             <button class="analyse-action" type="submit" data-action="analyze">Analyze</button>
           </div>
         </form>

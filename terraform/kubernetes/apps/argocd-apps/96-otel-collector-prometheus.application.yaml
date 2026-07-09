@@ -15,7 +15,7 @@ spec:
   source:
     repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
     chart: opentelemetry-collector
-    targetRevision: 0.158.1
+    targetRevision: 0.164.1
     helm:
       releaseName: otel-collector-prometheus
       values: |
@@ -68,7 +68,7 @@ spec:
           logsCollection:
             enabled: true
             includeCollectorLogs: false
-            storeCheckpoints: true
+            storeCheckpoints: false
 
         resources:
           requests:

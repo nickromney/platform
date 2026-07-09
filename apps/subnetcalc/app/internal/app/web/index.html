@@ -38,13 +38,14 @@
           </select>
           <button id="lookup-btn" type="submit">Lookup</button>
         </div>
-        <div class="examples" aria-label="Examples">
+        <fieldset class="examples">
+          <legend>Examples</legend>
           <button type="button" data-example="10.0.0.0/24">RFC1918: 10.0.0.0/24</button>
           <button type="button" data-example="100.64.0.1">RFC6598: 100.64.0.1</button>
           <button type="button" data-example="8.8.8.8">Public: 8.8.8.8</button>
           <button type="button" data-example="104.16.1.1">Cloudflare: 104.16.1.1</button>
           <button type="button" data-example="192.168.1.0/24">Network: 192.168.1.0/24</button>
-        </div>
+        </fieldset>
       </form>
 
       <form id="provider-form" class="app-panel" aria-labelledby="provider-range-title">

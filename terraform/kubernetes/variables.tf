@@ -419,7 +419,7 @@ variable "cilium_version" {
 variable "argocd_chart_version" {
   description = "Argo CD chart version."
   type        = string
-  default     = "10.0.1"
+  default     = "10.1.2"
 }
 
 variable "argocd_image_repository" {
@@ -461,13 +461,13 @@ variable "gitea_chart_version" {
 variable "prometheus_chart_version" {
   description = "Prometheus chart version (prometheus-community/prometheus)."
   type        = string
-  default     = "29.13.0"
+  default     = "29.14.0"
 }
 
 variable "prometheus_image_tag" {
   description = "Prometheus container image tag."
   type        = string
-  default     = "v3.12.0"
+  default     = "v3.13.0"
 }
 
 variable "grafana_chart_version" {
@@ -603,13 +603,13 @@ variable "kyverno_chart_version" {
 variable "policy_reporter_chart_version" {
   description = "Policy Reporter chart version."
   type        = string
-  default     = "3.7.4"
+  default     = "3.8.1"
 }
 
 variable "cert_manager_chart_version" {
   description = "cert-manager chart version (Jetstack)."
   type        = string
-  default     = "v1.20.3"
+  default     = "v1.21.0"
 }
 
 variable "hardened_image_registry" {
@@ -652,7 +652,7 @@ variable "oauth2_proxy_session_store_image" {
 variable "opentelemetry_collector_chart_version" {
   description = "OpenTelemetry Collector chart version (open-telemetry/opentelemetry-collector)."
   type        = string
-  default     = "0.159.2"
+  default     = "0.164.1"
 }
 
 # -----------------------------------------------------------------------------

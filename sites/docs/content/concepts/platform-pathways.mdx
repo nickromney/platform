@@ -53,6 +53,11 @@ Default pathways should be the first-run and documentation baseline. Alternative
 pathways should be explicit opt-ins with memory expectations, tfvars, and a
 focused validation command.
 
+> Warning: Do not mix retired or experimental pathway toggles into the default
+> stage files unless the same change also documents the memory impact and adds a
+> focused validation command. Otherwise the local reset/apply proof can pass one
+> operator's cache and fail on a clean laptop.
+
 ```bash
 make -C kubernetes/kind 900 plan
 make -C kubernetes/kind 900 apply AUTO_APPROVE=1

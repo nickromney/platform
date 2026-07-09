@@ -188,7 +188,7 @@ http_get() {
   curl -fsSL \
     -H "Accept: application/vnd.github+json" \
     -H "User-Agent: platform-check-version" \
-    "${url}"
+    "${url}" </dev/null
 }
 
 epoch_from_iso() {
@@ -404,7 +404,7 @@ latest_mcr_devcontainer_base_tag() {
     jq -r --arg prefix "${family_prefix}" '
       .tags
       | map(select(startswith($prefix)))
-      | map(capture("^(?<prefix>.*?)(?<major>[0-9]+)\\.(?<minor>[0-9]+)$")? as $m | select($m != null) | {tag: ., major: ($m.major | tonumber), minor: ($m.minor | tonumber)})
+      | map((capture("^(?<prefix>.*?)(?<major>[0-9]+)\\.(?<minor>[0-9]+)$")?) as $m | select($m != null) | {tag: ., major: ($m.major | tonumber), minor: ($m.minor | tonumber)})
       | sort_by(.major, .minor)
       | last.tag // ""
     '

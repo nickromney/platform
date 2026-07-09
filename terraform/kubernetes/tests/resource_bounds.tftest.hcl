@@ -8,6 +8,8 @@ run "metrics_server_enabled" {
     enable_gitea          = true
     enable_sso            = false
     enable_metrics_server = true
+    gitea_admin_pwd       = "test-admin-password"
+    gitea_member_user_pwd = "test-member-password"
   }
 
   assert {
@@ -41,6 +43,8 @@ run "external_secrets_enabled" {
     enable_gitea            = true
     enable_sso              = false
     enable_external_secrets = true
+    gitea_admin_pwd         = "test-admin-password"
+    gitea_member_user_pwd   = "test-member-password"
   }
 
   assert {
@@ -76,10 +80,13 @@ run "application_namespace_resource_bounds_enabled" {
     cni_provider                     = "none"
     enable_hubble                    = false
     enable_argocd                    = true
-    enable_gitea                     = false
+    enable_gitea                     = true
     enable_sso                       = false
+    enable_actions_runner            = true
     enable_app_repo_sentiment        = true
     enable_namespace_resource_bounds = true
+    gitea_admin_pwd                  = "test-admin-password"
+    gitea_member_user_pwd            = "test-member-password"
   }
 
   assert {

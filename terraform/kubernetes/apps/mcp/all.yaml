@@ -79,7 +79,7 @@ spec:
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: service.version=0.1.1,k8s.namespace.name=mcp,k8s.deployment.name=platform-mcp,telemetry.sdk.name=openllmetry
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: http://otel-collector-prometheus.observability.svc.cluster.local:4318
+              value: http://otel-collector.observability.svc.cluster.local:4318
             - name: IDP_API_BASE_URL
               value: http://idp-core.idp.svc.cluster.local:8080
             - name: SUBNETCALC_API_BASE_URL

@@ -320,6 +320,7 @@ env = {item["name"]: item["value"] for item in container["env"] if "value" in it
 assert env["PLATFORM_MCP_LOG_FORMAT"] == "json"
 assert env["PLATFORM_MCP_METRICS_ENABLED"] == "true"
 assert env["OTEL_SERVICE_NAME"] == "platform-mcp"
+assert env["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://otel-collector.observability.svc.cluster.local:4318"
 assert "k8s.namespace.name=mcp" in env["OTEL_RESOURCE_ATTRIBUTES"]
 
 service = by_kind_name(mcp_docs, "Service", "platform-mcp")

@@ -16,7 +16,7 @@ quay.io/cilium/hubble-ui:v0.13.3
 ghcr.io/nginx/nginx-gateway-fabric:2.5.1
 ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.1
 
-# --- ArgoCD (chart 10.0.1) ---
+# --- ArgoCD (chart 10.1.2) ---
 quay.io/argoproj/argocd:v3.4.4
 ecr-public.aws.com/docker/library/redis:8.2.7-alpine
 
@@ -24,21 +24,21 @@ ecr-public.aws.com/docker/library/redis:8.2.7-alpine
 docker.gitea.com/gitea:1.26.4-rootless
 
 # --- Kyverno (chart 3.8.1) ---
-ghcr.io/kyverno/kyverno:v1.18.1
-ghcr.io/kyverno/kyvernopre:v1.18.1
-ghcr.io/kyverno/background-controller:v1.18.1
-ghcr.io/kyverno/cleanup-controller:v1.18.1
-ghcr.io/kyverno/reports-controller:v1.18.1
+dhi.io/kyverno:1.18.1-debian13
+dhi.io/kyverno-init:1.18.1-debian13
+dhi.io/kyverno-background-controller:1.18.1-debian13
+dhi.io/kyverno-cleanup-controller:1.18.1-debian13
+dhi.io/kyverno-reports-controller:1.18.1-debian13
 ghcr.io/kyverno/readiness-checker:v0.1.0
 
-# --- cert-manager (chart v1.20.3) ---
-quay.io/jetstack/cert-manager-controller:v1.20.3
-quay.io/jetstack/cert-manager-webhook:v1.20.3
-quay.io/jetstack/cert-manager-cainjector:v1.20.3
-quay.io/jetstack/cert-manager-startupapicheck:v1.20.3
+# --- cert-manager (chart v1.21.0) ---
+quay.io/jetstack/cert-manager-controller:v1.21.0
+quay.io/jetstack/cert-manager-webhook:v1.21.0
+quay.io/jetstack/cert-manager-cainjector:v1.21.0
+quay.io/jetstack/cert-manager-startupapicheck:v1.21.0
 
-# --- Prometheus (chart 29.13.0) ---
-quay.io/prometheus/prometheus:v3.12.0
+# --- Prometheus (chart 29.14.0) ---
+quay.io/prometheus/prometheus:v3.13.0
 dhi.io/prometheus-config-reloader:0.89.0-debian13
 dhi.io/alertmanager:0.31.1-debian13
 dhi.io/kube-state-metrics:2.18.0-debian13
@@ -79,8 +79,11 @@ docker.io/clickhouse/clickhouse-server:25.5.11
 cgr.dev/chainguard/minio:latest
 cgr.dev/chainguard/busybox:latest
 
-# --- OpenTelemetry Collector (chart 0.159.2) ---
-otel/opentelemetry-collector-contrib:0.154.0
+# --- OpenTelemetry Collector (chart 0.164.1) ---
+otel/opentelemetry-collector-contrib:0.155.0
+
+# --- Playwright E2E ---
+mcr.microsoft.com/playwright:v1.58.2-noble
 
 # --- Gitea Actions Runner ---
 docker:29.4.3-cli

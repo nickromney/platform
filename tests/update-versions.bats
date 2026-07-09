@@ -79,6 +79,7 @@ write_fake_curl() {
 #!/usr/bin/env bash
 set -euo pipefail
 url="${*: -1}"
+cat >/dev/null
 case "${url}" in
   */repos/mikefarah/yq/releases/latest)
     printf '{"tag_name":"v4.2.0","published_at":"2020-01-01T00:00:00Z"}\n'
@@ -213,8 +214,35 @@ EOF
   run "${SCRIPT}" --execute --apply --only tools
 
   [ "${status}" -eq 0 ]
-  [[ "$(cat "${TOOLCHAIN_VERSIONS_FILE}")" == *'"yq=v4.2.0"'* ]]
-  [[ "$(cat "${TOOLCHAIN_VERSIONS_FILE}")" == *'KYVERNO_VERSION="${KYVERNO_VERSION:-v1.17.2}"'* ]]
+  expected=$'update-versions mode: apply\n'
+  expected+=$'domains: tools\n'
+  expected+=$'cooldown semantics: packages reuse js_dependency_cooldown_seconds; release resolvers use 604800 seconds\n'
+  expected+=$'\n'
+  expected+=$'== tools ==\n'
+  expected+=$'source: .devcontainer/toolchain-versions.sh; sources: .devcontainer/toolchain-sources.tsv\n'
+  expected+=$'Name\tCurrent\tLatest eligible\tStatus\tEligible date\n'
+  expected+=$'yq\tv4.0.0\tv4.2.0\tupdate available\t2020-01-08\n'
+  expected+=$'kyverno\tv1.17.2\tv1.99.0\tBLOCKED by cooldown\t2999-01-08\n'
+  expected+=$'lefthook\tv2.1.9\tv2.2.0\tBLOCKED by unknown cooldown\tunknown\n'
+  expected+=$'Updated tools: yq v4.0.0 -> v4.2.0\n'
+  expected+=$'Skipped tools: kyverno latest v1.99.0 is blocked by cooldown until 2999-01-08\n'
+  expected+=$'Skipped tools: lefthook latest v2.2.0 has unknown cooldown; set UPDATE_VERSIONS_ALLOW_UNKNOWN_COOLDOWN=1 to apply\n'
+  expected+=$'Skipped 2 toolchain update(s) because of cooldown policy.\n'
+  expected+=$'\n'
+  expected+=$'== audit verdicts ==\n'
+  expected+=$'Running: true\n'
+  expected+=$'PASS'
+  [ "${output}" = "${expected}" ]
+
+  expected_file=$'#!/usr/bin/env bash\n'
+  expected_file+=$'\n'
+  expected_file+=$'KYVERNO_VERSION="${KYVERNO_VERSION:-v1.17.2}"\n'
+  expected_file+=$'LEFTHOOK_VERSION="${LEFTHOOK_VERSION:-v2.1.9}"\n'
+  expected_file+=$'\n'
+  expected_file+=$'DEVCONTAINER_ARKADE_TOOLS=(\n'
+  expected_file+=$'  "yq=v4.2.0"\n'
+  expected_file+=$')'
+  [ "$(cat "${TOOLCHAIN_VERSIONS_FILE}")" = "${expected_file}" ]
 }
 
 @test "devcontainer domain reports a newer same-family base tag" {
