@@ -718,11 +718,14 @@ vendor_chart() {
   local chart="$2"
   local version="$3"
   local vendor_root="$4"
+  local archive_path
 
   fetch_chart_archive "${repo_url}" "${chart}" "${version}"
+  archive_path="$(chart_cache_archive_path "${repo_url}" "${chart}" "${version}")"
+  validate_chart_archive "${archive_path}" "${chart}" "${version}"
   mkdir -p "${vendor_root}"
   rm -rf "${vendor_root:?}/${chart}"
-  tar -xzf "$(chart_cache_archive_path "${repo_url}" "${chart}" "${version}")" -C "${vendor_root}"
+  tar -xzf "${archive_path}" -C "${vendor_root}"
 }
 
 chart_cache_archive_path() {
@@ -777,6 +780,45 @@ retry_chart_fetch() {
   return "${status}"
 }
 
+chart_archive_has_renderable_content() {
+  local archive_path="$1"
+  local chart="$2"
+
+  tar -tzf "${archive_path}" 2>/dev/null | awk -v prefix="${chart}/" '
+    $0 == prefix "Chart.yaml" {
+      has_chart_yaml = 1
+    }
+    $0 == prefix "values.yaml" {
+      has_values_yaml = 1
+    }
+    index($0, prefix) == 1 && $0 !~ /\/$/ {
+      file_count += 1
+    }
+    index($0, prefix "templates/") == 1 && $0 !~ /\/$/ {
+      has_renderable_content = 1
+    }
+    index($0, prefix "crds/") == 1 && $0 !~ /\/$/ {
+      has_renderable_content = 1
+    }
+    index($0, prefix "charts/") == 1 && $0 !~ /\/$/ {
+      has_renderable_content = 1
+    }
+    END {
+      exit !(has_chart_yaml && has_values_yaml && has_renderable_content && file_count >= 4)
+    }
+  '
+}
+
+validate_chart_archive() {
+  local archive_path="$1"
+  local chart="$2"
+  local version="$3"
+
+  if ! chart_archive_has_renderable_content "${archive_path}" "${chart}"; then
+    fail "helm pull for ${chart} ${version} produced an incomplete chart archive at ${archive_path}"
+  fi
+}
+
 fetch_chart_archive() {
   local repo_url="$1"
   local chart="$2"
@@ -788,9 +830,18 @@ fetch_chart_archive() {
   local fetched_archive
   local tmp_fetch_dir
   local tmp_registry_dir
+  local tmp_helm_home
 
   assert_pinned_chart_version "${chart}" "${version}"
   archive_path="$(chart_cache_archive_path "${repo_url}" "${chart}" "${version}")"
+  if [[ -f "${archive_path}" ]]; then
+    if ! chart_archive_has_renderable_content "${archive_path}" "${chart}"; then
+      warn "cached chart archive ${archive_path} is incomplete; refetching ${chart} ${version}"
+      rm -f "${archive_path}"
+    else
+      return 0
+    fi
+  fi
   if [[ -f "${archive_path}" ]]; then
     return 0
   fi
@@ -798,28 +849,56 @@ fetch_chart_archive() {
   archive_dir="$(dirname "${archive_path}")"
   mkdir -p "${archive_dir}"
   tmp_fetch_dir="$(mktemp -d "${archive_dir}/.fetch.${chart}.XXXXXX")"
+  tmp_helm_home="$(mktemp -d "${archive_dir}/.helm.${chart}.XXXXXX")"
   if [[ "${repo_url}" == "cr.agentgateway.dev/charts" || "${repo_url}" == "ghcr.io/kgateway-dev/charts" ]]; then
     local oci_repo="oci://${repo_url}/${chart}"
     tmp_registry_dir="$(mktemp -d)"
     set +e
     retry_chart_fetch "helm pull ${oci_repo} ${version}" \
       env DOCKER_CONFIG="${tmp_registry_dir}" \
+      HELM_CACHE_HOME="${tmp_helm_home}/cache" \
+      HELM_CONFIG_HOME="${tmp_helm_home}/config" \
+      HELM_DATA_HOME="${tmp_helm_home}/data" \
       helm pull "${oci_repo}" --version "${version}" --destination "${tmp_fetch_dir}" >/dev/null
     status=$?
     set -e
     rmdir "${tmp_registry_dir}" >/dev/null 2>&1 || true
     if [[ "${status}" -ne 0 ]]; then
       rm -rf "${tmp_fetch_dir}"
+      rm -rf "${tmp_helm_home}"
       return "${status}"
     fi
   else
     repo_name="vendor-$(printf '%s' "${repo_url}" | cksum | awk '{print $1}')"
+    set +e
     retry_chart_fetch "helm repo add ${repo_url}" \
+      env HELM_CACHE_HOME="${tmp_helm_home}/cache" \
+      HELM_CONFIG_HOME="${tmp_helm_home}/config" \
+      HELM_DATA_HOME="${tmp_helm_home}/data" \
       helm repo add "${repo_name}" "${repo_url}" --force-update >/dev/null 2>&1
-    retry_chart_fetch "helm repo update ${repo_name}" \
-      helm repo update "${repo_name}" >/dev/null 2>&1
-    retry_chart_fetch "helm pull ${repo_name}/${chart} ${version}" \
-      helm pull "${repo_name}/${chart}" --version "${version}" --destination "${tmp_fetch_dir}" >/dev/null
+    status=$?
+    if [[ "${status}" -eq 0 ]]; then
+      retry_chart_fetch "helm repo update ${repo_name}" \
+        env HELM_CACHE_HOME="${tmp_helm_home}/cache" \
+        HELM_CONFIG_HOME="${tmp_helm_home}/config" \
+        HELM_DATA_HOME="${tmp_helm_home}/data" \
+        helm repo update "${repo_name}" >/dev/null 2>&1
+      status=$?
+    fi
+    if [[ "${status}" -eq 0 ]]; then
+      retry_chart_fetch "helm pull ${repo_name}/${chart} ${version}" \
+        env HELM_CACHE_HOME="${tmp_helm_home}/cache" \
+        HELM_CONFIG_HOME="${tmp_helm_home}/config" \
+        HELM_DATA_HOME="${tmp_helm_home}/data" \
+        helm pull "${repo_name}/${chart}" --version "${version}" --destination "${tmp_fetch_dir}" >/dev/null
+      status=$?
+    fi
+    set -e
+    if [[ "${status}" -ne 0 ]]; then
+      rm -rf "${tmp_fetch_dir}"
+      rm -rf "${tmp_helm_home}"
+      return "${status}"
+    fi
   fi
 
   fetched_archive="${tmp_fetch_dir}/${chart}-${version}.tgz"
@@ -828,11 +907,14 @@ fetch_chart_archive() {
   fi
   if [[ -z "${fetched_archive}" || ! -f "${fetched_archive}" ]]; then
     rm -rf "${tmp_fetch_dir}"
+    rm -rf "${tmp_helm_home}"
     fail "helm pull for ${chart} ${version} did not produce a chart archive"
   fi
 
   mv "${fetched_archive}" "${archive_path}"
   rm -rf "${tmp_fetch_dir}"
+  rm -rf "${tmp_helm_home}"
+  validate_chart_archive "${archive_path}" "${chart}" "${version}"
 }
 
 patch_vendored_headlamp_chart() {
@@ -1084,11 +1166,11 @@ render_prometheus_application_manifest() {
       print "            enabled: false"
       print "          resources:"
       print "            requests:"
-      print "              cpu: 25m"
-      print "              memory: 64Mi"
+      print "              cpu: 10m"
+      print "              memory: 32Mi"
       print "            limits:"
-      print "              cpu: 200m"
-      print "              memory: 256Mi"
+      print "              cpu: 40m"
+      print "              memory: 96Mi"
     }
 
     function print_alert_rules_block() {
@@ -1534,7 +1616,7 @@ EOF
           logsCollection:
             enabled: true
             includeCollectorLogs: false
-            storeCheckpoints: true
+            storeCheckpoints: false
 
         resources:
           requests:

@@ -187,6 +187,26 @@ EOF
   [[ "${output}" == *"deployed tag != code tag (1.25.5 vs 1.26.0)"* ]]
 }
 
+@test "check-version treats Gitea rootless image tag as the same base app version" {
+  run bash -lc "
+    export CHECK_VERSION_LIB_ONLY=1 CHECK_VERSION_FORMAT=json
+    source '${SCRIPT}'
+    EXPECTED_CLUSTER_NAME='kind-local'
+    CLUSTER_OK=1
+    EXPECT_KIND_PROVISIONING='true'
+    CODE_ARGOCD_IMAGE_REF=''
+    CONFIGURED_ARGOCD_IMAGE_STATUS=''
+    LATEST_PREFERRED_ARGOCD_IMAGE_REF=''
+    LATEST_PREFERRED_ARGOCD_IMAGE_STATUS=''
+    row=\"\$(print_row 'gitea chart' '12.6.0' '12.6.0' '12.6.0' '1.26.4-rootless' '1.26.4' '' '1.26.4' '0')\"
+    emit_json_report \"\${row}\" '' '' '' '' | jq -r '.components[0] | [.component, .status_code, .status_group, (.deployed_tag_drift | tostring), (.update_available | tostring), .status_text] | @tsv'
+  "
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == $'gitea chart\tcurrent\tcurrent\tfalse\tfalse\t'* ]]
+  [[ "${output}" == *"deployed == codebase == latest (12.6.0)"* ]]
+}
+
 @test "check-version reads k3s pins from local variant Makefiles" {
   local makefile="${BATS_TEST_TMPDIR}/Makefile"
   cat >"${makefile}" <<'EOF'
@@ -330,7 +350,7 @@ EOF
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; \
     image_catalog_version_check_projection | awk -F '\t' '\$2 == \"sentiment-api\" { print \$1, \$2, \$6 } \$2 == \"grafana-victorialogs\" { print \$1, \$2, \$6 }'; \
     if image_ref_is_internal 'host.lima.internal:5002/platform/sentiment-api:0.1.0'; then echo catalog-local; else echo external; fi; \
-    image_catalog_version_check_status_for_ref 'host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.28.0'"
+    image_catalog_version_check_status_for_ref 'host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.29.0'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"workload sentiment-api local"* ]]
@@ -341,12 +361,13 @@ EOF
 
 @test "check-version drives preload alignment from image catalog projection" {
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; \
-    image_catalog_preload_alignment_projection | awk -F '\t' '\$1 == \"argocd\" { print \$1, \$2, \$3, \$7 } \$1 == \"prometheus\" { print \$1, \$2, \$3, \$7 }'; \
+    image_catalog_preload_alignment_projection | awk -F '\t' '\$1 == \"argocd\" { print \$1, \$2, \$3, \$7 } \$1 == \"prometheus\" { print \$1, \$2, \$3, \$7 } \$1 == \"playwright-e2e\" { print \$1, \$2, \$3, \$7 }'; \
     declare -f check_preload_image_version_alignment"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"argocd ArgoCD exact-ref preferred-image"* ]]
   [[ "${output}" == *"prometheus Prometheus repo-tag chart-app-version"* ]]
+  [[ "${output}" == *"playwright-e2e Playwright E2E repo-tag npm-playwright-core"* ]]
   [[ "${output}" == *"image_catalog_preload_alignment_projection"* ]]
   [[ "${output}" != *'check_preload_repo_tag_alignment "${preload_file}" "Prometheus"'* ]]
 }
@@ -673,6 +694,7 @@ EOF
 @test "check-version external image audit separates updates from skipped references" {
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; rows=\$(cat <<'EOF'
 apps/demo/Dockerfile:10	mcr.microsoft.com/dotnet/aspnet:9.0	9.0	10.0.6	mcr.microsoft.com	update available
+apps/demo/Dockerfile:12	dhi.io/python:3.13-debian13	3.13-debian13		dhi.io	vendor-managed mirror
 terraform/kubernetes/apps/argocd-apps/95-grafana.application.yaml:46	__GRAFANA_IMAGE_REGISTRY__/__GRAFANA_IMAGE_REPOSITORY__:__GRAFANA_IMAGE_TAG__			docker.io	templated image reference
 terraform/kubernetes/apps/argocd-apps/97-keycloak.application.yaml:52	__KEYCLOAK_IMAGE_REGISTRY__/__KEYCLOAK_IMAGE_REPOSITORY__:__KEYCLOAK_IMAGE_TAG__			quay.io	templated image reference
 apps/sentiment/compose.yml:100	quay.io/oauth2-proxy/oauth2-proxy:v7.15.2	v7.15.2	v7.15.2	quay.io	current
@@ -681,7 +703,7 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" =~ updates\ available:\ 1 ]]
-  [[ "${output}" =~ non-updatable\ references:\ 2 ]]
+  [[ "${output}" =~ non-updatable\ references:\ 3 ]]
   [[ "${output}" =~ current\ hidden:\ 1 ]]
   [[ "${output}" =~ Updates: ]]
   [[ "${output}" =~ Skipped\ /\ non-updatable: ]]
@@ -821,9 +843,27 @@ EOF
 }
 
 @test "check-version parallel line mapper runs callbacks with bounded concurrency" {
-  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; callback() { sleep 1; printf '%s\n' \"processed:\$1\"; }; input_file='${BATS_TEST_TMPDIR}/items.txt'; output_dir='${BATS_TEST_TMPDIR}/out'; printf 'a\nb\nc\n' >\"\${input_file}\"; start=\$(date +%s); parallel_map_lines 2 callback \"\${input_file}\" \"\${output_dir}\"; elapsed=\$(( \$(date +%s) - start )); printf '__ELAPSED__=%s\n' \"\${elapsed}\""
+  run bash -lc "
+    export CHECK_VERSION_LIB_ONLY=1
+    source '${SCRIPT}'
+    input_file='${BATS_TEST_TMPDIR}/items.txt'
+    output_dir='${BATS_TEST_TMPDIR}/out'
+    active_dir='${BATS_TEST_TMPDIR}/active'
+    samples_file='${BATS_TEST_TMPDIR}/samples'
+    mkdir -p \"\${active_dir}\"
+    callback() {
+      touch \"\${active_dir}/\$1\"
+      find \"\${active_dir}\" -type f | wc -l | tr -d ' ' >>\"\${samples_file}\"
+      sleep 1
+      rm -f \"\${active_dir}/\$1\"
+      printf '%s\n' \"processed:\$1\"
+    }
+    printf 'a\nb\nc\n' >\"\${input_file}\"
+    parallel_map_lines 2 callback \"\${input_file}\" \"\${output_dir}\"
+    printf '__MAX_ACTIVE__=%s\n' \"\$(sort -nr \"\${samples_file}\" | sed -n '1p')\"
+  "
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" =~ processed:a$'\n'processed:b$'\n'processed:c$'\n'__ELAPSED__= ]]
-  [[ "${output}" =~ __ELAPSED__=2|__ELAPSED__=1 ]]
+  [[ "${output}" =~ processed:a$'\n'processed:b$'\n'processed:c$'\n'__MAX_ACTIVE__= ]]
+  [[ "${output}" =~ __MAX_ACTIVE__=2 ]]
 }

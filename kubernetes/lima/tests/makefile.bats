@@ -127,6 +127,7 @@ setup() {
 }
 
 @test "lima check-app forwards ordered tfvars through the shared builder" {
+  run make -n -C "${REPO_ROOT}/kubernetes/lima" check-app STAGE=900 APP=grafana \
     PLATFORM_BASE_TFVARS="${BATS_TEST_TMPDIR}/base.tfvars" \
     PLATFORM_TFVARS="${BATS_TEST_TMPDIR}/override.tfvars"
 
@@ -396,4 +397,11 @@ EOF
   [[ "${output}" == *"shellcheck ${REPO_ROOT}/kubernetes/lima/scripts/"* ]]
   [[ "${output}" == *"../../terraform/kubernetes/scripts/check-cluster-health.sh"* ]]
   [[ "${output}" == *"../../terraform/kubernetes/scripts/check-component-version.sh"* ]]
+}
+
+@test "lima test gives the OpenTofu phase enough time for the full module suite" {
+  run make -n -C "${REPO_ROOT}/kubernetes/lima" test
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'run-opentofu-tests.sh" --execute --module-dir "../../terraform/kubernetes" --timeout-seconds "600"'* ]]
 }

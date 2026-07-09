@@ -67,8 +67,21 @@ apiVersion: v2
 name: ${chart}
 version: ${version}
 OUT
+    printf '{}\n' >"${workdir}/${chart}/values.yaml"
+    mkdir -p "${workdir}/${chart}/templates"
+    cat >"${workdir}/${chart}/templates/deployment.yaml" <<OUT
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${chart}
+OUT
+    cat >"${workdir}/${chart}/templates/service.yaml" <<OUT
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${chart}
+OUT
     if [[ "${chart}" == "headlamp" ]]; then
-      mkdir -p "${workdir}/${chart}/templates"
       cat >"${workdir}/${chart}/templates/deployment.yaml" <<'OUT'
 {{- if hasKey .Values.config "sessionTTL" }}
             - "-session-ttl={{ .Values.config.sessionTTL }}"
@@ -487,8 +500,11 @@ case "${cmd}" in
       esac
     done
     workdir="$(mktemp -d)"
-    mkdir -p "${workdir}/${chart}" "${destination}"
+    mkdir -p "${workdir}/${chart}/templates" "${destination}"
     printf 'apiVersion: v2\nname: %s\nversion: %s\n' "${chart}" "${version}" >"${workdir}/${chart}/Chart.yaml"
+    printf '{}\n' >"${workdir}/${chart}/values.yaml"
+    printf 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: %s\n' "${chart}" >"${workdir}/${chart}/templates/deployment.yaml"
+    printf 'apiVersion: v1\nkind: Service\nmetadata:\n  name: %s\n' "${chart}" >"${workdir}/${chart}/templates/service.yaml"
     tar -C "${workdir}" -czf "${destination}/${chart}-${version}.tgz" "${chart}"
     rm -rf "${workdir}"
     exit 0
@@ -504,6 +520,81 @@ EOF
   [ "$(cat "${retry_state}")" = "3" ]
   [ -f "${vendor_root}/cert-manager/Chart.yaml" ]
   [ "$(printf '%s\n' "${output}" | grep -c 'WARN sync-gitea-policies: helm pull vendor-.*cert-manager v1.20.2 failed on attempt')" = "2" ]
+}
+
+@test "vendor_chart refetches cached chart archives without renderable content" {
+  vendor_root="${BATS_TEST_TMPDIR}/vendor"
+  cache_dir="${BATS_TEST_TMPDIR}/chart-cache"
+  fetch_count="${BATS_TEST_TMPDIR}/helm-pull-count"
+  repo_key="$(printf '%s' "https://charts.jetstack.io" | cksum | awk '{print $1}')"
+  cache_archive="${cache_dir}/${repo_key}/cert-manager-v1.20.2.tgz"
+  workdir="$(mktemp -d)"
+
+  mkdir -p "${workdir}/cert-manager" "$(dirname "${cache_archive}")"
+  printf 'apiVersion: v2\nname: cert-manager\nversion: v1.20.2\n' >"${workdir}/cert-manager/Chart.yaml"
+  tar -C "${workdir}" -czf "${cache_archive}" cert-manager
+  rm -rf "${workdir}"
+
+  cat >"${TEST_BIN}/helm" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+cmd="${1:-}"
+shift || true
+case "${cmd}" in
+  repo)
+    exit 0
+    ;;
+  pull)
+    count_file="${HELM_FETCH_COUNT_FILE:?}"
+    count=0
+    if [[ -f "${count_file}" ]]; then
+      count="$(cat "${count_file}")"
+    fi
+    count=$((count + 1))
+    printf '%s\n' "${count}" >"${count_file}"
+    ref="${1:?missing chart ref}"
+    shift
+    chart="${ref##*/}"
+    destination=""
+    version=""
+    while [[ $# -gt 0 ]]; do
+      case "${1}" in
+        --version)
+          version="${2}"
+          shift 2
+          ;;
+        --destination)
+          destination="${2}"
+          shift 2
+          ;;
+        *)
+          shift
+          ;;
+      esac
+    done
+    workdir="$(mktemp -d)"
+    mkdir -p "${workdir}/${chart}/templates" "${destination}"
+    printf 'apiVersion: v2\nname: %s\nversion: %s\n' "${chart}" "${version}" >"${workdir}/${chart}/Chart.yaml"
+    printf '{}\n' >"${workdir}/${chart}/values.yaml"
+    printf 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: %s\n' "${chart}" >"${workdir}/${chart}/templates/deployment.yaml"
+    printf 'apiVersion: v1\nkind: Service\nmetadata:\n  name: %s\n' "${chart}" >"${workdir}/${chart}/templates/service.yaml"
+    tar -C "${workdir}" -czf "${destination}/${chart}-${version}.tgz" "${chart}"
+    rm -rf "${workdir}"
+    exit 0
+    ;;
+esac
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/helm"
+
+  run bash -lc "export HELM_FETCH_COUNT_FILE='${fetch_count}' CHART_VENDOR_CACHE_DIR='${cache_dir}'; source '${SCRIPT}'; vendor_chart 'https://charts.jetstack.io' 'cert-manager' 'v1.20.2' '${vendor_root}'"
+
+  [ "${status}" -eq 0 ]
+  [ "$(cat "${fetch_count}")" = "1" ]
+  [ -f "${vendor_root}/cert-manager/templates/deployment.yaml" ]
+  [ -f "${vendor_root}/cert-manager/templates/service.yaml" ]
+  [ -f "${vendor_root}/cert-manager/values.yaml" ]
+  [[ "${output}" == *"cached chart archive ${cache_archive} is incomplete; refetching cert-manager v1.20.2"* ]]
 }
 
 @test "vendor_chart reuses cached chart archive without refetching" {
@@ -549,8 +640,11 @@ case "${cmd}" in
       esac
     done
     workdir="$(mktemp -d)"
-    mkdir -p "${workdir}/${chart}" "${destination}"
+    mkdir -p "${workdir}/${chart}/templates" "${destination}"
     printf 'apiVersion: v2\nname: %s\nversion: %s\n' "${chart}" "${version}" >"${workdir}/${chart}/Chart.yaml"
+    printf '{}\n' >"${workdir}/${chart}/values.yaml"
+    printf 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: %s\n' "${chart}" >"${workdir}/${chart}/templates/deployment.yaml"
+    printf 'apiVersion: v1\nkind: Service\nmetadata:\n  name: %s\n' "${chart}" >"${workdir}/${chart}/templates/service.yaml"
     tar -C "${workdir}" -czf "${destination}/${chart}-${version}.tgz" "${chart}"
     rm -rf "${workdir}"
     exit 0
@@ -964,9 +1058,9 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"repository: registry.example.test/dhi/alertmanager"* ]]
-  [[ "${output}" == *$'resources:\n            requests:\n              cpu: 25m\n              memory: 64Mi\n            limits:\n              cpu: 200m\n              memory: 256Mi'* ]]
-  [[ "${output}" != *"cpu: 40m"* ]]
-  [[ "${output}" != *"memory: 96Mi"* ]]
+  [[ "${output}" == *$'resources:\n            requests:\n              cpu: 10m\n              memory: 32Mi\n            limits:\n              cpu: 40m\n              memory: 96Mi'* ]]
+  [[ "${output}" != *"cpu: 200m"* ]]
+  [[ "${output}" != *"memory: 256Mi"* ]]
 }
 
 @test "sync-gitea-policies contract renders external image tree changes" {
@@ -1160,12 +1254,12 @@ spec:
 __GRAFANA_PLUGINS_VALUES__
 EOF
 
-  run bash -lc "export PREFER_EXTERNAL_PLATFORM_IMAGES=true EXTERNAL_PLATFORM_IMAGE_GRAFANA='host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.28.0'; source '${SCRIPT}'; apply_external_platform_images '${repo_dir}'; render_grafana_application_manifest '${app_file}'"
+  run bash -lc "export PREFER_EXTERNAL_PLATFORM_IMAGES=true EXTERNAL_PLATFORM_IMAGE_GRAFANA='host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.29.0'; source '${SCRIPT}'; apply_external_platform_images '${repo_dir}'; render_grafana_application_manifest '${app_file}'"
 
   [ "${status}" -eq 0 ]
   grep -Fq "registry: host.docker.internal:5002" "${app_file}"
   grep -Fq "repository: platform/grafana-victorialogs" "${app_file}"
-  grep -Fq "tag: 12.3.1-v0.28.0" "${app_file}"
+  grep -Fq "tag: 12.3.1-v0.29.0" "${app_file}"
   grep -Fq "plugins: []" "${app_file}"
 }
 

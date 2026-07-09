@@ -253,7 +253,7 @@ run "external_platform_images_accepts_idp_refs" {
     prefer_external_platform_images = true
     external_platform_image_refs = {
       backstage      = "host.docker.internal:5002/platform/backstage:1.0.0"
-      grafana        = "host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.28.0"
+      grafana        = "host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.29.0"
       "idp-core"     = "host.docker.internal:5002/platform/idp-core:0.1.0"
       "platform-mcp" = "host.docker.internal:5002/platform/platform-mcp:0.1.0"
     }

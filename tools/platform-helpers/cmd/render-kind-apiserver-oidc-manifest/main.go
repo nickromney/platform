@@ -61,6 +61,9 @@ func main() {
 					hostnames = append(hostnames, strings.Trim(matches[1], `"'`))
 				}
 			}
+			if len(hostnames) == 0 {
+				continue
+			}
 			if len(hostnames) > 0 {
 				allManaged := true
 				for _, hostname := range hostnames {

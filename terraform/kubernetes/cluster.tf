@@ -180,20 +180,6 @@ resource "null_resource" "preload_images" {
   count = var.enable_image_preload && var.provision_kind_cluster ? 1 : 0
 
   triggers = {
-    cluster_id              = kind_cluster.local[0].id
-    preload_script          = filesha256("${local.stack_dir}/scripts/preload-images.sh")
-    preload_image_set       = filesha256(local.preload_image_list_path_effective)
-    preload_image_list      = local.preload_image_list_path_effective
-    enable_prometheus       = tostring(var.enable_prometheus)
-    enable_grafana          = tostring(var.enable_grafana)
-    enable_victoria_logs    = tostring(var.enable_victoria_logs)
-    enable_headlamp         = tostring(var.enable_headlamp)
-    enable_metrics_server   = tostring(var.enable_metrics_server)
-    enable_external_secrets = tostring(var.enable_external_secrets)
-    enable_sso              = tostring(var.enable_sso)
-    enable_actions_runner   = tostring(var.enable_actions_runner)
-    enable_langfuse         = tostring(var.enable_langfuse)
-    preload_parallelism     = tostring(var.image_preload_parallelism)
     cluster_id                  = kind_cluster.local[0].id
     preload_script              = filesha256("${local.stack_dir}/scripts/preload-images.sh")
     preload_image_set           = filesha256(local.preload_image_list_path_effective)
@@ -203,6 +189,7 @@ resource "null_resource" "preload_images" {
     enable_victoria_logs        = tostring(var.enable_victoria_logs)
     enable_headlamp             = tostring(var.enable_headlamp)
     enable_metrics_server       = tostring(var.enable_metrics_server)
+    enable_external_secrets     = tostring(var.enable_external_secrets)
     enable_progressive_delivery = tostring(var.enable_progressive_delivery)
     enable_sso                  = tostring(var.enable_sso)
     enable_actions_runner       = tostring(var.enable_actions_runner)
@@ -213,22 +200,13 @@ resource "null_resource" "preload_images" {
   provisioner "local-exec" {
     command = "${local.stack_dir}/scripts/preload-images.sh --execute --cluster ${var.cluster_name} --parallelism ${var.image_preload_parallelism} --image-list \"$PRELOAD_IMAGE_LIST\""
     environment = {
-      PRELOAD_IMAGE_LIST              = local.preload_image_list_path_effective
-      PRELOAD_ENABLE_PROMETHEUS       = tostring(var.enable_prometheus)
-      PRELOAD_ENABLE_GRAFANA          = tostring(var.enable_grafana)
-      PRELOAD_ENABLE_VICTORIA_LOGS    = tostring(var.enable_victoria_logs)
-      PRELOAD_ENABLE_HEADLAMP         = tostring(var.enable_headlamp)
-      PRELOAD_ENABLE_METRICS_SERVER   = tostring(var.enable_metrics_server)
-      PRELOAD_ENABLE_EXTERNAL_SECRETS = tostring(var.enable_external_secrets)
-      PRELOAD_ENABLE_SSO              = tostring(var.enable_sso)
-      PRELOAD_ENABLE_ACTIONS_RUNNER   = tostring(var.enable_actions_runner)
-      PRELOAD_ENABLE_LANGFUSE         = tostring(var.enable_langfuse)
       PRELOAD_IMAGE_LIST                  = local.preload_image_list_path_effective
       PRELOAD_ENABLE_PROMETHEUS           = tostring(var.enable_prometheus)
       PRELOAD_ENABLE_GRAFANA              = tostring(var.enable_grafana)
       PRELOAD_ENABLE_VICTORIA_LOGS        = tostring(var.enable_victoria_logs)
       PRELOAD_ENABLE_HEADLAMP             = tostring(var.enable_headlamp)
       PRELOAD_ENABLE_METRICS_SERVER       = tostring(var.enable_metrics_server)
+      PRELOAD_ENABLE_EXTERNAL_SECRETS     = tostring(var.enable_external_secrets)
       PRELOAD_ENABLE_PROGRESSIVE_DELIVERY = tostring(var.enable_progressive_delivery)
       PRELOAD_ENABLE_SSO                  = tostring(var.enable_sso)
       PRELOAD_ENABLE_ACTIONS_RUNNER       = tostring(var.enable_actions_runner)

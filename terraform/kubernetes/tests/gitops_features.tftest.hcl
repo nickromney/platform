@@ -278,24 +278,30 @@ run "observability_agent_enabled" {
     cni_provider               = "none"
     enable_hubble              = false
     enable_argocd              = true
-    enable_gitea               = false
+    enable_gitea               = true
     enable_sso                 = false
     enable_observability_agent = true
+    enable_app_of_apps         = true
+    gitea_admin_pwd            = "test-admin-password"
+    gitea_member_user_pwd      = "test-member-password"
   }
 
   assert {
-    condition     = length(kubectl_manifest.argocd_app_otel_collector_agent) == 1
-    error_message = "Expected kubectl_manifest.argocd_app_otel_collector_agent to exist when enable_observability_agent=true"
+    condition     = length(kubectl_manifest.argocd_app_of_apps) == 1
+    error_message = "Expected app-of-apps to manage the OTel collector agent when enable_observability_agent=true"
   }
 
   assert {
-    condition     = strcontains(kubectl_manifest.argocd_app_otel_collector_agent[0].yaml_body, "repoURL: ${local.policies_repo_url_cluster}")
-    error_message = "Expected OTel agent ArgoCD Application YAML to load from the policies repo"
+    condition     = strcontains(kubectl_manifest.argocd_app_of_apps[0].yaml_body, "path: apps/argocd-apps")
+    error_message = "Expected app-of-apps to sync the generated Argo CD application directory"
   }
 
   assert {
-    condition     = strcontains(kubectl_manifest.argocd_app_otel_collector_agent[0].yaml_body, "targetRevision: main") && strcontains(kubectl_manifest.argocd_app_otel_collector_agent[0].yaml_body, "path: ${local.vendored_chart_paths.opentelemetry_collector}")
-    error_message = "Expected OTel agent ArgoCD Application YAML to track the vendored chart on main"
+    condition = alltrue([
+      strcontains(file("${path.module}/apps/argocd-apps/100-otel-collector-agent.application.yaml"), "name: otel-collector-agent"),
+      strcontains(file("${path.module}/apps/argocd-apps/100-otel-collector-agent.application.yaml"), "chart: opentelemetry-collector"),
+    ])
+    error_message = "Expected the GitOps app directory to include the OTel collector agent Application seed"
   }
 }
 

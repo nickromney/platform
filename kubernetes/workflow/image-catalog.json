@@ -46,7 +46,7 @@
       "id": "grafana-victorialogs",
       "hcl_key": "grafana",
       "image_name": "grafana-victorialogs",
-      "default_tag": "12.3.1-v0.28.0",
+      "default_tag": "12.3.1-v0.29.0",
       "build": {
         "context": "generated-grafana-victorialogs",
         "dockerfile": "Dockerfile",
@@ -505,6 +505,23 @@
         "tag_extract_sed": "s|^[[:space:]]*(docker\\.io/)?victoriametrics/victoria-logs:([^[:space:]]+).*|\\2|",
         "expected_source": "victoria_logs_chart_app_version",
         "enabled_by": "EXPECT_VICTORIA_LOGS"
+      }
+    },
+    {
+      "id": "playwright-e2e",
+      "component": "Playwright E2E",
+      "version_check": {
+        "mode": "external",
+        "latest_lookup_policy": "npm-playwright-core",
+        "preload_alignment_policy": "repo-tag",
+        "checked_elsewhere": "tests/kubernetes/sso Playwright dependency report and preload alignment checks",
+        "reason": "The default SSO E2E Docker runtime must track the repo-pinned Playwright core version"
+      },
+      "preload_alignment": {
+        "kind": "repo-tag",
+        "line_regex": "^[[:space:]]*mcr\\.microsoft\\.com/playwright:",
+        "tag_extract_sed": "s|^[[:space:]]*mcr\\.microsoft\\.com/playwright:v([^[:space:]-]+)-noble.*|\\1|",
+        "expected_source": "playwright_core_package_version"
       }
     }
   ],

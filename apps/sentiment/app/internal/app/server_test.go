@@ -466,7 +466,7 @@ func TestFrontendKeepsThemeSwitcherParity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, text := range []string{`class="skip-link" href="#main"`, `<main id="main" tabindex="-1">`, `<header>`, `@social-5h3ll/5h3ll-ui`, `/app-shell.css`, `/app-shell.js`, `/idpauth.js`, `class="header-actions"`, `data-theme="system"`, `id="theme-switcher"`, `class="theme-toggle"`, `id="auth-state"`, `id="logout-btn" class="sign-in-link"`, `>Sign Out<`, `id="api-status" class="app-panel notice" role="status" aria-live="polite"`, `Checking API...`, `class="comment-actions"`, `aria-label="Sample comments"`, `data-sample="positive"`, `data-sample="mixed"`, `data-sample="negative"`, `class="analyse-action"`, `>Analyze<`, `id="diagnostics"`} {
+	for _, text := range []string{`class="skip-link" href="#main"`, `<main id="main" tabindex="-1">`, `<header>`, `@social-5h3ll/5h3ll-ui`, `/app-shell.css`, `/app-shell.js`, `/idpauth.js`, `class="header-actions"`, `data-theme="system"`, `id="theme-switcher"`, `class="theme-toggle"`, `id="auth-state"`, `id="logout-btn" class="sign-in-link"`, `>Sign Out<`, `id="api-status" class="app-panel notice" role="status" aria-live="polite"`, `Checking API...`, `class="comment-actions"`, `<fieldset class="samples">`, `<legend>Sample comments</legend>`, `data-sample="positive"`, `data-sample="mixed"`, `data-sample="negative"`, `class="analyse-action"`, `>Analyze<`, `id="diagnostics"`} {
 		if !strings.Contains(string(indexHTML), text) {
 			t.Fatalf("frontend index missing %q", text)
 		}

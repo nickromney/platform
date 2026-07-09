@@ -143,9 +143,10 @@ generate_dashboard_json() {
     '
     def x_of($idx): ($idx % 4) * 6;
     def y_of($idx): 3 + ((($idx / 4) | floor) * 5);
+    def prometheus_ds: {type: "prometheus", uid: "prometheus"};
     def stat_panel($tile; $idx):
       {
-        datasource: "Prometheus",
+        datasource: prometheus_ds,
         description: $tile.url,
         fieldConfig: {
           defaults: {
@@ -177,7 +178,7 @@ generate_dashboard_json() {
           {targetBlank: true, title: ("Open " + $tile.title), url: $tile.url}
         ],
         options: {colorMode: "background", graphMode: "none"},
-        targets: [{expr: $tile.expr, refId: "A"}],
+        targets: [{datasource: prometheus_ds, expr: $tile.expr, refId: "A"}],
         title: $tile.title,
         type: "stat"
       };
@@ -211,16 +212,7 @@ generate_dashboard_json() {
       refresh: "30s",
       schemaVersion: 39,
       tags: ["platform", "launchpad", "entrypoints"],
-      templating: {
-        list: [
-          {
-            name: "prometheus",
-            type: "datasource",
-            query: "prometheus",
-            current: {selected: false, value: "Prometheus"}
-          }
-        ]
-      },
+      templating: {list: []},
       time: {from: "now-15m", to: "now"},
       title: "Platform Launchpad",
       uid: "platform-launchpad"

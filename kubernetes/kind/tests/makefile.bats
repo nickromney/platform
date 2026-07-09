@@ -226,6 +226,7 @@ EOF
 }
 
 @test "kind check-app forwards ordered tfvars through the shared builder" {
+  run make -n -C "${REPO_ROOT}/kubernetes/kind" check-app STAGE=900 APP=grafana \
     PLATFORM_BASE_TFVARS="${BATS_TEST_TMPDIR}/base.tfvars" \
     PLATFORM_TFVARS="${BATS_TEST_TMPDIR}/override.tfvars"
 
@@ -615,8 +616,8 @@ EOF
   [ "${status}" -eq 0 ]
 }
 
-@test "kind prereqs checks Playwright browsers after registry auth without hard install" {
-  run bash -c 'prereqs=$(sed -n "/^prereqs:/,/^preload-images:/p" "$1"); registry_line=$(printf "%s\n" "$prereqs" | grep -n "Docker registry auth" | head -n1 | cut -d: -f1); playwright_line=$(printf "%s\n" "$prereqs" | grep -n "Playwright browser cache" | head -n1 | cut -d: -f1); check_line=$(printf "%s\n" "$prereqs" | grep -n "ENSURE_PLAYWRIGHT_BROWSERS.*--check --execute" | head -n1 | cut -d: -f1); test -n "$registry_line" && test -n "$playwright_line" && test -n "$check_line" && test "$registry_line" -lt "$playwright_line" && test "$playwright_line" -lt "$check_line"' _ \
+@test "kind prereqs checks Playwright cache status after registry auth without hard install" {
+  run bash -c 'prereqs=$(sed -n "/^prereqs:/,/^preload-images:/p" "$1"); registry_line=$(printf "%s\n" "$prereqs" | grep -n "Docker registry auth" | head -n1 | cut -d: -f1); docker_line=$(printf "%s\n" "$prereqs" | grep -n "Playwright Docker image cache" | head -n1 | cut -d: -f1); native_line=$(printf "%s\n" "$prereqs" | grep -n "ENSURE_PLAYWRIGHT_BROWSERS.*--check --execute" | head -n1 | cut -d: -f1); inspect_line=$(printf "%s\n" "$prereqs" | grep -n "docker image inspect" | head -n1 | cut -d: -f1); test -n "$registry_line" && test -n "$docker_line" && test -n "$native_line" && test -n "$inspect_line" && test "$registry_line" -lt "$docker_line" && test "$registry_line" -lt "$native_line" && test "$docker_line" -lt "$inspect_line"' _ \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]

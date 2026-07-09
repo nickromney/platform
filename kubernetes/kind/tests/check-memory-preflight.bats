@@ -205,7 +205,7 @@ fi
 attempt=\$((attempt + 1))
 printf '%s\n' "\${attempt}" >"\${state_file}"
 if [[ "\${attempt}" -eq 1 ]]; then
-  sleep 2
+  sleep 4
 fi
 cat <<'LSOF'
 COMMAND   PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
@@ -305,7 +305,7 @@ EOF
   fake_ps_docker_vm
   fake_lsof_timeout_then_docker_owner
 
-  run env KIND_PREFLIGHT_LSOF_TIMEOUT_SECONDS=1 "${SCRIPT}" --execute
+  run env KIND_PREFLIGHT_LSOF_TIMEOUT_SECONDS=3 "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"OK   no competing hypervisor VMs detected"* ]]

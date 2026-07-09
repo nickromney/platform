@@ -15,17 +15,22 @@ setup() {
 }
 
 @test "sync-gitea.sh uses Terraform variable defaults when stage tfvars omit a chart version" {
+  expected="$(bash -lc "source '${REPO_ROOT}/terraform/kubernetes/scripts/tf-defaults.sh'; tf_default_from_variables agentgateway_chart_version")"
+
+  run bash -lc "source '${SCRIPT}'; resolve_string AGENTGATEWAY_CHART_VERSION agentgateway_chart_version \"\$(tf_default_from_variables agentgateway_chart_version)\""
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = "0.120.0" ]
+  [ "${output}" = "${expected}" ]
 }
 
 @test "sync-gitea.sh falls back to Terraform variable defaults when tfvars are absent" {
   missing_tfvars="${BATS_TEST_TMPDIR}/missing.tfvars"
+  expected="$(bash -lc "source '${REPO_ROOT}/terraform/kubernetes/scripts/tf-defaults.sh'; tf_default_from_variables agentgateway_chart_version")"
 
+  run bash -lc "export GITEA_SYNC_TFVARS_FILE='${missing_tfvars}'; source '${SCRIPT}'; resolve_string AGENTGATEWAY_CHART_VERSION agentgateway_chart_version \"\$(tf_default_from_variables agentgateway_chart_version)\""
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = "0.120.0" ]
+  [ "${output}" = "${expected}" ]
 }
 
 @test "sync-gitea.sh exports every platform image override consumed by the policies renderer" {

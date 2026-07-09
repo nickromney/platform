@@ -15,17 +15,19 @@ If you are testing an older Lima or Lima cluster, rerun `900 apply` first or inv
 The repo uses project-local Playwright from `@playwright/test`; no global
 `playwright` install is expected.
 
-Full browser E2E now works in the devcontainer too. The image bakes Chromium
-runtime libraries, and `tests/kubernetes/sso/run.sh` verifies the pinned
-Playwright browser cache before tests start, so the same `check-sso-e2e` target
-runs from either the host or the container without mid-test browser downloads.
-The browser cache check probes the Playwright CDN before installing; set
-`PLAYWRIGHT_SKIP_CDN_PREFLIGHT=1` only when that preflight is known to be a
-false negative. On networks that cannot fetch Playwright browser archives,
-`PLATFORM_PLAYWRIGHT_MODE=docker` runs the tests in the matching
-`mcr.microsoft.com/playwright` image. `PLATFORM_PLAYWRIGHT_CHANNEL=chrome` is a
-host-native fallback that uses system Chrome with the usual browser-version
-drift tradeoff.
+Full browser E2E now works in the devcontainer too. By default,
+`tests/kubernetes/sso/run.sh` runs the suite in the matching
+`mcr.microsoft.com/playwright:v<playwright-core>-noble` image, which is listed
+in the local-cluster preload cache and digest lock. That keeps reset runs from
+depending on host Playwright browser caches removed by `clean-local-state`.
+
+Set `PLATFORM_PLAYWRIGHT_MODE=native` when you explicitly want host-native
+Playwright. Native mode verifies the pinned Playwright browser cache before
+tests start, probes the Playwright CDN before installing, and then runs without
+mid-test browser downloads. Set `PLAYWRIGHT_SKIP_CDN_PREFLIGHT=1` only when that
+preflight is known to be a false negative. `PLATFORM_PLAYWRIGHT_CHANNEL=chrome`
+is a native-mode fallback that uses system Chrome with the usual
+browser-version drift tradeoff.
 
 ## Setup
 
@@ -39,7 +41,7 @@ Required local tooling:
 
 - `bun`
 - `node`
-- `docker` when `PLATFORM_PLAYWRIGHT_MODE=docker`
+- `docker` for the default Docker-backed browser mode
 
 ## Run
 
@@ -60,10 +62,10 @@ cd kubernetes/kind
 HEADED=1 make check-sso-e2e
 ```
 
-Docker-backed browser mode:
+Native host-browser mode:
 
 ```bash
-PLATFORM_PLAYWRIGHT_MODE=docker make check-sso-e2e
+PLATFORM_PLAYWRIGHT_MODE=native make check-sso-e2e
 ```
 
 Run only the authenticated MCP Inspector and D2 render/export flow:

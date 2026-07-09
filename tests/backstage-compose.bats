@@ -115,7 +115,7 @@ assert "oauth2-proxy-backstage" in script_text
 assert "portal.compose.127.0.0.1.sslip.io" in browser_text
 assert "dex.compose.127.0.0.1.sslip.io" in browser_text
 assert "Developer Portal" in browser_text
-assert "Hello Platform" in browser_text
+assert "Sentiment" in browser_text
 assert "isOauth2ProxyForbiddenPage" in browser_text
 
 assert "up-portal" in makefile

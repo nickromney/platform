@@ -665,8 +665,7 @@ for line in text.splitlines(keepends=True):
     if not sep or before.strip() != "dependencies":
         continue
 
-        continue
-
+    fragment = after
     buffer.append(fragment if fragment.endswith("\n") else fragment + "\n")
     if array_closed(fragment):
         break
@@ -1660,7 +1659,9 @@ terraform_argocd_application_image_tag() {
         resource_pattern = "resource \"kubectl_manifest\" \"argocd_app_" app_name "\""
       }
 
+      $0 ~ resource_pattern {
         in_resource = 1
+        next
       }
 
       in_resource && /^[[:space:]]*yaml_body[[:space:]]*=[[:space:]]*<<-?/ {
@@ -2279,6 +2280,22 @@ k8s_deployment_container_image() {
     head -n1 | xargs || true
 }
 
+component_tags_equivalent() {
+  local name="$1"
+  local left="$2"
+  local right="$3"
+
+  [ "${left}" = "${right}" ] && return 0
+
+  case "${name}" in
+    gitea\ chart)
+      [ "${left%-rootless}" = "${right%-rootless}" ] && return 0
+      ;;
+  esac
+
+  return 1
+}
+
 print_row() {
   local name="$1"
   local deployed="$2"
@@ -2311,14 +2328,14 @@ print_row() {
     fi
   fi
 
-  if [ -n "$codebase_tag" ] && [ -n "$latest_tag" ] && [ "$codebase_tag" != "$latest_tag" ]; then
+  if [ -n "$codebase_tag" ] && [ -n "$latest_tag" ] && ! component_tags_equivalent "$name" "$codebase_tag" "$latest_tag"; then
     tag_update_available=1
     update_available=1
     tag_latest_state="; code tag != latest tag (${codebase_tag} vs ${latest_tag})"
   fi
 
   if [ "${CLUSTER_OK:-0}" -eq 1 ] && [ -n "$deployed_tag" ] && [ "$deployed_tag" != "Unavailable" ] && \
-    [ -n "$codebase_tag" ] && [ "$deployed_tag" != "$codebase_tag" ]; then
+    [ -n "$codebase_tag" ] && ! component_tags_equivalent "$name" "$deployed_tag" "$codebase_tag"; then
     deployed_tag_drift=1
   fi
 
@@ -2422,6 +2439,7 @@ preload_alignment_expected_value() {
     prometheus_chart_app_version) echo "${PRELOAD_EXPECTED_PROMETHEUS_TAG:-}" ;;
     grafana_chart_app_version) echo "${PRELOAD_EXPECTED_GRAFANA_TAG:-}" ;;
     victoria_logs_chart_app_version) echo "${PRELOAD_EXPECTED_VICTORIA_LOGS_TAG:-}" ;;
+    playwright_core_package_version) bun_lock_resolved_version "${REPO_ROOT}/tests/kubernetes/sso/bun.lock" "playwright-core" ;;
     *) echo "" ;;
   esac
 }
@@ -3634,6 +3652,9 @@ main() {
   LATESTTAG_ARGOCD_CHART=$(helm_chart_app_version "argo" "https://argoproj.github.io/argo-helm" "argo-cd" "${LATEST_ARGOCD}")
   LATESTTAG_ARGOCD="${LATESTTAG_ARGOCD_CHART}"
   LATESTTAG_GITEA=$(helm_chart_app_version "gitea" "https://dl.gitea.io/charts/" "gitea" "${LATEST_GITEA}")
+  if [ -n "${CODETAG_GITEA_OVERRIDE}" ] && [ "${CODE_GITEA}" = "${LATEST_GITEA}" ]; then
+    LATESTTAG_GITEA="${CODETAG_GITEA_OVERRIDE}"
+  fi
   LATESTTAG_CILIUM=$(helm_chart_app_version "cilium" "https://helm.cilium.io" "cilium" "${LATEST_CILIUM}")
   if [ "${EXPECT_PROMETHEUS}" = "true" ]; then LATESTTAG_PROMETHEUS=$(helm_chart_app_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus" "${LATEST_PROMETHEUS}"); fi
   if [ "${EXPECT_GRAFANA}" = "true" ]; then LATESTTAG_GRAFANA=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "grafana" "${LATEST_GRAFANA}"); fi

@@ -40,6 +40,7 @@ CONFIGURE_K3S_APISERVER_OIDC := $(SCRIPTS_DIR)/configure-k3s-apiserver-oidc.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
 AUTO_APPROVE ?= 0
 DRY_RUN ?= 0
+TOFU_TEST_TIMEOUT_SECONDS ?= 600
 OIDC_RECOVERY_FORMAT ?= text
 OIDC_RECOVERY_FORCE_MODE ?= k3s-restart
 READONLY_MODE_FLAG := $(if $(filter 1,$(DRY_RUN)),--dry-run,--execute)
@@ -1087,7 +1088,7 @@ test:
 	@$(MAKE) test-shell
 	@$(MAKE) test-bats
 	@$(MAKE) prepare-state
-	@"$(STACK_DIR)/scripts/run-opentofu-tests.sh" --execute --module-dir "$(STACK_DIR)"
+	@"$(STACK_DIR)/scripts/run-opentofu-tests.sh" --execute --module-dir "$(STACK_DIR)" --timeout-seconds "$(TOFU_TEST_TIMEOUT_SECONDS)"
 
 .PHONY: test-idempotence
 test-idempotence: WORKFLOW_REQUIRE_STAGE_FILE=1

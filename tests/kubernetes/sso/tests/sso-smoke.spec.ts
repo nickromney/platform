@@ -27,6 +27,11 @@ type Target = {
     | 'mcp-inspector-d2-render-export'
 }
 
+type LaunchpadTile = {
+  name: string
+  url: string
+}
+
 function isEnabled(envName: string, defaultValue: boolean) {
   const raw = process.env[envName]
   if (!raw) return defaultValue
@@ -62,29 +67,6 @@ const MCP_ENDPOINT_URL = absolutePlatformUrl('mcp', '/mcp')
 const KEYCLOAK_REALM = process.env.SSO_E2E_KEYCLOAK_REALM || 'platform'
 const OIDC_HOST = new URL(absolutePlatformUrl('keycloak', `/realms/${KEYCLOAK_REALM}/`)).host
 const KEYCLOAK_ADMIN_CONSOLE_URL = absolutePlatformUrl('keycloak', '/admin/platform/console/#/platform/users')
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function normalizeUrl(value: string) {
-  return value.replace(/\/$/, '')
-}
-
-const GRAFANA_LAUNCHPAD_APPS = [
-  { name: 'Argo CD', url: platformUrl('argocd.admin'), flow: 'oauth2-proxy', segment: 'admin' },
-  { name: 'Keycloak', url: KEYCLOAK_ADMIN_CONSOLE_URL, flow: 'none', segment: 'admin' },
-  { name: 'Gitea', url: platformUrl('gitea.admin'), flow: 'oauth2-proxy', segment: 'admin' },
-  { name: 'Headlamp', url: platformUrl('headlamp.admin'), flow: 'headlamp-oidc', segment: 'admin' },
-  { name: 'Hubble', url: platformUrl('hubble.admin'), flow: 'oauth2-proxy', segment: 'admin' },
-  { name: 'Kyverno Policy UI', url: platformUrl('kyverno.admin'), flow: 'none', segment: 'admin' },
-  { name: 'Auth Chat DEV', url: platformUrl('auth-chat.dev'), flow: 'oauth2-proxy', segment: 'dev' },
-  { name: 'ChatGPT Sim DEV', url: platformUrl('chatgpt.dev'), flow: 'oauth2-proxy', segment: 'dev' },
-  { name: 'Sentiment DEV', url: platformUrl('sentiment.dev'), flow: 'oauth2-proxy', segment: 'dev' },
-  { name: 'SubnetCalc DEV', url: platformUrl('subnetcalc.dev'), flow: 'oauth2-proxy', segment: 'dev' },
-  { name: 'Sentiment UAT', url: platformUrl('sentiment.uat'), flow: 'oauth2-proxy', segment: 'uat' },
-  { name: 'SubnetCalc UAT', url: platformUrl('subnetcalc.uat'), flow: 'oauth2-proxy', segment: 'uat' },
-] as const
 
 const BASE_TARGETS: Target[] = [
   {
@@ -130,6 +112,13 @@ const BASE_TARGETS: Target[] = [
     segment: 'admin',
     flow: 'oauth2-proxy',
     postLogin: INCLUDE_VICTORIA_LOGS ? 'grafana-victoria-logs' : undefined,
+  },
+  {
+    name: 'grafana-launchpad',
+    url: absolutePlatformUrl('grafana.admin', '/d/platform-launchpad/platform-launchpad?orgId=1&from=now-6h&to=now&timezone=browser&refresh=30s'),
+    segment: 'admin',
+    flow: 'oauth2-proxy',
+    postLogin: 'grafana-launchpad',
   },
   { name: 'argocd-admin', url: platformUrl('argocd.admin'), segment: 'admin', flow: 'oauth2-proxy' },
   { name: 'hubble-admin', url: platformUrl('hubble.admin'), segment: 'admin', flow: 'oauth2-proxy', postLogin: 'hubble-namespace-argocd' },
@@ -295,7 +284,7 @@ async function gotoWithGatewayRetry(page: Page, url: string) {
       const gatewayErrorHeading = page.getByRole('heading', { name: /(502 Bad Gateway|503 Service Unavailable|504 Gateway Time-out)/i })
       const isGatewayError = (status >= 500 && status < 600) || (await gatewayErrorHeading.isVisible().catch(() => false))
 
-      if (!isGatewayError) return
+      if (!isGatewayError) return resp
     } catch {
       // Network/navigation hiccup; retry below.
     }
@@ -679,61 +668,75 @@ async function hubbleChooseNamespaceArgocd(page: Page, baseUrl: string) {
 }
 
 async function grafanaLaunchpadShowsHealthyTiles(page: Page) {
-  const maxLaunchpadAttempts = Number(process.env.SSO_E2E_GRAFANA_LAUNCHPAD_RETRIES || 24)
-  const body = page.locator('body')
-  let launchpadBodyText = ''
+  const apps = await grafanaLaunchpadTilesFromApi(page)
+  expect(apps.length, 'Grafana launchpad dashboard should expose the selected stack tiles').toBeGreaterThanOrEqual(20)
+  for (const app of apps) {
+    await assertLaunchpadTileNavigates(page, app)
+  }
+}
 
-  for (let attempt = 1; attempt <= maxLaunchpadAttempts; attempt++) {
-    launchpadBodyText = (await body.textContent().catch(() => ''))?.replace(/\s+/g, ' ').trim() ?? ''
-    if (/Platform Launchpad/i.test(launchpadBodyText)) {
-      break
-    }
+async function grafanaLaunchpadTilesFromApi(page: Page): Promise<LaunchpadTile[]> {
+  const apiResponse = await page.evaluate(async () => {
+    const response = await fetch('/api/dashboards/uid/platform-launchpad', { credentials: 'include' })
+    const body = await response.text()
+    return { status: response.status, body }
+  })
 
-    if (attempt < maxLaunchpadAttempts) {
-      await page.waitForTimeout(5_000)
-      await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => undefined)
+  expect(apiResponse.status, apiResponse.body).toBe(200)
+
+  const payload = JSON.parse(apiResponse.body) as {
+    dashboard?: {
+      title?: unknown
+      panels?: Array<Record<string, unknown>>
     }
   }
+  expect(payload.dashboard?.title, apiResponse.body).toBe('Platform Launchpad')
 
-  expect(launchpadBodyText, 'Grafana launchpad dashboard did not render').toMatch(/Platform Launchpad/i)
+  const panels = Array.isArray(payload.dashboard?.panels) ? payload.dashboard.panels : []
+  const statPanels = panels.filter((panel) => panel.type === 'stat')
+  const linklessTiles = statPanels
+    .filter((panel) => !Array.isArray(panel.links) || !panel.links.some((link) => isRecord(link) && typeof link.url === 'string'))
+    .map((panel) => (typeof panel.title === 'string' ? panel.title : '<untitled>'))
 
-  for (const app of GRAFANA_LAUNCHPAD_APPS) {
-    const region = page.getByRole('region', { name: app.name })
-    await expect(region, `Grafana launchpad region missing for ${app.name}`).toBeVisible({ timeout: 120_000 })
-    let healthy = false
-    let lastRegionText = ''
+  expect(linklessTiles, `Every Grafana launchpad stat panel needs a navigable link: ${linklessTiles.join(', ')}`).toEqual([])
 
-    for (let attempt = 1; attempt <= maxLaunchpadAttempts; attempt++) {
-      lastRegionText = (await region.textContent().catch(() => ''))?.replace(/\s+/g, ' ').trim() ?? ''
-      if (/Healthy|Up/i.test(lastRegionText)) {
-        healthy = true
-        break
-      }
-
-      if (attempt < maxLaunchpadAttempts) {
-        await page.waitForTimeout(5_000)
-        await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => undefined)
-        await expect(page.locator('body')).toContainText(/Platform Launchpad/i, { timeout: 120_000 })
-      }
+  const tiles = statPanels.flatMap((panel) => {
+    if (typeof panel.title !== 'string' || !Array.isArray(panel.links)) {
+      return []
     }
 
-    expect(healthy, `Grafana launchpad tile for ${app.name} is not healthy: ${lastRegionText}`).toBe(true)
+    const firstLink = panel.links.find((link) => isRecord(link) && typeof link.url === 'string')
+    if (!firstLink || typeof firstLink.url !== 'string') {
+      return []
+    }
 
-    const openLink = region.getByRole('link', { name: new RegExp(`^Open\\s+${escapeRegExp(app.name)}$`, 'i') })
-    await expect(openLink, `Grafana launchpad link missing for ${app.name}`).toBeVisible({ timeout: 120_000 })
+    return [{ name: panel.title, url: new URL(firstLink.url, page.url()).toString() }]
+  })
 
-    await expect
-      .poll(
-        async () => {
-          const href = await openLink.getAttribute('href')
-          return normalizeUrl(new URL(href ?? '', page.url()).toString())
-        },
-        {
-          message: `Grafana launchpad link href mismatch for ${app.name}`,
-          timeout: 30_000,
-        },
-      )
-      .toBe(normalizeUrl(app.url))
+  expect(tiles, 'Grafana launchpad dashboard should expose at least one linked stat tile').not.toHaveLength(0)
+  const duplicateTileNames = tiles
+    .map((tile) => tile.name)
+    .filter((name, index, names) => names.indexOf(name) !== index)
+  expect(duplicateTileNames, `Grafana launchpad tile names must be unique: ${duplicateTileNames.join(', ')}`).toEqual([])
+  return tiles
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+async function assertLaunchpadTileNavigates(page: Page, app: LaunchpadTile) {
+  const tilePage = await page.context().newPage()
+  try {
+    const response = await gotoWithGatewayRetry(tilePage, app.url)
+    await tilePage.waitForLoadState('domcontentloaded', { timeout: 60_000 }).catch(() => undefined)
+    await assertNoGatewayErrorWithReloads(tilePage, `grafana launchpad tile ${app.name}`)
+
+    const status = response?.status() ?? 0
+    expect(status, `Grafana launchpad tile ${app.name} returned a 5xx status`).toBeLessThan(500)
+    expect(tilePage.url(), `Grafana launchpad tile ${app.name} ended on a browser error page`).not.toMatch(/^chrome-error:/)
+  } finally {
+    await tilePage.close().catch(() => undefined)
   }
 }
 
@@ -1266,7 +1269,7 @@ test.describe(SUITE_NAME, () => {
 
   for (const t of TARGETS) {
     test(`${t.name}: load and login`, async ({ page }, testInfo) => {
-      test.setTimeout(180_000)
+      test.setTimeout(t.postLogin === 'grafana-launchpad' ? 360_000 : 180_000)
       const browserApiTraffic = t.postLogin === 'developer-portal' ? watchBrowserApiTraffic(page) : undefined
       const runtimeEvents = t.name === 'chatgpt-sim' ? watchPageRuntimeEvents(page) : undefined
 

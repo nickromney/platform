@@ -135,6 +135,7 @@ for relative_path in (
     assert "Platform App Golden Signals" in text, relative_path
     assert ("Error rate (%)" in text or "5xx error ratio" in text), relative_path
     assert "LLM inference p95 (ms)" in text, relative_path
+    assert "llm_inference_latency_ms_milliseconds_bucket" in text, relative_path
     assert (
         "0 * sum(rate(traces_span_metrics_calls_total" in text
         or "0 * sum(rate(http_server_requests_seconds_count" in text

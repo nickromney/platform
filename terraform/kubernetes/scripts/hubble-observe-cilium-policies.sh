@@ -295,6 +295,10 @@ print_observation_contract() {
         directions: ["ingress", "egress"],
         world_egress_mode: $world_egress_mode,
         annotations: {
+          "platform.publiccloudexperiments.net/hubble-policy-candidate": "true",
+          "platform.publiccloudexperiments.net/hubble-policy-since": $since_value,
+          "platform.publiccloudexperiments.net/hubble-policy-iterations": $iterations,
+          "platform.publiccloudexperiments.net/hubble-policy-capture-mode": $capture_mode
         },
         promotion: {
           enabled: ($promote_to_module == "1"),
@@ -1799,6 +1803,14 @@ write_namespace_policy_header() {
     printf '  namespace: %s\n' "${namespace}"
     printf '  annotations:\n'
     printf '    "policies.cilium.io/title": "%s"\n' "$(yaml_escape "${title}")"
+    printf '    "platform.publiccloudexperiments.net/source-kind": "CiliumNetworkPolicy"\n'
+    printf '    "platform.publiccloudexperiments.net/hubble-policy-candidate": "true"\n'
+    printf '    "platform.publiccloudexperiments.net/hubble-policy-direction": "%s"\n' "${direction}"
+    printf '    "platform.publiccloudexperiments.net/hubble-policy-mode": "%s"\n' "${mode}"
+    printf '    "platform.publiccloudexperiments.net/hubble-policy-row-count": "%s"\n' "${row_count}"
+    printf '    "platform.publiccloudexperiments.net/hubble-policy-since": "%s"\n' "$(yaml_escape "${since_value}")"
+    printf '    "platform.publiccloudexperiments.net/hubble-policy-iterations": "%s"\n' "${iterations}"
+    printf '    "platform.publiccloudexperiments.net/hubble-policy-capture-mode": "%s"\n' "$(yaml_escape "${capture_mode}")"
     printf 'specs:\n'
   } > "${policy_file}"
 }
@@ -2889,6 +2901,7 @@ fi
 declare -a batch_pids=()
 while IFS= read -r namespace; do
   [[ -n "${namespace}" ]] || continue
+  collect_namespace_data "${namespace}" &
   batch_pids+=("$!")
 
   if [[ "${#batch_pids[@]}" -ge "${namespace_workers}" ]]; then

@@ -416,6 +416,7 @@ main() {
   export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR subnetcalc-apim-simulator
   export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_FRONTEND subnetcalc-frontend
   export_resolved_string APIM_PUBLIC_HOST apim_public_host "apim.admin.127.0.0.1.sslip.io"
+  export_resolved_string SSO_PUBLIC_URL sso_public_url ""
   export_resolved_string HEADLAMP_PUBLIC_HOST headlamp_public_host "headlamp.admin.127.0.0.1.sslip.io"
   export_resolved_string HEADLAMP_OIDC_CLIENT_SECRET headlamp_oidc_client_secret ""
   export_resolved_string HARDENED_IMAGE_REGISTRY hardened_image_registry dhi.io

@@ -96,6 +96,8 @@ EOF
 }
 
 @test "SSO E2E runner provisions browsers before tests and disables test-time downloads" {
+  export PLATFORM_PLAYWRIGHT_MODE=native
+
   run "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
@@ -105,6 +107,7 @@ EOF
 }
 
 @test "SSO E2E runner can skip browser provisioning for focused wrapper tests" {
+  export PLATFORM_PLAYWRIGHT_MODE=native
   export SSO_E2E_SKIP_PLAYWRIGHT_INSTALL=1
 
   run "${SCRIPT}" --execute
@@ -113,6 +116,16 @@ EOF
   [ ! -e "${ENSURE_CALLS}" ]
   grep -Fq 'run test --|PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1' "${BUN_CALLS}"
   [[ "${output}" == *"Skipping Playwright browser install because SSO_E2E_SKIP_PLAYWRIGHT_INSTALL=1"* ]]
+}
+
+@test "SSO E2E runner defaults to the matching cached Playwright Docker image" {
+  run "${SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  [ ! -e "${ENSURE_CALLS}" ]
+  grep -Fq 'run --rm' "${DOCKER_CALLS}"
+  grep -Fq 'mcr.microsoft.com/playwright:v1.58.2-fixture-noble' "${DOCKER_CALLS}"
+  grep -Fq 'npx playwright test' "${DOCKER_CALLS}"
 }
 
 @test "SSO E2E runner docker mode uses matching Playwright image and container wiring" {

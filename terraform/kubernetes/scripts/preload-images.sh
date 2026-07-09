@@ -652,6 +652,19 @@ image_repo_no_tag() {
   fi
 }
 
+image_digest_from_ref() {
+  local ref="$1"
+  local digest=""
+
+  case "${ref}" in
+    *@sha256:*)
+      digest="${ref##*@}"
+      ;;
+  esac
+
+  printf '%s\n' "${digest}"
+}
+
 canonicalize_image_ref() {
   local ref="$1"
   local digest=""
@@ -821,13 +834,20 @@ default_lock_file_for_platform() {
 generate_lock_file() {
   local out="$1"
   local tmp
-  local digest repo
+  local explicit_digest digest repo
   require_cmd jq
   tmp="$(mktemp)"
 
   : >"$tmp"
   while IFS= read -r img; do
     [[ -z "$img" ]] && continue
+    explicit_digest="$(image_digest_from_ref "$img")"
+    if [[ -n "${explicit_digest}" ]]; then
+      repo="$(image_repo_no_tag "$img")"
+      printf '%s\t%s@%s\n' "$img" "$repo" "$explicit_digest" >>"$tmp"
+      continue
+    fi
+
     digest="$(resolve_platform_digest "$img" 2>/dev/null || true)"
     if [[ -z "$digest" ]]; then
       echo "  WARN    unable to resolve digest for $img ($TARGET_PLATFORM); will fall back to docker pull --platform" >&2
@@ -860,6 +880,16 @@ ensure_pinned_tag() {
   local pinned_ref="$2"
 
   [[ -z "$pinned_ref" ]] && return 1
+  if [[ -n "$(image_digest_from_ref "$img")" ]]; then
+    if docker_image_exists "$img"; then
+      return 0
+    fi
+    if ! docker_image_exists "$pinned_ref"; then
+      docker_pull_safe "$pinned_ref" >/dev/null
+    fi
+    return 0
+  fi
+
   local digest="${pinned_ref##*@}"
 
   if docker_image_exists "$img" && image_has_digest "$img" "$digest"; then
@@ -1012,6 +1042,7 @@ pull_image() {
   local prefix
   local result
 
+  prefix="${idx}/${total}"
   [[ "$pinned_ref" == "-" ]] && pinned_ref=""
 
   if docker_image_exists "$img"; then
@@ -1059,6 +1090,7 @@ export -f docker_image_repo_digests
 export -f docker_pull_safe
 export -f ensure_pinned_tag
 export -f image_has_digest
+export -f image_digest_from_ref
 
 echo ""
 echo "Pulling images (parallelism=$PARALLELISM)..."
@@ -1228,6 +1260,8 @@ load_image_with_fallback() {
 
 while IFS=$'\t' read -r idx img pinned_ref; do
   [[ "$pinned_ref" == "-" ]] && pinned_ref=""
+  prefix="${idx}/${total}"
+  load_ref="$img"
 
   if cluster_has_image_on_all_nodes "$img" "$pinned_ref"; then
     echo "  [$prefix] present $img (already in kind nodes)"
@@ -1235,10 +1269,14 @@ while IFS=$'\t' read -r idx img pinned_ref; do
     continue
   fi
 
-  if ! docker_image_exists "$img"; then
-    echo "  [$prefix] skip    $img (not in local cache)"
-    skipped=$((skipped + 1))
-    continue
+  if ! docker_image_exists "$load_ref"; then
+    if [[ -n "$pinned_ref" && -n "$(image_digest_from_ref "$img")" ]] && docker_image_exists "$pinned_ref"; then
+      load_ref="$pinned_ref"
+    else
+      echo "  [$prefix] skip    $img (not in local cache)"
+      skipped=$((skipped + 1))
+      continue
+    fi
   fi
 
   if [[ -n "$pinned_ref" ]]; then
@@ -1247,16 +1285,19 @@ while IFS=$'\t' read -r idx img pinned_ref; do
       failed=$((failed + 1))
       continue
     fi
+    if [[ -n "$(image_digest_from_ref "$img")" ]] && ! docker_image_exists "$img" && docker_image_exists "$pinned_ref"; then
+      load_ref="$pinned_ref"
+    fi
   fi
 
-  archive="${workdir}/image-$(echo "$img" | tr '/:@' '___').tar"
-  if ! save_image_archive "$img" "$archive"; then
+  archive="${workdir}/image-$(echo "$load_ref" | tr '/:@' '___').tar"
+  if ! save_image_archive "$load_ref" "$archive"; then
     echo "  WARN    [$prefix] failed to docker save $img for $TARGET_PLATFORM (continuing)" >&2
     failed=$((failed + 1))
     continue
   fi
 
-  if load_image_with_fallback "$img" "$archive" "$prefix"; then
+  if load_image_with_fallback "$load_ref" "$archive" "$prefix"; then
     loaded=$((loaded + 1))
     echo "  [$prefix] loaded  $img"
     continue
@@ -1264,10 +1305,13 @@ while IFS=$'\t' read -r idx img pinned_ref; do
 
   echo "  INFO    [$prefix] load failed for $img; refreshing pinned ref and retrying once..." >&2
   if [[ -n "$pinned_ref" ]] && ensure_pinned_tag "$img" "$pinned_ref"; then
-    save_image_archive "$img" "$archive" >/dev/null 2>&1 || true
+    if [[ -n "$(image_digest_from_ref "$img")" ]] && ! docker_image_exists "$img" && docker_image_exists "$pinned_ref"; then
+      load_ref="$pinned_ref"
+    fi
+    save_image_archive "$load_ref" "$archive" >/dev/null 2>&1 || true
   fi
 
-  if load_image_with_fallback "$img" "$archive" "$prefix"; then
+  if load_image_with_fallback "$load_ref" "$archive" "$prefix"; then
     loaded=$((loaded + 1))
     echo "  [$prefix] loaded  $img"
   else

@@ -715,7 +715,7 @@ locals {
   # The Kubernetes/Helm/kubectl providers validate config_path eagerly.
   # Stage 100 may run on machines without an existing kubeconfig file, so fall back
   # to a committed, syntactically-valid empty kubeconfig.
-  kubeconfig_path_for_providers = fileexists(local.kubeconfig_path_expanded) ? local.kubeconfig_path_expanded : "${local.stack_dir}/templates/empty-kubeconfig.yaml"
+  kubeconfig_path_for_providers = fileexists(local.kubeconfig_path_expanded) ? local.kubeconfig_path_expanded : "${local.repo_root}/terraform/kubernetes/templates/empty-kubeconfig.yaml"
   kubeconfig_raw_for_providers  = file(local.kubeconfig_path_for_providers)
   kubeconfig_context_names_for_providers = [
     for ctx in try(yamldecode(local.kubeconfig_raw_for_providers).contexts, []) : tostring(try(ctx.name, ""))

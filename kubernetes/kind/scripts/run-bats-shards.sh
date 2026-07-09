@@ -101,10 +101,10 @@ declare -a shard_counts=()
 
 i=0
 while [[ "${i}" -lt "${BATS_SHARDS}" ]]; do
-  shard_loads[$i]=0
-  shard_counts[$i]=0
-  shard_files[$i]="${RUN_DIR}/shard-$((i + 1)).txt"
-  : > "${shard_files[$i]}"
+  shard_loads[i]=0
+  shard_counts[i]=0
+  shard_files[i]="${RUN_DIR}/shard-$((i + 1)).txt"
+  : > "${shard_files[i]}"
   i=$((i + 1))
 done
 
@@ -113,21 +113,21 @@ while IFS=$'\t' read -r file test_name; do
   min_load="${shard_loads[0]}"
   i=1
   while [[ "${i}" -lt "${BATS_SHARDS}" ]]; do
-    if [[ "${shard_loads[$i]}" -lt "${min_load}" ]]; then
+    if [[ "${shard_loads[i]}" -lt "${min_load}" ]]; then
       min_index="${i}"
-      min_load="${shard_loads[$i]}"
+      min_load="${shard_loads[i]}"
     fi
     i=$((i + 1))
   done
 
-  printf '%s\t%s\n' "${file}" "${test_name}" >> "${shard_files[$min_index]}"
-  shard_loads[$min_index]=$((shard_loads[$min_index] + 1))
+  printf '%s\t%s\n' "${file}" "${test_name}" >> "${shard_files[min_index]}"
+  shard_loads[min_index]=$((shard_loads[min_index] + 1))
 done < "${TESTS_FILE}"
 
 i=0
 while [[ "${i}" -lt "${BATS_SHARDS}" ]]; do
-  if [[ -s "${shard_files[$i]}" ]]; then
-    shard_counts[$i]="$(cut -f1 "${shard_files[$i]}" | sort -u | wc -l | tr -d ' ')"
+  if [[ -s "${shard_files[i]}" ]]; then
+    shard_counts[i]="$(cut -f1 "${shard_files[i]}" | sort -u | wc -l | tr -d ' ')"
   fi
   i=$((i + 1))
 done
@@ -136,11 +136,11 @@ total_tests=0
 total_files=0
 i=0
 while [[ "${i}" -lt "${BATS_SHARDS}" ]]; do
-  total_tests=$((total_tests + shard_loads[$i]))
-  total_files=$((total_files + shard_counts[$i]))
-  printf 'shard %d: %d tests across %d file groups\n' "$((i + 1))" "${shard_loads[$i]}" "${shard_counts[$i]}"
+  total_tests=$((total_tests + shard_loads[i]))
+  total_files=$((total_files + shard_counts[i]))
+  printf 'shard %d: %d tests across %d file groups\n' "$((i + 1))" "${shard_loads[i]}" "${shard_counts[i]}"
   if [[ "${PLAN_ONLY}" -eq 1 ]]; then
-    sed "s#^${REPO_ROOT}/#  #" "${shard_files[$i]}"
+    sed "s#^${REPO_ROOT}/#  #" "${shard_files[i]}"
   fi
   i=$((i + 1))
 done
@@ -237,24 +237,24 @@ print_progress() {
 
   i=0
   while [[ "${i}" -lt "${BATS_SHARDS}" ]]; do
-    if [[ "${shard_counts[$i]}" -eq 0 ]]; then
+    if [[ "${shard_counts[i]}" -eq 0 ]]; then
       i=$((i + 1))
       continue
     fi
-    if [[ "${shard_done[$i]:-0}" -eq 1 ]]; then
+    if [[ "${shard_done[i]:-0}" -eq 1 ]]; then
       completed=$((completed + 1))
-      if [[ "${shard_exit[$i]:-0}" -ne 0 ]]; then
+      if [[ "${shard_exit[i]:-0}" -ne 0 ]]; then
         failed=$((failed + 1))
       fi
     else
       running=$((running + 1))
     fi
-    shard_tests_done="$(count_completed_tests "${logs[$i]}")"
-    if [[ "${shard_tests_done}" -gt "${shard_loads[$i]}" ]]; then
-      shard_tests_done="${shard_loads[$i]}"
+    shard_tests_done="$(count_completed_tests "${logs[i]}")"
+    if [[ "${shard_tests_done}" -gt "${shard_loads[i]}" ]]; then
+      shard_tests_done="${shard_loads[i]}"
     fi
     tests_done=$((tests_done + shard_tests_done))
-    shard_failed_tests="$(count_failed_tests "${logs[$i]}")"
+    shard_failed_tests="$(count_failed_tests "${logs[i]}")"
     failed_tests=$((failed_tests + shard_failed_tests))
     i=$((i + 1))
   done
@@ -270,17 +270,17 @@ print_progress() {
 
   i=0
   while [[ "${i}" -lt "${BATS_SHARDS}" ]]; do
-    if [[ "${shard_counts[$i]}" -eq 0 || "${shard_done[$i]:-0}" -eq 1 ]]; then
+    if [[ "${shard_counts[i]}" -eq 0 || "${shard_done[i]:-0}" -eq 1 ]]; then
       i=$((i + 1))
       continue
     fi
-    shard_tests_done="$(count_completed_tests "${logs[$i]}")"
-    if [[ "${shard_tests_done}" -gt "${shard_loads[$i]}" ]]; then
-      shard_tests_done="${shard_loads[$i]}"
+    shard_tests_done="$(count_completed_tests "${logs[i]}")"
+    if [[ "${shard_tests_done}" -gt "${shard_loads[i]}" ]]; then
+      shard_tests_done="${shard_loads[i]}"
     fi
-    line="$(latest_log_line "${logs[$i]}")"
+    line="$(latest_log_line "${logs[i]}")"
     printf '  shard %d/%d: %d/%d tests, pid %s, latest: %s\n' \
-      "$((i + 1))" "${BATS_SHARDS}" "${shard_tests_done}" "${shard_loads[$i]}" "${pids[$i]}" "${line}"
+      "$((i + 1))" "${BATS_SHARDS}" "${shard_tests_done}" "${shard_loads[i]}" "${pids[i]}" "${line}"
     i=$((i + 1))
   done
 }
@@ -288,16 +288,16 @@ print_progress() {
 i=0
 active_shards=0
 while [[ "${i}" -lt "${BATS_SHARDS}" ]]; do
-  if [[ "${shard_counts[$i]}" -eq 0 ]]; then
+  if [[ "${shard_counts[i]}" -eq 0 ]]; then
     i=$((i + 1))
     continue
   fi
 
   log="${RUN_DIR}/shard-$((i + 1)).log"
-  logs[$i]="${log}"
-  shard_done[$i]=0
-  shard_exit[$i]=0
-  shard_started_at[$i]="$(now_epoch)"
+  logs[i]="${log}"
+  shard_done[i]=0
+  shard_exit[i]=0
+  shard_started_at[i]="$(now_epoch)"
   (
     current_file=""
     regex=""
@@ -318,13 +318,13 @@ while [[ "${i}" -lt "${BATS_SHARDS}" ]]; do
       else
         regex="${regex}|${escaped_name}"
       fi
-    done < <(sort "${shard_files[$i]}")
+    done < <(sort "${shard_files[i]}")
     run_file_group
   ) > "${log}" 2>&1 &
-  pids[$i]=$!
+  pids[i]=$!
   active_shards=$((active_shards + 1))
   printf 'started shard %d/%d: %d tests, %d file groups, pid %s, log %s\n' \
-    "$((i + 1))" "${BATS_SHARDS}" "${shard_loads[$i]}" "${shard_counts[$i]}" "${pids[$i]}" "${log}"
+    "$((i + 1))" "${BATS_SHARDS}" "${shard_loads[i]}" "${shard_counts[i]}" "${pids[i]}" "${log}"
   i=$((i + 1))
 done
 
@@ -337,31 +337,31 @@ remaining="${active_shards}"
 while [[ "${remaining}" -gt 0 ]]; do
   i=0
   while [[ "${i}" -lt "${BATS_SHARDS}" ]]; do
-    if [[ -n "${pids[$i]:-}" && "${shard_done[$i]:-0}" -eq 0 ]]; then
-      if kill -0 "${pids[$i]}" 2>/dev/null; then
+    if [[ -n "${pids[i]:-}" && "${shard_done[i]:-0}" -eq 0 ]]; then
+      if kill -0 "${pids[i]}" 2>/dev/null; then
         :
       else
-        if wait "${pids[$i]}"; then
-          shard_exit[$i]=0
+        if wait "${pids[i]}"; then
+          shard_exit[i]=0
         else
-          shard_exit[$i]=$?
-          status="${shard_exit[$i]}"
+          shard_exit[i]=$?
+          status="${shard_exit[i]}"
         fi
-        shard_done[$i]=1
-        shard_finished_at[$i]="$(now_epoch)"
+        shard_done[i]=1
+        shard_finished_at[i]="$(now_epoch)"
         remaining=$((remaining - 1))
 
-        if [[ "${shard_exit[$i]}" -eq 0 ]]; then
+        if [[ "${shard_exit[i]}" -eq 0 ]]; then
           printf 'ok shard %d (%d tests) in %s: %s\n' \
-            "$((i + 1))" "${shard_loads[$i]}" \
-            "$(format_duration "$((shard_finished_at[$i] - shard_started_at[$i]))")" \
-            "${logs[$i]}"
+            "$((i + 1))" "${shard_loads[i]}" \
+            "$(format_duration "$((shard_finished_at[i] - shard_started_at[i]))")" \
+            "${logs[i]}"
         else
           printf 'not ok shard %d (%d tests) in %s: %s\n' \
-            "$((i + 1))" "${shard_loads[$i]}" \
-            "$(format_duration "$((shard_finished_at[$i] - shard_started_at[$i]))")" \
-            "${logs[$i]}" >&2
-          sed -n '1,220p' "${logs[$i]}" >&2
+            "$((i + 1))" "${shard_loads[i]}" \
+            "$(format_duration "$((shard_finished_at[i] - shard_started_at[i]))")" \
+            "${logs[i]}" >&2
+          sed -n '1,220p' "${logs[i]}" >&2
         fi
       fi
     fi

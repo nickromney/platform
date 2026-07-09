@@ -1329,7 +1329,7 @@ print(f"validated {len(preload_image_snapshot_files())} preload image snapshot(s
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 4 preload image snapshot(s) and 7 lock entry(ies)"* ]]
+  [[ "${output}" == *"validated 4 preload image snapshot(s) and 8 lock entry(ies)"* ]]
 }
 
 @test "app runtime tests share preload image artifact helpers" {

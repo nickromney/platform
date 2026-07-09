@@ -135,6 +135,7 @@ __GRAFANA_PLUGINS_VALUES__
                 type: prometheus
                 access: proxy
                 url: http://prometheus-server.observability.svc.cluster.local
+                uid: prometheus
                 isDefault: true
                 jsonData:
                   timeInterval: 15s
@@ -174,7 +175,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "text"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://grafana.admin.127.0.0.1.sslip.io/d/backstage-observability/backstage-observability",
                       "fieldConfig": {
                         "defaults": {
@@ -232,6 +236,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "((max(kube_deployment_status_replicas_available{namespace=\"idp\",deployment=\"backstage\"}) > bool 0) or max(argocd_app_info{name=\"idp\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))",
                           "refId": "A"
                         }
@@ -240,7 +248,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-app-overview/platform-app-golden-signals",
                       "fieldConfig": {
                         "defaults": {
@@ -298,6 +309,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "((max(kube_deployment_status_replicas_available{namespace=\"observability\",deployment=\"grafana\"}) > bool 0) or max(argocd_app_info{name=\"grafana\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))",
                           "refId": "A"
                         }
@@ -306,7 +321,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-mcp-observability/platform-mcp-observability",
                       "fieldConfig": {
                         "defaults": {
@@ -364,6 +382,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "((max(kube_deployment_status_replicas_available{namespace=\"mcp\",deployment=\"platform-mcp\"}) > bool 0) or max(argocd_app_info{name=\"mcp\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))",
                           "refId": "A"
                         }
@@ -372,7 +394,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-namespace-health/platform-namespace-health",
                       "fieldConfig": {
                         "defaults": {
@@ -430,6 +455,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "((max(kube_deployment_status_replicas_available{namespace=\"observability\",deployment=\"grafana\"}) > bool 0) or max(argocd_app_info{name=\"grafana\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))",
                           "refId": "A"
                         }
@@ -438,7 +467,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://argocd.admin.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
@@ -496,6 +528,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "((max(kube_deployment_status_replicas_available{namespace=\"argocd\",deployment=\"argocd-server\"}) > bool 0) or (sum(argocd_app_info{health_status=\"Healthy\"}) > bool 0) or vector(0))",
                           "refId": "A"
                         }
@@ -504,7 +540,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://gitea.admin.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
@@ -562,6 +601,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "((max(kube_deployment_status_replicas_available{namespace=\"gitea\",deployment=\"gitea\"}) > bool 0) or max(argocd_app_info{name=\"gitea\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))",
                           "refId": "A"
                         }
@@ -570,7 +613,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://headlamp.admin.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
@@ -628,6 +674,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "((max(kube_deployment_status_replicas_available{namespace=\"headlamp\",deployment=\"headlamp\"}) > bool 0) or max(argocd_app_info{name=\"headlamp\",health_status=\"Healthy\",sync_status=\"Synced\"}) or max(argocd_app_info{name=\"platform-gateway-routes\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))",
                           "refId": "A"
                         }
@@ -636,7 +686,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://hubble.admin.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
@@ -694,6 +747,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-hubble\"}) > bool 0) or max(argocd_app_info{name=\"platform-gateway-routes\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))",
                           "refId": "A"
                         }
@@ -702,7 +759,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://keycloak.127.0.0.1.sslip.io/admin/platform/console/#/platform/users",
                       "fieldConfig": {
                         "defaults": {
@@ -760,6 +820,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"keycloak\"}) > bool 0) or vector(0))",
                           "refId": "A"
                         }
@@ -768,7 +832,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://kyverno.admin.127.0.0.1.sslip.io/",
                       "fieldConfig": {
                         "defaults": {
@@ -826,6 +893,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "((max(kube_deployment_status_replicas_available{namespace=\"policy-reporter\",deployment=~\"policy-reporter|policy-reporter-ui\"}) > bool 0) or max(argocd_app_info{name=\"policy-reporter\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))",
                           "refId": "A"
                         }
@@ -834,7 +905,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://mcp-console.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
@@ -892,6 +966,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-mcp-console\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"mcp\",deployment=\"mcp-inspector\"}) > bool 0)) or vector(0))",
                           "refId": "A"
                         }
@@ -900,7 +978,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://mcp.127.0.0.1.sslip.io/mcp",
                       "fieldConfig": {
                         "defaults": {
@@ -958,6 +1039,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "((max(kube_deployment_status_replicas_available{namespace=\"mcp\",deployment=\"platform-mcp\"}) > bool 0) or max(argocd_app_info{name=\"mcp\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))",
                           "refId": "A"
                         }
@@ -966,7 +1051,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://portal.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
@@ -1024,6 +1112,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-backstage\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"idp\",deployment=\"backstage\"}) > bool 0)) or vector(0))",
                           "refId": "A"
                         }
@@ -1032,7 +1124,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://portal-api.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
@@ -1090,6 +1185,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-idp-core\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"idp\",deployment=\"idp-core\"}) > bool 0)) or vector(0))",
                           "refId": "A"
                         }
@@ -1098,7 +1197,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://subnetcalc.dev.127.0.0.1.sslip.io/api",
                       "fieldConfig": {
                         "defaults": {
@@ -1156,6 +1258,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-apim\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"apim\",deployment=\"subnetcalc-apim-simulator\"}) > bool 0)) or vector(0))",
                           "refId": "A"
                         }
@@ -1164,7 +1270,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://auth-chat.dev.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
@@ -1222,6 +1331,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-auth-chat\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"auth-chat\"}) > bool 0)) or vector(0))",
                           "refId": "A"
                         }
@@ -1230,7 +1343,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://chatgpt.dev.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
@@ -1288,6 +1404,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-chatgpt-sim\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"chatgpt-sim\"}) > bool 0)) or vector(0))",
                           "refId": "A"
                         }
@@ -1296,7 +1416,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://langfuse.admin.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
@@ -1354,6 +1477,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-langfuse\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"langfuse\",deployment=\"langfuse-web\"}) > bool 0)) or vector(0))",
                           "refId": "A"
                         }
@@ -1362,7 +1489,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://lf-evals.dev.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
@@ -1420,6 +1550,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-langfuse-eval-runner\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"langfuse-eval-runner\"}) > bool 0)) or vector(0))",
                           "refId": "A"
                         }
@@ -1428,7 +1562,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://lf-agent.dev.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
@@ -1486,6 +1623,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-langfuse-tool-agent\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"langfuse-tool-agent\"}) > bool 0)) or vector(0))",
                           "refId": "A"
                         }
@@ -1494,7 +1635,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://lf-chat.dev.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
@@ -1552,6 +1696,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-langfuse-trace-chat\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"langfuse-trace-chat\"}) > bool 0)) or vector(0))",
                           "refId": "A"
                         }
@@ -1560,7 +1708,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://sentiment.dev.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
@@ -1618,6 +1769,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-sentiment-dev\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"sentiment-router\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"sentiment-auth-ui\"}) > bool 0)) or vector(0))",
                           "refId": "A"
                         }
@@ -1626,7 +1781,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://subnetcalc.dev.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
@@ -1684,6 +1842,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-subnetcalc-dev\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"subnetcalc-router\"}) > bool 0) * ((max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"subnetcalc-frontend\"}) > bool 0) or (max(kube_pod_status_ready{namespace=\"dev\",pod=~\"subnetcalc-frontend-.*\",condition=\"true\"}) > bool 0) or vector(0))) or vector(0))",
                           "refId": "A"
                         }
@@ -1692,7 +1854,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://sentiment.uat.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
@@ -1750,6 +1915,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-sentiment-uat\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"uat\",deployment=\"sentiment-router\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"uat\",deployment=\"sentiment-auth-ui\"}) > bool 0)) or vector(0))",
                           "refId": "A"
                         }
@@ -1758,7 +1927,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "type": "stat"
                     },
                     {
-                      "datasource": "Prometheus",
+                      "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                      },
                       "description": "https://subnetcalc.uat.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
@@ -1816,6 +1988,10 @@ __GRAFANA_PLUGINS_VALUES__
                       },
                       "targets": [
                         {
+                          "datasource": {
+                            "type": "prometheus",
+                            "uid": "prometheus"
+                          },
                           "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-subnetcalc-uat\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"uat\",deployment=\"subnetcalc-router\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"uat\",deployment=\"subnetcalc-frontend\"}) > bool 0)) or vector(0))",
                           "refId": "A"
                         }
@@ -1832,17 +2008,7 @@ __GRAFANA_PLUGINS_VALUES__
                     "entrypoints"
                   ],
                   "templating": {
-                    "list": [
-                      {
-                        "name": "prometheus",
-                        "type": "datasource",
-                        "query": "prometheus",
-                        "current": {
-                          "selected": false,
-                          "value": "Prometheus"
-                        }
-                      }
-                    ]
+                    "list": []
                   },
                   "time": {
                     "from": "now-15m",
@@ -1861,32 +2027,32 @@ __GRAFANA_PLUGINS_VALUES__
                   "panels": [
                     {
                       "datasource": "Prometheus",
-                      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+                      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
                       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
                       "id": 1,
                       "targets": [
                         {
-                          "expr": "sum(rate(http_server_requests_seconds_count{namespace=~\"dev|uat\"}[5m])) by (k8s_namespace_name)",
-                          "legendFormat": "{{k8s_namespace_name}}",
+                          "expr": "sum(rate(traces_span_metrics_calls_total{service_name=~\"sentiment-api|subnetcalc-api\",k8s_namespace_name=~\"dev|uat\"}[5m])) by (k8s_namespace_name,service_name)",
+                          "legendFormat": "{{k8s_namespace_name}}/{{service_name}}",
                           "refId": "A"
                         }
                       ],
-                      "title": "HTTP request rate (5m)",
+                      "title": "Request rate (rps)",
                       "type": "timeseries"
                     },
                     {
                       "datasource": "Prometheus",
-                      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
+                      "fieldConfig": {"defaults": {"unit": "percent"}, "overrides": []},
                       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
                       "id": 2,
                       "targets": [
                         {
-                          "expr": "(sum(rate(http_server_requests_seconds_count{namespace=~\"dev|uat\",status=~\"5..\"}[5m])) by (k8s_namespace_name) / clamp_min(sum(rate(http_server_requests_seconds_count{namespace=~\"dev|uat\"}[5m])) by (k8s_namespace_name), 1)) or (0 * sum(rate(http_server_requests_seconds_count{namespace=~\"dev|uat\"}[5m])) by (k8s_namespace_name))",
-                          "legendFormat": "{{k8s_namespace_name}}",
+                          "expr": "(100 * (sum(rate(traces_span_metrics_calls_total{service_name=~\"sentiment-api|subnetcalc-api\",k8s_namespace_name=~\"dev|uat\",http_status_code=~\"4..|5..\"}[5m])) by (k8s_namespace_name,service_name) / clamp_min(sum(rate(traces_span_metrics_calls_total{service_name=~\"sentiment-api|subnetcalc-api\",k8s_namespace_name=~\"dev|uat\"}[5m])) by (k8s_namespace_name,service_name), 0.0001))) or (0 * sum(rate(traces_span_metrics_calls_total{service_name=~\"sentiment-api|subnetcalc-api\",k8s_namespace_name=~\"dev|uat\"}[5m])) by (k8s_namespace_name,service_name))",
+                          "legendFormat": "{{k8s_namespace_name}}/{{service_name}}",
                           "refId": "A"
                         }
                       ],
-                      "title": "5xx error ratio",
+                      "title": "Error rate (%)",
                       "type": "timeseries"
                     },
                     {
@@ -1896,12 +2062,12 @@ __GRAFANA_PLUGINS_VALUES__
                       "id": 3,
                       "targets": [
                         {
-                          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{namespace=~\"dev|uat\"}[5m])) by (le,k8s_namespace_name)) * 1000",
-                          "legendFormat": "{{k8s_namespace_name}}",
+                          "expr": "histogram_quantile(0.95, sum(rate(traces_span_metrics_duration_milliseconds_bucket{service_name=~\"sentiment-api|subnetcalc-api\",k8s_namespace_name=~\"dev|uat\"}[5m])) by (le,k8s_namespace_name,service_name))",
+                          "legendFormat": "{{k8s_namespace_name}}/{{service_name}}",
                           "refId": "A"
                         }
                       ],
-                      "title": "HTTP latency p95 (ms)",
+                      "title": "Latency p95 (ms)",
                       "type": "timeseries"
                     },
                     {
@@ -1926,7 +2092,7 @@ __GRAFANA_PLUGINS_VALUES__
                       "id": 5,
                       "targets": [
                         {
-                          "expr": "histogram_quantile(0.95, sum(rate(llm_inference_latency_ms_bucket{k8s_namespace_name=~\"dev|uat\"}[5m])) by (le,k8s_namespace_name)) or on(k8s_namespace_name) (0 * max by (k8s_namespace_name) (sentiment_comments_created_total{k8s_namespace_name=~\"dev|uat\"}))",
+                          "expr": "histogram_quantile(0.95, sum(rate(llm_inference_latency_ms_bucket{k8s_namespace_name=~\"dev|uat\"}[5m])) by (le,k8s_namespace_name)) or histogram_quantile(0.95, sum(rate(llm_inference_latency_ms_milliseconds_bucket{k8s_namespace_name=~\"dev|uat\"}[5m])) by (le,k8s_namespace_name)) or on(k8s_namespace_name) (0 * max by (k8s_namespace_name) (sentiment_comments_created_total{k8s_namespace_name=~\"dev|uat\"}))",
                           "legendFormat": "{{k8s_namespace_name}}",
                           "refId": "A"
                         }

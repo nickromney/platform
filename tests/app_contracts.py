@@ -201,6 +201,8 @@ def platform_launchpad_rendered_dashboard_contract_violations(repo_root: Path) -
         rendered_titles = [panel.get("title") for panel in stat_panels]
         if dashboard.get("title") != "Platform Launchpad":
             violations.append(f"{relative} rendered dashboard title should be Platform Launchpad")
+        if dashboard.get("templating", {}).get("list") != []:
+            violations.append(f"{relative} rendered Launchpad dashboard should not keep an unused datasource variable")
         if rendered_titles != expected_titles:
             violations.append(f"{relative} rendered Launchpad tiles should match selected inventory tiles")
 
@@ -218,6 +220,10 @@ def platform_launchpad_rendered_dashboard_contract_violations(repo_root: Path) -
                 violations.append(f"{relative} {title} panel link should match inventory URL")
             if not targets_config or targets_config[0].get("expr") != tile.get("expr"):
                 violations.append(f"{relative} {title} panel query should match inventory expression")
+            if panel.get("datasource") != {"type": "prometheus", "uid": "prometheus"}:
+                violations.append(f"{relative} {title} panel should use the stable Prometheus datasource UID")
+            if targets_config and targets_config[0].get("datasource") != {"type": "prometheus", "uid": "prometheus"}:
+                violations.append(f"{relative} {title} query should use the stable Prometheus datasource UID")
 
     subnetcalc_dev = next((tile for tile in selected_tiles if tile.get("title") == "SubnetCalc DEV"), None)
     if subnetcalc_dev is None:
@@ -5878,6 +5884,7 @@ def preload_image_required_refs() -> tuple[str, ...]:
         "docker:29.4.3-cli",
         "gitea/act_runner:0.4.1",
         "kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5",
+        "mcr.microsoft.com/playwright:v1.58.2-noble",
         "dhi.io/golang:1.26-alpine3.23-dev",
         "dhi.io/static:20260413-alpine3.23",
         "python:3.12.13-alpine3.23",
@@ -5902,6 +5909,7 @@ def preload_image_lock_refs() -> tuple[str, ...]:
         "docker:29.4.3-cli",
         "gitea/act_runner:0.4.1",
         "kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5",
+        "mcr.microsoft.com/playwright:v1.58.2-noble",
         "python:3.12.13-alpine3.23",
         "docker.io/curlimages/curl:8.19.0",
         "curlimages/curl:8.19.0",
