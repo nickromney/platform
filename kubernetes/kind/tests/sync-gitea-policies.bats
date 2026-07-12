@@ -5,6 +5,7 @@ setup() {
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
   export SCRIPT="${REPO_ROOT}/terraform/kubernetes/scripts/sync-gitea-policies.sh"
   export TEST_BIN="${BATS_TEST_TMPDIR}/bin"
+  export CHART_VENDOR_CACHE_DIR="${BATS_TEST_TMPDIR}/chart-cache"
   mkdir -p "${TEST_BIN}"
   export PATH="${TEST_BIN}:${PATH}"
 
@@ -28,6 +29,9 @@ set -euo pipefail
 cmd="${1:-}"
 shift || true
 case "${cmd}" in
+  lint)
+    exit 0
+    ;;
   repo)
     exit 0
     ;;
@@ -464,6 +468,9 @@ set -euo pipefail
 cmd="${1:-}"
 shift || true
 case "${cmd}" in
+  lint)
+    exit 0
+    ;;
   repo)
     exit 0
     ;;
@@ -541,6 +548,9 @@ set -euo pipefail
 cmd="${1:-}"
 shift || true
 case "${cmd}" in
+  lint)
+    exit 0
+    ;;
   repo)
     exit 0
     ;;
@@ -597,6 +607,29 @@ EOF
   [[ "${output}" == *"cached chart archive ${cache_archive} is incomplete; refetching cert-manager v1.20.2"* ]]
 }
 
+@test "chart archive validation rejects metadata-only Kubernetes templates" {
+  archive="${BATS_TEST_TMPDIR}/argo-rollouts-2.41.0.tgz"
+  workdir="${BATS_TEST_TMPDIR}/metadata-only-chart"
+  mkdir -p "${workdir}/argo-rollouts/templates"
+  printf 'apiVersion: v2\nname: argo-rollouts\nversion: 2.41.0\n' >"${workdir}/argo-rollouts/Chart.yaml"
+  printf '{}\n' >"${workdir}/argo-rollouts/values.yaml"
+  printf 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: argo-rollouts\n' >"${workdir}/argo-rollouts/templates/deployment.yaml"
+  printf 'apiVersion: v1\nkind: Service\nmetadata:\n  name: argo-rollouts\n' >"${workdir}/argo-rollouts/templates/service.yaml"
+  tar -C "${workdir}" -czf "${archive}" argo-rollouts
+
+  cat >"${TEST_BIN}/helm" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${1:-}" == "lint" ]] || exit 1
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/helm"
+
+  run bash -lc "source '${SCRIPT}'; chart_archive_has_renderable_content '${archive}' argo-rollouts"
+
+  [ "${status}" -ne 0 ]
+}
+
 @test "vendor_chart reuses cached chart archive without refetching" {
   vendor_root="${BATS_TEST_TMPDIR}/vendor"
   cache_dir="${BATS_TEST_TMPDIR}/chart-cache"
@@ -608,6 +641,9 @@ set -euo pipefail
 cmd="${1:-}"
 shift || true
 case "${cmd}" in
+  lint)
+    exit 0
+    ;;
   repo)
     exit 0
     ;;
@@ -1289,6 +1325,18 @@ EOF
   [ "${status}" -eq 0 ]
   grep -Fq "image: host.docker.internal:5002/platform/argo-rollouts-gatewayapi-plugin:v0.5.0" "${app_file}"
   grep -Fq "location: file:///var/run/argo-rollouts/plugins/gatewayapi-plugin" "${app_file}"
+}
+
+@test "Argo Rollouts vendoring uses the source Application chart version" {
+  apps_dir="${BATS_TEST_TMPDIR}/apps"
+  vendor_dir="${BATS_TEST_TMPDIR}/vendor"
+  mkdir -p "${apps_dir}" "${vendor_dir}"
+  cp "${REPO_ROOT}/terraform/kubernetes/apps/argocd-apps/87-argo-rollouts.application.yaml" "${apps_dir}/87-argo-rollouts.application.yaml"
+
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes'; source '${SCRIPT}'; vendor_chart() { printf '%s\\t%s\\t%s\\n' \"\$1\" \"\$2\" \"\$3\"; }; rewrite_argocd_app_to_vendored_chart() { :; }; rewrite_external_argocd_apps_to_vendored_charts '${apps_dir}' '${vendor_dir}'"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'https://argoproj.github.io/argo-helm\targo-rollouts\t2.41.0' ]
 }
 
 @test "external image render-input module maps contract defaults and manifest replacements" {

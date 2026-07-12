@@ -416,7 +416,7 @@ check-kind-state:
 		exit 1; \
 	fi; \
 	if [ ! -s "$(STATE_FILE)" ]; then \
-		"$(SNAPSHOT_TFSTATE)" --execute --state-file "$(TG_STATE_PATH)" --keep "$(TFSTATE_SNAPSHOT_KEEP)" --restore-command "make -C kubernetes/kind state-restore AUTO_APPROVE=1"; \
+		"$(SNAPSHOT_TFSTATE)" --execute --state-file "$(TG_STATE_PATH)" --keep "$(TFSTATE_SNAPSHOT_KEEP)" --restore-command "make -C kubernetes/kind state-restore AUTO_APPROVE=1" || :; \
 		echo "Refusing to continue against a live cluster with zero-byte state."; \
 		exit 1; \
 	fi; \
