@@ -362,7 +362,8 @@ EOF
 @test "check-version drives preload alignment from image catalog projection" {
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; \
     image_catalog_preload_alignment_projection | awk -F '\t' '\$1 == \"argocd\" { print \$1, \$2, \$3, \$7 } \$1 == \"prometheus\" { print \$1, \$2, \$3, \$7 } \$1 == \"playwright-e2e\" { print \$1, \$2, \$3, \$7 }'; \
-    declare -f check_preload_image_version_alignment"
+    declare -f check_preload_image_version_alignment; \
+    declare -f main"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"argocd ArgoCD exact-ref preferred-image"* ]]
@@ -370,6 +371,7 @@ EOF
   [[ "${output}" == *"playwright-e2e Playwright E2E repo-tag npm-playwright-core"* ]]
   [[ "${output}" == *"image_catalog_preload_alignment_projection"* ]]
   [[ "${output}" != *'check_preload_repo_tag_alignment "${preload_file}" "Prometheus"'* ]]
+  [[ "${output}" == *'check_preload_image_version_alignment "${CODE_ARGOCD_IMAGE_REF}" "${CODETAG_PROMETHEUS}" "${CODETAG_GRAFANA}" "${CODETAG_VICTORIA_LOGS}"'* ]]
 }
 
 @test "check-version reports stale preload image candidates from catalog alignment checks" {
@@ -377,6 +379,8 @@ EOF
   cat >"${preload_file}" <<'EOF'
 quay.io/prometheus/prometheus:v2.54.0
 quay.io/prometheus/prometheus:v2.55.0
+docker.io/victoriametrics/victoria-logs:v1.34.0
+docker.io/victoriametrics/victoria-logs:v1.35.0
 EOF
 
   run bash -lc "
@@ -395,15 +399,30 @@ EOF
         'warn' \
         'test-fixture' \
         'EXPECT_PROMETHEUS'
+      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        'victoria-logs' \
+        'VictoriaLogs' \
+        'repo-tag' \
+        '^docker[.]io/victoriametrics/victoria-logs:' \
+        's|^.*:([^[:space:]]+)$|\1|' \
+        'victoria_logs_chart_app_version' \
+        'latest' \
+        'checked-elsewhere' \
+        'warn' \
+        'test-fixture' \
+        'EXPECT_VICTORIA_LOGS'
     }
     PRELOAD_IMAGES_FILE='${preload_file}'
     EXPECT_PROMETHEUS=true
-    check_preload_image_version_alignment '' 'v2.55.0' '' '' '' ''
+    EXPECT_VICTORIA_LOGS=true
+    check_preload_image_version_alignment '' 'v2.55.0' '' 'v1.35.0'
   "
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"stale preload candidate (line 1): quay.io/prometheus/prometheus:v2.54.0 (expected Prometheus tag v2.55.0)"* ]]
   [[ "${output}" == *"Prometheus preload includes 1 non-matching tag line(s); expected tag is v2.55.0"* ]]
+  [[ "${output}" == *"stale preload candidate (line 3): docker.io/victoriametrics/victoria-logs:v1.34.0 (expected VictoriaLogs tag v1.35.0)"* ]]
+  [[ "${output}" == *"VictoriaLogs preload includes 1 non-matching tag line(s); expected tag is v1.35.0"* ]]
 }
 
 @test "check-version reports not deployed current components as current" {

@@ -2462,7 +2462,7 @@ check_preload_image_version_alignment() {
   PRELOAD_EXPECTED_ARGOCD_IMAGE_REF="$1"
   PRELOAD_EXPECTED_PROMETHEUS_TAG="$2"
   PRELOAD_EXPECTED_GRAFANA_TAG="$3"
-  PRELOAD_EXPECTED_VICTORIA_LOGS_TAG="$6"
+  PRELOAD_EXPECTED_VICTORIA_LOGS_TAG="$4"
 
   if [ ! -f "${preload_file}" ]; then
     warn "preload image list not found at ${preload_file}"
@@ -3286,13 +3286,25 @@ emit_json_report() {
     printf '%s\n' "${component_rows}" | \
       tsv_rows_to_json_array '["component","deployed","codebase","latest","deploy_tag","code_tag","preferred_tag","latest_tag","status"]' | \
       jq '
+        def normalized_component_tag($row; $tag):
+          if $row.component == "gitea chart" then
+            ($tag | sub("-rootless$"; ""))
+          else
+            $tag
+          end;
+        def component_tags_equivalent($row; $left; $right):
+          normalized_component_tag($row; $left) == normalized_component_tag($row; $right);
         def tag_update_available($row):
-          ($row.code_tag != "" and $row.latest_tag != "" and $row.code_tag != $row.latest_tag);
+          (
+            $row.code_tag != "" and $row.latest_tag != "" and
+            (component_tags_equivalent($row; $row.code_tag; $row.latest_tag) | not)
+          );
         def deployed_tag_drift($row):
           (
             $row.deployed != "" and $row.deployed != "Unavailable" and
             $row.deploy_tag != "" and $row.deploy_tag != "Unavailable" and
-            $row.code_tag != "" and $row.deploy_tag != $row.code_tag
+            $row.code_tag != "" and
+            (component_tags_equivalent($row; $row.deploy_tag; $row.code_tag) | not)
           );
         def component_status_code($row):
           if (
@@ -3868,6 +3880,7 @@ main() {
   check_app_yaml_tfvar_drift
   check_platform_application_inventory
   check_preload_chart_section_version_alignment
+  check_preload_image_version_alignment "${CODE_ARGOCD_IMAGE_REF}" "${CODETAG_PROMETHEUS}" "${CODETAG_GRAFANA}" "${CODETAG_VICTORIA_LOGS}"
   check_platform_manifest_api_version_pins
 
   progress "Warming npm and PyPI metadata cache"

@@ -119,7 +119,7 @@ create_snapshot() {
 
   if [[ ! -s "${STATE_FILE}" ]]; then
     print_restore_command_warning
-    return 0
+    return 1
   fi
 
   dir="$(snapshot_dir)"

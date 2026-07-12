@@ -686,7 +686,6 @@ chart_version_override_for_name() {
   case "${chart}" in
     agentgateway) printf '%s\n' "${AGENTGATEWAY_CHART_VERSION}" ;;
     agentgateway-crds) printf '%s\n' "${AGENTGATEWAY_CHART_VERSION}" ;;
-    argo-rollouts) printf '%s\n' "2.40.5" ;;
     cert-manager) printf '%s\n' "${CERT_MANAGER_CHART_VERSION}" ;;
     external-secrets) printf '%s\n' "${EXTERNAL_SECRETS_CHART_VERSION}" ;;
     grafana) printf '%s\n' "${GRAFANA_CHART_VERSION}" ;;
@@ -783,8 +782,10 @@ retry_chart_fetch() {
 chart_archive_has_renderable_content() {
   local archive_path="$1"
   local chart="$2"
+  local lint_dir
+  local lint_status=0
 
-  tar -tzf "${archive_path}" 2>/dev/null | awk -v prefix="${chart}/" '
+  if ! tar -tzf "${archive_path}" 2>/dev/null | awk -v prefix="${chart}/" '
     $0 == prefix "Chart.yaml" {
       has_chart_yaml = 1
     }
@@ -806,7 +807,17 @@ chart_archive_has_renderable_content() {
     END {
       exit !(has_chart_yaml && has_values_yaml && has_renderable_content && file_count >= 4)
     }
-  '
+  '; then
+    return 1
+  fi
+
+  lint_dir="$(mktemp -d)"
+  if ! tar -xzf "${archive_path}" -C "${lint_dir}" 2>/dev/null || \
+    ! helm lint "${lint_dir}/${chart}" >/dev/null 2>&1; then
+    lint_status=1
+  fi
+  rm -rf "${lint_dir}"
+  return "${lint_status}"
 }
 
 validate_chart_archive() {

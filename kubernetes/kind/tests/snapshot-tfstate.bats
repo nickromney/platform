@@ -30,7 +30,7 @@ snapshot_count() {
   [ "${status}" -eq 0 ]
 }
 
-@test "zero-byte live state warns and names the explicit restore command" {
+@test "zero-byte live state warns and fails closed without changing state" {
   state_dir="${BATS_TEST_TMPDIR}/state"
   snapshot_dir="${state_dir}/snapshots"
   state_file="${state_dir}/terraform.tfstate"
@@ -40,7 +40,7 @@ snapshot_count() {
 
   run "${SCRIPT}" --execute --state-file "${state_file}" --restore-command "make -C kubernetes/kind state-restore AUTO_APPROVE=1"
 
-  [ "${status}" -eq 0 ]
+  [ "${status}" -ne 0 ]
   [[ "${output}" == *"WARN live Terraform/OpenTofu state is zero bytes: ${state_file}"* ]]
   [[ "${output}" == *"WARN newest non-empty snapshot: ${snapshot_dir}/terraform.tfstate.20260101T000001Z.1.snapshot"* ]]
   [[ "${output}" == *"WARN restore explicitly with: make -C kubernetes/kind state-restore AUTO_APPROVE=1"* ]]
