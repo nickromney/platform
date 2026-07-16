@@ -285,7 +285,7 @@
           "name": "local",
           "type": "platform",
           "namespace": "langfuse",
-          "route": "https://langfuse.admin.127.0.0.1.sslip.io",
+          "route": "https://langfuse.dev.127.0.0.1.sslip.io",
           "rbac": {
             "group": "platform-viewers",
             "viewer": true,
@@ -377,6 +377,49 @@
           "type": "development",
           "namespace": "dev",
           "route": "https://lf-agent.dev.127.0.0.1.sslip.io",
+          "rbac": {
+            "group": "platform-viewers",
+            "viewer": true,
+            "mutator": false
+          }
+        }
+      ],
+      "secrets": [
+        {
+          "name": "langfuse-api-keys",
+          "binding": "langfuse",
+          "rotation": "demo"
+        }
+      ],
+      "scorecard": {
+        "runtime_profile": "restricted",
+        "has_health_endpoint": true,
+        "has_network_policy": true,
+        "has_owner": true,
+        "has_runtime_probes": true,
+        "has_resource_requests_limits": true
+      }
+    },
+    {
+      "name": "langfuse-mcp-agent",
+      "display_name": "Langfuse MCP Agent",
+      "owner": "platform",
+      "lifecycle": "demo",
+      "source": {
+        "repo": "platform",
+        "path": "apps/langfuse-demos"
+      },
+      "deployment": {
+        "strategy": "gitops",
+        "controller": "argocd",
+        "applications": ["langfuse-demos"]
+      },
+      "environments": [
+        {
+          "name": "dev",
+          "type": "development",
+          "namespace": "dev",
+          "route": "https://lf-mcp.dev.127.0.0.1.sslip.io",
           "rbac": {
             "group": "platform-viewers",
             "viewer": true,

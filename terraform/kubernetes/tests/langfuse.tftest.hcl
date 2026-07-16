@@ -58,6 +58,11 @@ run "langfuse_enabled_creates_gitops_app" {
   }
 
   assert {
+    condition     = startswith(local.langfuse_public_host, "langfuse.dev.")
+    error_message = "Expected the Langfuse UI to live on the developer-facing dev subdomain"
+  }
+
+  assert {
     condition     = strcontains(file("${path.module}/sso.tf"), "clientId                  = \"langfuse\"")
     error_message = "Expected Keycloak realm to include a native Langfuse OIDC client"
   }
@@ -127,7 +132,7 @@ run "langfuse_enabled_creates_gitops_app" {
   }
 }
 
-run "langfuse_demos_enabled_creates_three_sso_apps" {
+run "langfuse_demos_enabled_creates_four_sso_apps" {
   command = plan
 
   variables {
@@ -158,10 +163,28 @@ run "langfuse_demos_enabled_creates_three_sso_apps" {
       contains(local.sso_oauth2_proxy_redirect_uris, "${local.langfuse_trace_chat_public_url}/oauth2/callback"),
       contains(local.sso_oauth2_proxy_redirect_uris, "${local.langfuse_tool_agent_public_url}/oauth2/callback"),
       contains(local.sso_oauth2_proxy_redirect_uris, "${local.langfuse_eval_runner_public_url}/oauth2/callback"),
+      contains(local.sso_oauth2_proxy_redirect_uris, "${local.langfuse_mcp_agent_public_url}/oauth2/callback"),
       contains(keys(kubectl_manifest.argocd_app_oauth2_proxy_idp), "trace_chat"),
       contains(keys(kubectl_manifest.argocd_app_oauth2_proxy_idp), "tool_agent"),
       contains(keys(kubectl_manifest.argocd_app_oauth2_proxy_idp), "eval_runner"),
+      contains(keys(kubectl_manifest.argocd_app_oauth2_proxy_idp), "mcp_agent"),
     ])
     error_message = "Expected Langfuse demo apps to have OAuth2 proxy apps and Keycloak callback redirects"
+  }
+
+  assert {
+    condition = (
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_idp["mcp_agent"].yaml_body, "name: oauth2-proxy-langfuse-mcp-agent") &&
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_idp["mcp_agent"].yaml_body, "upstream: http://langfuse-mcp-agent.dev.svc.cluster.local:8080")
+    )
+    error_message = "Expected the Langfuse MCP agent oauth2-proxy app to protect the demo service"
+  }
+
+  assert {
+    condition = (
+      strcontains(file("${path.module}/apps/langfuse-demos/all.yaml"), "name: langfuse-mcp-agent") &&
+      strcontains(file("${path.module}/apps/langfuse-demos/all.yaml"), "value: http://platform-mcp.mcp.svc.cluster.local:8080/mcp")
+    )
+    error_message = "Expected the Langfuse demos manifest to deploy the MCP agent against the in-cluster platform-mcp server"
   }
 }

@@ -16,9 +16,12 @@ type Config struct {
 	OpenAIBaseURL     string
 	OpenAIAPIKey      string
 	OpenAIModel       string
+	MCPBaseURL        string
+	MCPToolName       string
 	DemoName          string
 	LLMTimeout        time.Duration
 	LangfuseTimeout   time.Duration
+	MCPTimeout        time.Duration
 }
 
 func ConfigFromEnv() Config {
@@ -33,8 +36,11 @@ func ConfigFromEnv() Config {
 		OpenAIBaseURL:     apphttp.EnvURL("OPENAI_BASE_URL", "http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1"),
 		OpenAIAPIKey:      apphttp.Env("OPENAI_API_KEY", ""),
 		OpenAIModel:       apphttp.Env("OPENAI_MODEL", "auto"),
+		MCPBaseURL:        apphttp.EnvURL("MCP_BASE_URL", "http://platform-mcp.mcp.svc.cluster.local:8080/mcp"),
+		MCPToolName:       apphttp.Env("MCP_TOOL_NAME", "d2_validate"),
 		DemoName:          apphttp.Env("DEMO_NAME", role),
 		LLMTimeout:        apphttp.EnvSeconds("LLM_TIMEOUT_SECONDS", 10*time.Second),
 		LangfuseTimeout:   apphttp.EnvSeconds("LANGFUSE_TIMEOUT_SECONDS", 15*time.Second),
+		MCPTimeout:        apphttp.EnvSeconds("MCP_TIMEOUT_SECONDS", 10*time.Second),
 	}
 }

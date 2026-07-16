@@ -856,7 +856,7 @@ EOF
   [[ "${output}" == *"image: docker.io/clickhouse/clickhouse-server:25.5.11"* ]]
   [[ "${output}" == *"image: cgr.dev/chainguard/minio:latest"* ]]
   [[ "${output}" == *'encryption-key: "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"'* ]]
-  [[ "${output}" == *"langfuse.admin.127.0.0.1.sslip.io"* ]]
+  [[ "${output}" == *"langfuse.dev.127.0.0.1.sslip.io"* ]]
   [[ "${output}" == *"name: oauth2-proxy-langfuse"* ]]
   [[ "${output}" != *"dhi.io/langfuse"* ]]
   [[ "${output}" != *"dhi.io/postgres"* ]]

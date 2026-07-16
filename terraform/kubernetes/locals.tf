@@ -118,9 +118,11 @@ locals {
   langfuse_tool_agent_public_url       = "https://${local.langfuse_tool_agent_public_host}${local.gateway_https_host_port_suffix}"
   langfuse_eval_runner_public_host     = "lf-evals.dev.${local.platform_base_domain_effective}"
   langfuse_eval_runner_public_url      = "https://${local.langfuse_eval_runner_public_host}${local.gateway_https_host_port_suffix}"
+  langfuse_mcp_agent_public_host       = "lf-mcp.dev.${local.platform_base_domain_effective}"
+  langfuse_mcp_agent_public_url        = "https://${local.langfuse_mcp_agent_public_host}${local.gateway_https_host_port_suffix}"
   agentgateway_ai_gateway_public_host  = "llm.${local.platform_base_domain_effective}"
   agentgateway_ai_gateway_public_url   = "https://${local.agentgateway_ai_gateway_public_host}${local.gateway_https_host_port_suffix}"
-  langfuse_public_host                 = local.separate_admin_domain_enabled ? "langfuse.${local.platform_admin_base_domain_effective}" : "langfuse.admin.${local.platform_base_domain_effective}"
+  langfuse_public_host                 = "langfuse.dev.${local.platform_base_domain_effective}"
   langfuse_public_url                  = "https://${local.langfuse_public_host}${local.gateway_https_host_port_suffix}"
   langfuse_keycloak_redirect_uri       = "${local.langfuse_public_url}/api/auth/callback/keycloak"
   idp_portal_public_host               = "portal.${local.platform_base_domain_effective}"
@@ -194,9 +196,9 @@ locals {
       public_url         = local.langfuse_public_url
       upstream           = "http://langfuse-web.langfuse.svc.cluster.local:3000"
       group              = local.sso_viewer_group
-      cookie_name        = local.admin_sso_cookie_name
-      cookie_domain      = local.admin_cookie_domain
-      whitelist_domain   = local.admin_whitelist_domains
+      cookie_name        = local.dev_sso_cookie_name
+      cookie_domain      = local.dev_cookie_domain
+      whitelist_domain   = local.dev_whitelist_domains
       backend_logout_arg = local.oauth2_proxy_backend_logout_arg_map
     }
   } : {}
@@ -227,6 +229,17 @@ locals {
       name               = "oauth2-proxy-langfuse-eval-runner"
       public_url         = local.langfuse_eval_runner_public_url
       upstream           = "http://langfuse-eval-runner.dev.svc.cluster.local:8080"
+      group              = local.sso_viewer_group
+      cookie_name        = local.dev_sso_cookie_name
+      cookie_domain      = local.dev_cookie_domain
+      whitelist_domain   = local.dev_whitelist_domains
+      backend_logout_arg = local.oauth2_proxy_backend_logout_arg_map
+      skip_auth_regex    = "^/(style\\.css|app\\.js|runtime-config\\.js|favicon\\.ico)$"
+    }
+    mcp_agent = {
+      name               = "oauth2-proxy-langfuse-mcp-agent"
+      public_url         = local.langfuse_mcp_agent_public_url
+      upstream           = "http://langfuse-mcp-agent.dev.svc.cluster.local:8080"
       group              = local.sso_viewer_group
       cookie_name        = local.dev_sso_cookie_name
       cookie_domain      = local.dev_cookie_domain
@@ -679,6 +692,7 @@ locals {
     langfuse_trace_chat_public_host        = local.langfuse_trace_chat_public_host
     langfuse_tool_agent_public_host        = local.langfuse_tool_agent_public_host
     langfuse_eval_runner_public_host       = local.langfuse_eval_runner_public_host
+    langfuse_mcp_agent_public_host         = local.langfuse_mcp_agent_public_host
     prefer_external_platform               = var.prefer_external_platform_images
     host_local_registry_enabled            = local.host_local_registry_enabled
     host_local_registry_host               = local.host_local_registry_host_effective

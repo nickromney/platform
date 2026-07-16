@@ -539,7 +539,8 @@ def langfuse_demo_rollout_surface_contract_violations(repo_root: Path) -> tuple[
             "Langfuse Trace Chat DEV",
             "Langfuse Tool Agent DEV",
             "Langfuse Eval Runner DEV",
-            "https://langfuse.admin.127.0.0.1.sslip.io",
+            "Langfuse MCP Agent DEV",
+            "https://langfuse.dev.127.0.0.1.sslip.io",
             "langfuse_demo_llm_calls_total",
             'langfuse_demo_runs_total{job=\\"langfuse-demos\\"}',
             'langfuse_demo_langfuse_batches_total{job=\\"langfuse-demos\\"}',
@@ -629,6 +630,7 @@ def langfuse_demo_runtime_names() -> tuple[str, ...]:
         "langfuse-trace-chat",
         "langfuse-tool-agent",
         "langfuse-eval-runner",
+        "langfuse-mcp-agent",
     )
 
 
@@ -636,7 +638,7 @@ def langfuse_launchpad_tile_expectations() -> tuple[tuple[str, str, str, str], .
     return (
         (
             "Langfuse",
-            "https://langfuse.admin.127.0.0.1.sslip.io",
+            "https://langfuse.dev.127.0.0.1.sslip.io",
             "ENABLE_LANGFUSE",
             "langfuse-web",
         ),
@@ -658,15 +660,22 @@ def langfuse_launchpad_tile_expectations() -> tuple[tuple[str, str, str, str], .
             "ENABLE_LANGFUSE_DEMOS",
             "langfuse-eval-runner",
         ),
+        (
+            "Langfuse MCP Agent DEV",
+            "https://lf-mcp.dev.127.0.0.1.sslip.io",
+            "ENABLE_LANGFUSE_DEMOS",
+            "langfuse-mcp-agent",
+        ),
     )
 
 
 def langfuse_service_catalog_route_expectations() -> tuple[tuple[str, str], ...]:
     return (
-        ("langfuse", "https://langfuse.admin.127.0.0.1.sslip.io"),
+        ("langfuse", "https://langfuse.dev.127.0.0.1.sslip.io"),
         ("langfuse-trace-chat", "https://lf-chat.dev.127.0.0.1.sslip.io"),
         ("langfuse-tool-agent", "https://lf-agent.dev.127.0.0.1.sslip.io"),
         ("langfuse-eval-runner", "https://lf-evals.dev.127.0.0.1.sslip.io"),
+        ("langfuse-mcp-agent", "https://lf-mcp.dev.127.0.0.1.sslip.io"),
     )
 
 
@@ -5572,7 +5581,7 @@ def platform_mcp_langfuse_inventory_expectations() -> dict[str, dict[str, Any]]:
             "applications": ["langfuse"],
             "environment": "local",
             "namespace": "langfuse",
-            "route": "https://langfuse.admin.127.0.0.1.sslip.io",
+            "route": "https://langfuse.dev.127.0.0.1.sslip.io",
         },
         "langfuse-trace-chat": {
             "owner": "platform",
@@ -5597,6 +5606,14 @@ def platform_mcp_langfuse_inventory_expectations() -> dict[str, dict[str, Any]]:
             "environment": "dev",
             "namespace": "dev",
             "route": "https://lf-evals.dev.127.0.0.1.sslip.io",
+        },
+        "langfuse-mcp-agent": {
+            "owner": "platform",
+            "source_path": "apps/langfuse-demos",
+            "applications": ["langfuse-demos"],
+            "environment": "dev",
+            "namespace": "dev",
+            "route": "https://lf-mcp.dev.127.0.0.1.sslip.io",
         },
     }
 

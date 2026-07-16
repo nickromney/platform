@@ -292,9 +292,9 @@ PY
   grep -Fq 'if [[ "${EXPECT_LANGFUSE}" == "true" ]]; then apps+=(langfuse); fi' "${script}"
   grep -Fq 'if [[ "${EXPECT_LANGFUSE}" == "true" ]]; then apps+=(oauth2-proxy-langfuse); fi' "${script}"
   grep -Fq 'if [[ "${EXPECT_LANGFUSE_DEMOS}" == "true" ]]; then apps+=(langfuse-demos); fi' "${script}"
-  grep -Fq 'if [[ "${EXPECT_LANGFUSE_DEMOS}" == "true" ]]; then apps+=(oauth2-proxy-langfuse-trace-chat oauth2-proxy-langfuse-tool-agent oauth2-proxy-langfuse-eval-runner); fi' "${script}"
+  grep -Fq 'if [[ "${EXPECT_LANGFUSE_DEMOS}" == "true" ]]; then apps+=(oauth2-proxy-langfuse-trace-chat oauth2-proxy-langfuse-tool-agent oauth2-proxy-langfuse-eval-runner oauth2-proxy-langfuse-mcp-agent); fi' "${script}"
   grep -Fq 'sso_apps+=(oauth2-proxy-langfuse)' "${script}"
-  grep -Fq 'sso_apps+=(oauth2-proxy-langfuse-trace-chat oauth2-proxy-langfuse-tool-agent oauth2-proxy-langfuse-eval-runner)' "${script}"
+  grep -Fq 'sso_apps+=(oauth2-proxy-langfuse-trace-chat oauth2-proxy-langfuse-tool-agent oauth2-proxy-langfuse-eval-runner oauth2-proxy-langfuse-mcp-agent)' "${script}"
 }
 
 @test "Cilium policies allow APIM admin oauth2 proxy to reach APIM upstream" {

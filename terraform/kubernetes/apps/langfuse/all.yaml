@@ -28,7 +28,7 @@ metadata:
     app.kubernetes.io/name: langfuse
     app.kubernetes.io/component: config
 data:
-  NEXTAUTH_URL: https://langfuse.admin.127.0.0.1.sslip.io
+  NEXTAUTH_URL: https://langfuse.dev.127.0.0.1.sslip.io
   AUTH_KEYCLOAK_CLIENT_ID: langfuse
   AUTH_KEYCLOAK_ISSUER: https://keycloak.127.0.0.1.sslip.io/realms/platform
   AUTH_KEYCLOAK_SCOPE: "openid email profile groups"
@@ -539,7 +539,7 @@ spec:
   template:
     metadata:
       annotations:
-        platform.publiccloudexperiments.net/config-generation: "2026-05-22-langfuse-bootstrap"
+        platform.publiccloudexperiments.net/config-generation: "2026-07-14-langfuse-dev-host"
       labels:
         app.kubernetes.io/name: langfuse
         app.kubernetes.io/component: web
@@ -684,7 +684,7 @@ spec:
   template:
     metadata:
       annotations:
-        platform.publiccloudexperiments.net/config-generation: "2026-05-22-langfuse-bootstrap"
+        platform.publiccloudexperiments.net/config-generation: "2026-07-14-langfuse-dev-host"
       labels:
         app.kubernetes.io/name: langfuse
         app.kubernetes.io/component: worker

@@ -338,6 +338,7 @@ func TestRuntimeConfigProvidesDistinctRoleUI(t *testing.T) {
 		"trace-chat":  "Single prompt",
 		"tool-agent":  "Planner",
 		"eval-runner": "Eval cases",
+		"mcp-agent":   "MCP initialize",
 	}
 
 	for role, expectedCopy := range roles {
@@ -641,6 +642,187 @@ func TestTraceChatUsesBoundedLLMTimeoutAndStillIngestsFallbackTrace(t *testing.T
 	}
 	if !strings.Contains(rec.Body.String(), `"llmStatus":"error"`) || !strings.Contains(rec.Body.String(), `"langfuseStatus":"ok"`) {
 		t.Fatalf("unexpected timeout response: %s", rec.Body.String())
+	}
+}
+
+func TestMcpAgentTracesInitializeToolsListAndToolCall(t *testing.T) {
+	var ingestion map[string][]map[string]any
+	var mcpMethods []string
+	client := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		switch {
+		case strings.Contains(r.URL.Path, "/mcp"):
+			raw, _ := io.ReadAll(r.Body)
+			var rpc struct {
+				Method string         `json:"method"`
+				Params map[string]any `json:"params"`
+			}
+			if err := json.Unmarshal(raw, &rpc); err != nil {
+				t.Fatal(err)
+			}
+			mcpMethods = append(mcpMethods, rpc.Method)
+			switch rpc.Method {
+			case "initialize":
+				return jsonResponse(http.StatusOK, `{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","serverInfo":{"name":"platform-mcp","version":"0.1.0"}}}`), nil
+			case "tools/list":
+				return jsonResponse(http.StatusOK, `{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"model_ping"},{"name":"d2_validate"},{"name":"d2_render"}]}}`), nil
+			case "tools/call":
+				if rpc.Params["name"] != "d2_validate" {
+					t.Fatalf("unexpected tool call: %v", rpc.Params)
+				}
+				return jsonResponse(http.StatusOK, `{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"{\"status\":\"ok\"}"}]}}`), nil
+			default:
+				t.Fatalf("unexpected MCP method %q", rpc.Method)
+				return nil, nil
+			}
+		case strings.Contains(r.URL.Path, "/chat/completions"):
+			return jsonResponse(http.StatusOK, `{"choices":[{"message":{"content":"MCP evidence summarized"}}]}`), nil
+		case strings.Contains(r.URL.Path, "/api/public/ingestion"):
+			raw, _ := io.ReadAll(r.Body)
+			if err := json.Unmarshal(raw, &ingestion); err != nil {
+				t.Fatal(err)
+			}
+			return jsonResponse(http.StatusOK, `{"successes":[],"errors":[]}`), nil
+		default:
+			t.Fatalf("unexpected request: %s", r.URL.String())
+			return nil, nil
+		}
+	})
+	srv := NewServer(Config{
+		Role:              "mcp-agent",
+		LangfuseHost:      "http://langfuse",
+		LangfusePublicKey: "pk",
+		LangfuseSecretKey: "sk",
+		OpenAIBaseURL:     "http://llm/v1",
+		OpenAIModel:       "local",
+		MCPBaseURL:        "http://platform-mcp/mcp",
+		MCPToolName:       "d2_validate",
+	}, client)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/run", strings.NewReader(`{"prompt":"inspect the mcp server"}`))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("run returned %d: %s", rec.Code, rec.Body.String())
+	}
+	var response runResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.LangfuseStatus != "ok" || response.LLMStatus != "ok" || !strings.HasPrefix(response.TraceID, "lf-mcp-") {
+		t.Fatalf("unexpected response: %+v", response)
+	}
+	if got := strings.Join(mcpMethods, ","); got != "initialize,tools/list,tools/call" {
+		t.Fatalf("unexpected MCP call sequence: %s", got)
+	}
+	stepNames := map[string]bool{}
+	for _, step := range response.Steps {
+		stepNames[step.Name] = true
+	}
+	for _, name := range []string{"mcp_initialize", "mcp_tools_list", "mcp_tool_call", "final-response"} {
+		if !stepNames[name] {
+			t.Fatalf("missing step %q in %+v", name, response.Steps)
+		}
+	}
+	scoreValues := map[string]float64{}
+	for _, score := range response.Scores {
+		scoreValues[score.Name] = score.Value
+	}
+	if scoreValues["mcp_available"] != 1 || scoreValues["mcp_tool_call_ok"] != 1 || scoreValues["mcp_tools_discovered"] != 3 {
+		t.Fatalf("unexpected MCP scores: %+v", response.Scores)
+	}
+	spanCount := 0
+	for _, event := range ingestion["batch"] {
+		if event["type"].(string) == "span-create" {
+			spanCount++
+		}
+	}
+	if spanCount != 3 {
+		t.Fatalf("expected one span per MCP interaction, got %d in %#v", spanCount, ingestion)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	for _, text := range []string{"langfuse_demo_mcp_calls_total", `role="mcp-agent"`} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("metrics missing %q: %s", text, rec.Body.String())
+		}
+	}
+}
+
+func TestMcpAgentDegradesGracefullyWhenMCPAndLLMAreOffline(t *testing.T) {
+	var sawIngestion bool
+	client := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		switch {
+		case strings.Contains(r.URL.Path, "/mcp"):
+			return jsonResponse(http.StatusServiceUnavailable, `{"error":"offline"}`), nil
+		case strings.Contains(r.URL.Path, "/chat/completions"):
+			return jsonResponse(http.StatusServiceUnavailable, `{"error":"offline"}`), nil
+		case strings.Contains(r.URL.Path, "/api/public/ingestion"):
+			sawIngestion = true
+			raw, _ := io.ReadAll(r.Body)
+			if !strings.Contains(string(raw), "score-create") {
+				t.Fatalf("ingestion missing scores: %s", string(raw))
+			}
+			return jsonResponse(http.StatusOK, `{"successes":[],"errors":[]}`), nil
+		default:
+			t.Fatalf("unexpected request: %s", r.URL.String())
+			return nil, nil
+		}
+	})
+	srv := NewServer(Config{
+		Role:              "mcp-agent",
+		LangfuseHost:      "http://langfuse",
+		LangfusePublicKey: "pk",
+		LangfuseSecretKey: "sk",
+		OpenAIBaseURL:     "http://llm/v1",
+		OpenAIModel:       "local",
+		MCPBaseURL:        "http://platform-mcp/mcp",
+		MCPToolName:       "d2_validate",
+	}, client)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/run", strings.NewReader(`{"prompt":"inspect the mcp server"}`))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("run returned %d: %s", rec.Code, rec.Body.String())
+	}
+	var response runResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if !sawIngestion {
+		t.Fatalf("expected Langfuse ingestion even when MCP is offline")
+	}
+	if response.LLMStatus != "deterministic fallback" {
+		t.Fatalf("expected deterministic fallback status, got %+v", response)
+	}
+	scoreValues := map[string]float64{}
+	for _, score := range response.Scores {
+		scoreValues[score.Name] = score.Value
+	}
+	if scoreValues["mcp_available"] != 0 || scoreValues["mcp_tool_call_ok"] != 0 {
+		t.Fatalf("MCP offline should be visible in scores: %+v", response.Scores)
+	}
+	if !strings.Contains(response.Answer, "initialize=http_error") {
+		t.Fatalf("fallback answer should carry MCP evidence: %q", response.Answer)
+	}
+}
+
+func TestConfigDefaultsTargetInClusterMCPServer(t *testing.T) {
+	t.Setenv("MCP_BASE_URL", "")
+	t.Setenv("MCP_TOOL_NAME", "")
+	t.Setenv("MCP_TIMEOUT_SECONDS", "")
+
+	cfg := ConfigFromEnv()
+	if cfg.MCPBaseURL != "http://platform-mcp.mcp.svc.cluster.local:8080/mcp" {
+		t.Fatalf("default MCP base URL should target the in-cluster platform-mcp service, got %q", cfg.MCPBaseURL)
+	}
+	if cfg.MCPToolName != "d2_validate" {
+		t.Fatalf("default MCP tool should be the deterministic d2_validate, got %q", cfg.MCPToolName)
+	}
+	if cfg.MCPTimeout < 5*time.Second {
+		t.Fatalf("MCP timeout should give the in-cluster hop headroom, got %s", cfg.MCPTimeout)
 	}
 }
 

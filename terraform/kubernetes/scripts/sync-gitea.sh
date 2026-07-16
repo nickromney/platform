@@ -437,10 +437,11 @@ main() {
   export_resolved_string AGENTGATEWAY_CHART_VERSION agentgateway_chart_version "$(tf_default_from_variables agentgateway_chart_version)"
   export_resolved_string AGENTGATEWAY_AI_GATEWAY_MODEL agentgateway_ai_gateway_model ""
   export_resolved_string AGENTGATEWAY_AI_GATEWAY_PUBLIC_HOST agentgateway_ai_gateway_public_host ""
-  export_resolved_string LANGFUSE_PUBLIC_HOST langfuse_public_host "langfuse.admin.127.0.0.1.sslip.io"
+  export_resolved_string LANGFUSE_PUBLIC_HOST langfuse_public_host "langfuse.dev.127.0.0.1.sslip.io"
   export_resolved_string LANGFUSE_TRACE_CHAT_PUBLIC_HOST langfuse_trace_chat_public_host "lf-chat.dev.127.0.0.1.sslip.io"
   export_resolved_string LANGFUSE_TOOL_AGENT_PUBLIC_HOST langfuse_tool_agent_public_host "lf-agent.dev.127.0.0.1.sslip.io"
   export_resolved_string LANGFUSE_EVAL_RUNNER_PUBLIC_HOST langfuse_eval_runner_public_host "lf-evals.dev.127.0.0.1.sslip.io"
+  export_resolved_string LANGFUSE_MCP_AGENT_PUBLIC_HOST langfuse_mcp_agent_public_host "lf-mcp.dev.127.0.0.1.sslip.io"
 
   exec "${delegate}" --execute
 }

@@ -23,6 +23,7 @@ resources:
   - httproute-langfuse-trace-chat.yaml
   - httproute-langfuse-tool-agent.yaml
   - httproute-langfuse-eval-runner.yaml
+  - httproute-langfuse-mcp-agent.yaml
   - httproute-mcp.yaml
   - httproute-mcp-console.yaml
   - httproute-portal.yaml
