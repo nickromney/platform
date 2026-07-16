@@ -57,6 +57,35 @@ spec:
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
+  name: langfuse-mcp-agent
+  title: Langfuse MCP Agent
+  description: MCP-using agent demo that records initialize, tools/list, and tools/call spans against the platform MCP server.
+  tags:
+    - llm
+    - demo
+    - mcp
+  annotations:
+    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/langfuse-demos/
+    backstage.io/kubernetes-label-selector: app.kubernetes.io/name=langfuse-mcp-agent
+  links:
+    - url: https://lf-mcp.dev.127.0.0.1.sslip.io
+      title: Dev
+      icon: dashboard
+    - url: https://grafana.admin.127.0.0.1.sslip.io/d/langfuse-agent-flow/langfuse-agent-flow
+      title: Langfuse Agent Flow
+      icon: dashboard
+spec:
+  type: website
+  lifecycle: demo
+  owner: group:default/platform
+  system: local-idp
+  dependsOn:
+    - component:default/langfuse
+    - component:default/platform-mcp
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
   name: langfuse-eval-runner
   title: Langfuse Eval Runner
   description: Evaluation runner demo that emits deterministic scores and LLM availability evidence.

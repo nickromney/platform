@@ -194,7 +194,7 @@
     },
     {
       "title": "Langfuse",
-      "url": "https://langfuse.admin.127.0.0.1.sslip.io",
+      "url": "https://langfuse.dev.127.0.0.1.sslip.io",
       "sort_key": "dev/langfuse",
       "service": "langfuse",
       "owner": "platform",
@@ -243,6 +243,19 @@
         "ENABLE_LANGFUSE_DEMOS"
       ],
       "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-langfuse-eval-runner\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"langfuse-eval-runner\"}) > bool 0)) or vector(0))"
+    },
+    {
+      "title": "Langfuse MCP Agent DEV",
+      "url": "https://lf-mcp.dev.127.0.0.1.sslip.io",
+      "sort_key": "dev/langfuse-mcp-agent",
+      "service": "langfuse-mcp-agent",
+      "owner": "platform",
+      "environment": "dev",
+      "rbac_group": "platform-viewers",
+      "requires": [
+        "ENABLE_LANGFUSE_DEMOS"
+      ],
+      "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-langfuse-mcp-agent\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"langfuse-mcp-agent\"}) > bool 0)) or vector(0))"
     },
     {
       "title": "Sentiment UAT",

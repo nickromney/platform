@@ -37,6 +37,8 @@ type metrics struct {
 	runs             atomic.Int64
 	llmCalls         atomic.Int64
 	llmErrors        atomic.Int64
+	mcpCalls         atomic.Int64
+	mcpErrors        atomic.Int64
 	langfuseBatches  atomic.Int64
 	langfuseErrors   atomic.Int64
 	runLatencyMillis atomic.Int64
@@ -132,13 +134,17 @@ func NewServer(cfg Config, client HTTPDoer) http.Handler {
 }
 
 func (s *server) health(w http.ResponseWriter, _ *http.Request) {
-	apphttp.WriteBrowserAppHealth(w, map[string]any{
+	payload := map[string]any{
 		"status":          "ok",
 		"service":         "langfuse-demos",
 		"role":            s.cfg.Role,
 		"langfuse_host":   s.cfg.LangfuseHost,
 		"openai_base_url": s.cfg.OpenAIBaseURL,
-	})
+	}
+	if s.cfg.Role == "mcp-agent" {
+		payload["mcp_base_url"] = s.cfg.MCPBaseURL
+	}
+	apphttp.WriteBrowserAppHealth(w, payload)
 }
 
 func (s *server) metrics(w http.ResponseWriter, _ *http.Request) {
@@ -153,6 +159,12 @@ func (s *server) metrics(w http.ResponseWriter, _ *http.Request) {
 	fmt.Fprintf(&body, "# HELP langfuse_demo_llm_errors_total LLM attempts that failed or returned non-2xx.\n")
 	fmt.Fprintf(&body, "# TYPE langfuse_demo_llm_errors_total counter\n")
 	fmt.Fprintf(&body, "langfuse_demo_llm_errors_total{role=%q} %d\n", role, s.m.llmErrors.Load())
+	fmt.Fprintf(&body, "# HELP langfuse_demo_mcp_calls_total MCP JSON-RPC requests attempted.\n")
+	fmt.Fprintf(&body, "# TYPE langfuse_demo_mcp_calls_total counter\n")
+	fmt.Fprintf(&body, "langfuse_demo_mcp_calls_total{role=%q} %d\n", role, s.m.mcpCalls.Load())
+	fmt.Fprintf(&body, "# HELP langfuse_demo_mcp_errors_total MCP JSON-RPC requests that failed or returned an RPC error.\n")
+	fmt.Fprintf(&body, "# TYPE langfuse_demo_mcp_errors_total counter\n")
+	fmt.Fprintf(&body, "langfuse_demo_mcp_errors_total{role=%q} %d\n", role, s.m.mcpErrors.Load())
 	fmt.Fprintf(&body, "# HELP langfuse_demo_langfuse_batches_total Langfuse ingestion batches sent.\n")
 	fmt.Fprintf(&body, "# TYPE langfuse_demo_langfuse_batches_total counter\n")
 	fmt.Fprintf(&body, "langfuse_demo_langfuse_batches_total{role=%q} %d\n", role, s.m.langfuseBatches.Load())
@@ -180,6 +192,10 @@ func (s *server) runtimeConfig(w http.ResponseWriter, r *http.Request) {
 		"hostLLMEndpoint": "http://127.0.0.1:8000/v1",
 		"llmPrerequisite": "For live LLM content, start the oMLX OpenAI-compatible server on http://127.0.0.1:8000/v1. In kind, agentgateway forwards pod traffic to host.docker.internal:8000.",
 	}
+	if s.cfg.Role == "mcp-agent" {
+		payload["mcpBaseUrl"] = s.cfg.MCPBaseURL
+		payload["mcpToolName"] = s.cfg.MCPToolName
+	}
 	for key, value := range s.roleUIMap() {
 		payload[key] = value
 	}
@@ -202,6 +218,8 @@ func (s *server) runDemo(w http.ResponseWriter, r *http.Request) {
 		res = s.runToolAgent(r.Context(), req, start)
 	case "eval-runner":
 		res = s.runEvalRunner(r.Context(), req, start)
+	case "mcp-agent":
+		res = s.runMcpAgent(r.Context(), req, start)
 	default:
 		res = s.runTraceChat(r.Context(), req, start)
 	}
@@ -303,6 +321,149 @@ func (s *server) runToolAgent(ctx context.Context, req runRequest, started time.
 		LangfuseStatus: langfuseStatus,
 		DurationMillis: time.Since(started).Milliseconds(),
 	}
+}
+
+type mcpResult struct {
+	Status         string
+	Detail         string
+	Result         json.RawMessage
+	DurationMillis int64
+}
+
+func (s *server) callMCP(ctx context.Context, id int, method string, params map[string]any) mcpResult {
+	start := time.Now()
+	s.m.mcpCalls.Add(1)
+	callCtx, cancel := context.WithTimeout(ctx, positiveDuration(s.cfg.MCPTimeout, 5*time.Second))
+	defer cancel()
+	payload, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"method":  method,
+		"params":  params,
+	})
+	req, err := http.NewRequestWithContext(callCtx, http.MethodPost, s.cfg.MCPBaseURL, bytes.NewReader(payload))
+	if err != nil {
+		s.m.mcpErrors.Add(1)
+		return mcpResult{Status: "error", Detail: err.Error(), DurationMillis: time.Since(start).Milliseconds()}
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		s.m.mcpErrors.Add(1)
+		return mcpResult{Status: "error", Detail: err.Error(), DurationMillis: time.Since(start).Milliseconds()}
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		s.m.mcpErrors.Add(1)
+		return mcpResult{Status: "http_error", Detail: fmt.Sprintf("http_%d: %s", resp.StatusCode, truncate(string(raw), 120)), DurationMillis: time.Since(start).Milliseconds()}
+	}
+	var parsed struct {
+		Result json.RawMessage `json:"result"`
+		Error  *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		s.m.mcpErrors.Add(1)
+		return mcpResult{Status: "parse_error", Detail: err.Error(), DurationMillis: time.Since(start).Milliseconds()}
+	}
+	if parsed.Error != nil {
+		s.m.mcpErrors.Add(1)
+		return mcpResult{Status: "rpc_error", Detail: fmt.Sprintf("code=%d %s", parsed.Error.Code, parsed.Error.Message), DurationMillis: time.Since(start).Milliseconds()}
+	}
+	return mcpResult{Status: "ok", Detail: truncate(string(parsed.Result), 160), Result: parsed.Result, DurationMillis: time.Since(start).Milliseconds()}
+}
+
+func (s *server) runMcpAgent(ctx context.Context, req runRequest, started time.Time) runResponse {
+	traceID := "lf-mcp-" + randomID()
+	initID := "span-" + randomID()
+	listID := "span-" + randomID()
+	callID := "span-" + randomID()
+	finalID := "gen-" + randomID()
+
+	initRes := s.callMCP(ctx, 1, "initialize", map[string]any{
+		"protocolVersion": "2025-06-18",
+		"capabilities":    map[string]any{},
+		"clientInfo":      map[string]any{"name": "langfuse-demos", "version": "0.1.0"},
+	})
+	listRes := s.callMCP(ctx, 2, "tools/list", map[string]any{})
+	toolNames := mcpToolNames(listRes.Result)
+	listDetail := appconfig.FirstNonEmpty(strings.Join(toolNames, ","), listRes.Detail)
+
+	callRes := s.callMCP(ctx, 3, "tools/call", map[string]any{
+		"name": s.cfg.MCPToolName,
+		"arguments": map[string]any{
+			"source": "langfuse_mcp_demo: " + truncate(req.Prompt, 120),
+		},
+	})
+
+	mcpAvailable := initRes.Status == "ok" && listRes.Status == "ok"
+	finalPrompt := fmt.Sprintf(
+		"User prompt: %s\nMCP server: %s\nDiscovered tools: %s\nTool %s call status: %s\nTool result: %s",
+		req.Prompt, s.cfg.MCPBaseURL, listDetail, s.cfg.MCPToolName, callRes.Status, callRes.Detail,
+	)
+	finalStarted := time.Now()
+	final := s.callLLM(ctx, []llmMessage{
+		{Role: "system", Content: "Summarize the MCP tool evidence for a Langfuse observability demo in two sentences."},
+		{Role: "user", Content: finalPrompt},
+	})
+	answer := appconfig.FirstNonEmpty(final.Content, fmt.Sprintf(
+		"MCP agent completed with deterministic evidence: initialize=%s, tools/list=%s (%s), tools/call %s=%s. Langfuse receives one span per MCP interaction plus the final generation attempt and scores.",
+		initRes.Status, listRes.Status, listDetail, s.cfg.MCPToolName, callRes.Status,
+	))
+	finalDisplayStatus := llmDisplayStatus(final)
+	scores := []demoScore{
+		{Name: "mcp_available", Value: boolFloat(mcpAvailable), DataType: "BOOLEAN", Comment: "initialize + tools/list status"},
+		{Name: "mcp_tool_call_ok", Value: boolFloat(callRes.Status == "ok"), DataType: "BOOLEAN", Comment: s.cfg.MCPToolName + " " + callRes.Status},
+		{Name: "mcp_tools_discovered", Value: float64(len(toolNames)), DataType: "NUMERIC", Comment: "tools returned by tools/list"},
+	}
+	events := []langfuseEvent{
+		traceCreate(traceID, "langfuse.mcp_agent", req.Prompt, answer, []string{"platform-demo", "mcp-agent"}),
+		spanCreate(initID, traceID, "mcp_initialize", s.cfg.MCPBaseURL, initRes.Detail, initRes.Status),
+		spanCreate(listID, traceID, "mcp_tools_list", s.cfg.MCPBaseURL, listDetail, listRes.Status),
+		spanCreate(callID, traceID, "mcp_tool_call", s.cfg.MCPToolName, callRes.Detail, callRes.Status),
+		generationCreate(finalID, traceID, "final-response", final.Model, finalPrompt, answer, finalStarted, time.Now(), final.Status, final.StatusCode),
+	}
+	events = append(events, scoreEvents(traceID, finalID, scores)...)
+	langfuseStatus := s.ingest(ctx, events)
+	return runResponse{
+		Role:    s.cfg.Role,
+		TraceID: traceID,
+		Answer:  answer,
+		Steps: []demoStep{
+			{Name: "mcp_initialize", Type: "mcp", Status: initRes.Status, Detail: truncate(initRes.Detail, 120), TraceID: traceID, SpanID: initID, Duration: initRes.DurationMillis},
+			{Name: "mcp_tools_list", Type: "mcp", Status: listRes.Status, Detail: truncate(listDetail, 120), TraceID: traceID, SpanID: listID, Duration: listRes.DurationMillis},
+			{Name: "mcp_tool_call", Type: "mcp", Status: callRes.Status, Detail: truncate(callRes.Detail, 120), TraceID: traceID, SpanID: callID, Duration: callRes.DurationMillis},
+			{Name: "final-response", Type: "generation", Status: finalDisplayStatus, Detail: appconfig.FirstNonEmpty(final.Content, "deterministic synthesis"), TraceID: traceID, SpanID: finalID, Duration: final.DurationMillis},
+		},
+		Scores:         scores,
+		LLMStatus:      joinAgentStatuses(finalDisplayStatus),
+		LangfuseStatus: langfuseStatus,
+		DurationMillis: time.Since(started).Milliseconds(),
+	}
+}
+
+func mcpToolNames(result json.RawMessage) []string {
+	if len(result) == 0 {
+		return nil
+	}
+	var parsed struct {
+		Tools []struct {
+			Name string `json:"name"`
+		} `json:"tools"`
+	}
+	if err := json.Unmarshal(result, &parsed); err != nil {
+		return nil
+	}
+	names := make([]string, 0, len(parsed.Tools))
+	for _, tool := range parsed.Tools {
+		if strings.TrimSpace(tool.Name) != "" {
+			names = append(names, strings.TrimSpace(tool.Name))
+		}
+	}
+	return names
 }
 
 func (s *server) runEvalRunner(ctx context.Context, req runRequest, started time.Time) runResponse {
@@ -582,6 +743,8 @@ func (s *server) displayName() string {
 		return "Langfuse Tool Agent"
 	case "eval-runner":
 		return "Langfuse Eval Runner"
+	case "mcp-agent":
+		return "Langfuse MCP Agent"
 	default:
 		return "Langfuse Trace Chat"
 	}
@@ -593,6 +756,8 @@ func (s *server) defaultPrompt() string {
 		return "Use tools to decide whether this platform has Langfuse tracing wired correctly."
 	case "eval-runner":
 		return "Run the default regression eval set."
+	case "mcp-agent":
+		return "Discover the platform MCP tools and validate a demo diagram source."
 	default:
 		return "Explain what this Langfuse trace should show in one sentence."
 	}
@@ -626,6 +791,14 @@ func (s *server) roleUI() roleUI {
 			ActionLabel:   "Run Evals",
 			DefaultPrompt: s.defaultPrompt(),
 			Capabilities:  []string{"Case generations", "Keyword scoring", "Aggregate eval score", "Replay-ready traces"},
+		}
+	case "mcp-agent":
+		return roleUI{
+			ScenarioCopy:  "MCP initialize, tools/list, and tools/call spans plus a final LLM synthesis and MCP health scores in one trace.",
+			PromptLabel:   "Agent task",
+			ActionLabel:   "Run MCP Agent",
+			DefaultPrompt: s.defaultPrompt(),
+			Capabilities:  []string{"MCP initialize span", "MCP tools/list span", "MCP tools/call span", "Final synthesis generation"},
 		}
 	default:
 		return roleUI{

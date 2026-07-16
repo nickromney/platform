@@ -290,6 +290,7 @@ for name, (selector, source_path) in {
     "langfuse-trace-chat": ("app.kubernetes.io/name=langfuse-trace-chat", "apps/langfuse-demos/"),
     "langfuse-tool-agent": ("app.kubernetes.io/name=langfuse-tool-agent", "apps/langfuse-demos/"),
     "langfuse-eval-runner": ("app.kubernetes.io/name=langfuse-eval-runner", "apps/langfuse-demos/"),
+    "langfuse-mcp-agent": ("app.kubernetes.io/name=langfuse-mcp-agent", "apps/langfuse-demos/"),
     "subnetcalc": ("app=subnetcalc", "apps/subnetcalc/"),
     "sentiment": ("app=sentiment", "apps/sentiment/"),
 }.items():
@@ -322,6 +323,10 @@ for component_name in ("langfuse-trace-chat", "langfuse-tool-agent", "langfuse-e
     assert entities[("Component", component_name)]["spec"]["dependsOn"] == [
         "component:default/langfuse"
     ]
+assert entities[("Component", "langfuse-mcp-agent")]["spec"]["dependsOn"] == [
+    "component:default/langfuse",
+    "component:default/platform-mcp",
+]
 assert entities[("Component", "subnetcalc")]["spec"]["dependsOn"] == [
     "component:default/idp-core",
     "component:default/apim-simulator",
@@ -353,10 +358,11 @@ assert platform_mcp_links["MCP Endpoint"] == "https://mcp.127.0.0.1.sslip.io/mcp
 assert platform_mcp_links["MCP Console"] == "https://mcp-console.127.0.0.1.sslip.io"
 assert mcp_inspector_links["MCP Console"] == "https://mcp-console.127.0.0.1.sslip.io"
 for component_name, route in {
-    "langfuse": "https://langfuse.admin.127.0.0.1.sslip.io",
+    "langfuse": "https://langfuse.dev.127.0.0.1.sslip.io",
     "langfuse-trace-chat": "https://lf-chat.dev.127.0.0.1.sslip.io",
     "langfuse-tool-agent": "https://lf-agent.dev.127.0.0.1.sslip.io",
     "langfuse-eval-runner": "https://lf-evals.dev.127.0.0.1.sslip.io",
+    "langfuse-mcp-agent": "https://lf-mcp.dev.127.0.0.1.sslip.io",
 }.items():
     links = {link["url"] for link in entities[("Component", component_name)]["metadata"]["links"]}
     assert route in links

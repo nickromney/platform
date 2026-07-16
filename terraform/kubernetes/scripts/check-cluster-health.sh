@@ -98,7 +98,7 @@ expected_argocd_apps() {
     if [[ "${EXPECT_APIM_EFFECTIVE}" == "true" ]]; then apps+=(oauth2-proxy-apim); fi
     if [[ "${EXPECT_BACKSTAGE_EFFECTIVE}" == "true" ]]; then apps+=(oauth2-proxy-backstage); fi
     if [[ "${EXPECT_LANGFUSE}" == "true" ]]; then apps+=(oauth2-proxy-langfuse); fi
-    if [[ "${EXPECT_LANGFUSE_DEMOS}" == "true" ]]; then apps+=(oauth2-proxy-langfuse-trace-chat oauth2-proxy-langfuse-tool-agent oauth2-proxy-langfuse-eval-runner); fi
+    if [[ "${EXPECT_LANGFUSE_DEMOS}" == "true" ]]; then apps+=(oauth2-proxy-langfuse-trace-chat oauth2-proxy-langfuse-tool-agent oauth2-proxy-langfuse-eval-runner oauth2-proxy-langfuse-mcp-agent); fi
   fi
 
   if [[ "${EXPECT_MCP_EFFECTIVE}" == "true" ]]; then
@@ -1088,7 +1088,7 @@ print_gateway_urls() {
     echo "  • Kyverno:  https://$(admin_host kyverno)${port_suffix}/"
   fi
   if [[ "${EXPECT_LANGFUSE}" == "true" || "${show_all}" == "true" ]]; then
-    echo "  • Langfuse: https://$(admin_host langfuse)${port_suffix}/"
+    echo "  • Langfuse: https://langfuse.dev.${PLATFORM_BASE_DOMAIN}${port_suffix}/"
   fi
 
   if [[ "${EXPECT_SSO}" == "true" ]]; then
@@ -1725,7 +1725,7 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
       sso_apps+=(oauth2-proxy-langfuse)
     fi
     if [[ "${EXPECT_LANGFUSE_DEMOS}" == "true" ]]; then
-      sso_apps+=(oauth2-proxy-langfuse-trace-chat oauth2-proxy-langfuse-tool-agent oauth2-proxy-langfuse-eval-runner)
+      sso_apps+=(oauth2-proxy-langfuse-trace-chat oauth2-proxy-langfuse-tool-agent oauth2-proxy-langfuse-eval-runner oauth2-proxy-langfuse-mcp-agent)
     fi
 
     for app in "${sso_apps[@]}"; do

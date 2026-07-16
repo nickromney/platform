@@ -27,8 +27,8 @@ This directory contains the source applications that feed the local platform dem
 - [`platform-mcp/`](platform-mcp/) contains the production MCP service. It keeps
   the MCP SDK as an intentional protocol dependency.
 - [`langfuse-demos/`](langfuse-demos/) contains lightweight Go demo roles for
-  trace, tool-agent, and eval flows against Langfuse and an OpenAI-compatible
-  model endpoint.
+  trace, tool-agent, eval, and MCP-agent flows against Langfuse, an
+  OpenAI-compatible model endpoint, and the in-cluster platform MCP server.
 - [`shared/apphttp/`](shared/apphttp/) contains dependency-free Go HTTP helpers
   for repeated JSON response and bounded decode behaviour in lightweight apps.
 - [`shared/appshell/`](shared/appshell/) contains the shared vanilla app shell

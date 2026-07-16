@@ -4,8 +4,8 @@ metadata:
   name: platform-mcp-hardened
 spec:
   description: >-
-    Hardened policy for the machine MCP lane. APIM is the only permitted
-    ingress source for platform-mcp.
+    Hardened policy for the machine MCP lane. APIM and the Langfuse MCP
+    demo agent are the only permitted ingress sources for platform-mcp.
   endpointSelector:
     matchLabels:
       "k8s:io.kubernetes.pod.namespace": mcp
@@ -15,6 +15,14 @@ spec:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": apim
             "k8s:app.kubernetes.io/name": subnetcalc-apim-simulator
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:app.kubernetes.io/part-of": langfuse-demos
       toPorts:
         - ports:
             - port: "8080"

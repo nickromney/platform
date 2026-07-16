@@ -18,3 +18,6 @@ spec:
     - group: ""
       kind: Service
       name: oauth2-proxy-langfuse-eval-runner
+    - group: ""
+      kind: Service
+      name: oauth2-proxy-langfuse-mcp-agent

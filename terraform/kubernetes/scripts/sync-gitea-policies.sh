@@ -171,6 +171,7 @@ string|LANGFUSE_PUBLIC_HOST|langfuse_public_host|
 string|LANGFUSE_TRACE_CHAT_PUBLIC_HOST|langfuse_trace_chat_public_host|
 string|LANGFUSE_TOOL_AGENT_PUBLIC_HOST|langfuse_tool_agent_public_host|
 string|LANGFUSE_EVAL_RUNNER_PUBLIC_HOST|langfuse_eval_runner_public_host|
+string|LANGFUSE_MCP_AGENT_PUBLIC_HOST|langfuse_mcp_agent_public_host|
 bool|ENABLE_LANGFUSE|enable_langfuse|false
 bool|ENABLE_LANGFUSE_DEMOS|enable_langfuse_demos|false
 bool|PREFER_EXTERNAL_PLATFORM_IMAGES|prefer_external_platform|false
@@ -291,10 +292,11 @@ MCP_PUBLIC_HOST="${MCP_PUBLIC_HOST:-mcp.${PLATFORM_BASE_DOMAIN}}"
 MCP_CONSOLE_PUBLIC_HOST="${MCP_CONSOLE_PUBLIC_HOST:-mcp-console.${PLATFORM_BASE_DOMAIN}}"
 AGENTGATEWAY_AI_GATEWAY_PUBLIC_HOST="${AGENTGATEWAY_AI_GATEWAY_PUBLIC_HOST:-llm.${PLATFORM_BASE_DOMAIN}}"
 AGENTGATEWAY_AI_GATEWAY_MODEL="${AGENTGATEWAY_AI_GATEWAY_MODEL:-}"
-LANGFUSE_PUBLIC_HOST="${LANGFUSE_PUBLIC_HOST:-langfuse.admin.${PLATFORM_BASE_DOMAIN}}"
+LANGFUSE_PUBLIC_HOST="${LANGFUSE_PUBLIC_HOST:-langfuse.dev.${PLATFORM_BASE_DOMAIN}}"
 LANGFUSE_TRACE_CHAT_PUBLIC_HOST="${LANGFUSE_TRACE_CHAT_PUBLIC_HOST:-lf-chat.dev.${PLATFORM_BASE_DOMAIN}}"
 LANGFUSE_TOOL_AGENT_PUBLIC_HOST="${LANGFUSE_TOOL_AGENT_PUBLIC_HOST:-lf-agent.dev.${PLATFORM_BASE_DOMAIN}}"
 LANGFUSE_EVAL_RUNNER_PUBLIC_HOST="${LANGFUSE_EVAL_RUNNER_PUBLIC_HOST:-lf-evals.dev.${PLATFORM_BASE_DOMAIN}}"
+LANGFUSE_MCP_AGENT_PUBLIC_HOST="${LANGFUSE_MCP_AGENT_PUBLIC_HOST:-lf-mcp.dev.${PLATFORM_BASE_DOMAIN}}"
 ADMIN_ROUTE_ALLOWLIST_CIDRS="${ADMIN_ROUTE_ALLOWLIST_CIDRS:-}"
 GATEWAY_TRUSTED_PROXY_CIDRS="${GATEWAY_TRUSTED_PROXY_CIDRS:-}"
 ENABLE_CERT_MANAGER="${ENABLE_CERT_MANAGER:-true}"
@@ -534,10 +536,11 @@ rewrite_public_hostnames() {
       -e "s|mcp-console\\.127\\.0\\.0\\.1\\.sslip\\.io|${MCP_CONSOLE_PUBLIC_HOST}|g" \
       -e "s|mcp\\.127\\.0\\.0\\.1\\.sslip\\.io|${MCP_PUBLIC_HOST}|g" \
       -e "s|llm\\.127\\.0\\.0\\.1\\.sslip\\.io|${AGENTGATEWAY_AI_GATEWAY_PUBLIC_HOST}|g" \
-      -e "s|langfuse\\.admin\\.127\\.0\\.0\\.1\\.sslip\\.io|${LANGFUSE_PUBLIC_HOST}|g" \
+      -e "s|langfuse\\.dev\\.127\\.0\\.0\\.1\\.sslip\\.io|${LANGFUSE_PUBLIC_HOST}|g" \
       -e "s|lf-chat\\.dev\\.127\\.0\\.0\\.1\\.sslip\\.io|${LANGFUSE_TRACE_CHAT_PUBLIC_HOST}|g" \
       -e "s|lf-agent\\.dev\\.127\\.0\\.0\\.1\\.sslip\\.io|${LANGFUSE_TOOL_AGENT_PUBLIC_HOST}|g" \
       -e "s|lf-evals\\.dev\\.127\\.0\\.0\\.1\\.sslip\\.io|${LANGFUSE_EVAL_RUNNER_PUBLIC_HOST}|g" \
+      -e "s|lf-mcp\\.dev\\.127\\.0\\.0\\.1\\.sslip\\.io|${LANGFUSE_MCP_AGENT_PUBLIC_HOST}|g" \
       -e "s|127\\.0\\.0\\.1\\.sslip\\.io|${PLATFORM_BASE_DOMAIN}|g" \
       "${file}" > "${tmp_file}"
     mv "${tmp_file}" "${file}"
@@ -2066,7 +2069,7 @@ prune_gateway_routes_manifests() {
   fi
 
   if ! is_true "${ENABLE_LANGFUSE_DEMOS}"; then
-    for route in langfuse-trace-chat langfuse-tool-agent langfuse-eval-runner; do
+    for route in langfuse-trace-chat langfuse-tool-agent langfuse-eval-runner langfuse-mcp-agent; do
       remove_if_present "${routes_dir}/httproute-${route}.yaml"
       remove_kustomization_entry "${kustomization_file}" "httproute-${route}.yaml"
     done

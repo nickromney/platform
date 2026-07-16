@@ -409,6 +409,149 @@ spec:
       port: 8080
       targetPort: http
 ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langfuse-mcp-agent
+  namespace: dev
+  labels:
+    app: langfuse-demos
+    app.kubernetes.io/name: langfuse-mcp-agent
+    app.kubernetes.io/component: mcp-agent
+    app.kubernetes.io/part-of: langfuse-demos
+    project: kindlocal
+    team: platform
+    tier: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: langfuse-mcp-agent
+      app.kubernetes.io/part-of: langfuse-demos
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8080"
+      labels:
+        app: langfuse-demos
+        app.kubernetes.io/name: langfuse-mcp-agent
+        app.kubernetes.io/component: mcp-agent
+        app.kubernetes.io/part-of: langfuse-demos
+        project: kindlocal
+        team: platform
+        tier: frontend
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      imagePullSecrets:
+        - name: gitea-registry-creds
+      containers:
+        - name: server
+          image: localhost:30090/platform/langfuse-demos:0.1.0
+          imagePullPolicy: Always
+          env:
+            - name: DEMO_ROLE
+              value: mcp-agent
+            - name: DEMO_NAME
+              value: Langfuse MCP Agent
+            - name: PORT
+              value: "8080"
+            - name: PUBLIC_BASE_URL
+              value: https://lf-mcp.dev.127.0.0.1.sslip.io
+            - name: LANGFUSE_HOST
+              value: http://langfuse-web.langfuse.svc.cluster.local:3000
+            - name: LANGFUSE_PUBLIC_KEY
+              value: pk-lf-local-platform
+            - name: LANGFUSE_SECRET_KEY
+              value: sk-lf-local-platform
+            - name: OPENAI_BASE_URL
+              value: http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1
+            - name: OPENAI_MODEL
+              value: auto
+            - name: MCP_BASE_URL
+              value: http://platform-mcp.mcp.svc.cluster.local:8080/mcp
+            - name: MCP_TOOL_NAME
+              value: d2_validate
+            - name: LLM_TIMEOUT_SECONDS
+              value: "10"
+            - name: LANGFUSE_TIMEOUT_SECONDS
+              value: "15"
+            - name: MCP_TIMEOUT_SECONDS
+              value: "10"
+            - name: HOME
+              value: /tmp
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+              ephemeral-storage: 64Mi
+            limits:
+              cpu: 200m
+              memory: 192Mi
+              ephemeral-storage: 256Mi
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: langfuse-mcp-agent
+  namespace: dev
+  labels:
+    app: langfuse-demos
+    app.kubernetes.io/name: langfuse-mcp-agent
+    app.kubernetes.io/component: mcp-agent
+    app.kubernetes.io/part-of: langfuse-demos
+    project: kindlocal
+    team: platform
+    tier: frontend
+spec:
+  selector:
+    app.kubernetes.io/name: langfuse-mcp-agent
+    app.kubernetes.io/part-of: langfuse-demos
+  ports:
+    - name: http
+      appProtocol: http
+      port: 8080
+      targetPort: http
+---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -472,3 +615,13 @@ spec:
       ports:
         - protocol: TCP
           port: 80
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mcp
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: platform-mcp
+      ports:
+        - protocol: TCP
+          port: 8080

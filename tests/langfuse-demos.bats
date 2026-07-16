@@ -33,6 +33,7 @@ expected = {
     "langfuse-trace-chat": "trace-chat",
     "langfuse-tool-agent": "tool-agent",
     "langfuse-eval-runner": "eval-runner",
+    "langfuse-mcp-agent": "mcp-agent",
 }
 assert expected.keys() <= deployments.keys(), deployments.keys()
 assert expected.keys() <= services.keys(), services.keys()
@@ -57,6 +58,10 @@ for name, role in expected.items():
     assert int(env["LANGFUSE_TIMEOUT_SECONDS"]) >= 10, name
     assert "langfuse-demos" in container["image"], name
     assert container["imagePullPolicy"] == "Always", name
+    if role == "mcp-agent":
+        assert env["MCP_BASE_URL"] == "http://platform-mcp.mcp.svc.cluster.local:8080/mcp", name
+        assert env["MCP_TOOL_NAME"] == "d2_validate", name
+        assert int(env["MCP_TIMEOUT_SECONDS"]) >= 5, name
 
 network_policy = next(
     doc
@@ -69,7 +74,9 @@ for text in (
     "kubernetes.io/metadata.name: langfuse",
     "kubernetes.io/metadata.name: agentgateway-system",
     "kubernetes.io/metadata.name: observability",
+    "kubernetes.io/metadata.name: mcp",
     "app.kubernetes.io/name: prometheus",
+    "app.kubernetes.io/name: platform-mcp",
     "port: 3000",
     "port: 80",
     "port: 8080",
@@ -121,6 +128,8 @@ for expected in (
     "k8s:app.kubernetes.io/name: agentgateway-ai-gateway",
     "k8s:io.kubernetes.pod.namespace: observability",
     "k8s:app.kubernetes.io/name: prometheus",
+    "k8s:io.kubernetes.pod.namespace: mcp",
+    "k8s:app.kubernetes.io/name: platform-mcp",
 ):
     assert expected in policy_text, expected
 ports = {
@@ -129,7 +138,7 @@ ports = {
     for port_block in rule.get("toPorts", [])
     for port in port_block.get("ports", [])
 }
-assert {"53", "3000", "80"} <= ports, ports
+assert {"53", "3000", "80", "8080"} <= ports, ports
 protocols_for_53 = {
     port.get("protocol")
     for rule in spec.get("egress", [])
@@ -319,7 +328,7 @@ assert job["metadata"]["annotations"]["argocd.argoproj.io/hook"] == "PostSync", 
 for name in ("langfuse-web", "langfuse-worker"):
     deployment = next(doc for doc in docs if doc.get("kind") == "Deployment" and doc["metadata"]["name"] == name)
     annotations = deployment["spec"]["template"]["metadata"]["annotations"]
-    assert annotations["platform.publiccloudexperiments.net/config-generation"] == "2026-05-22-langfuse-bootstrap", name
+    assert annotations["platform.publiccloudexperiments.net/config-generation"] == "2026-07-14-langfuse-dev-host", name
 pod_spec = job["spec"]["template"]["spec"]
 assert pod_spec["automountServiceAccountToken"] is False
 container = pod_spec["containers"][0]
@@ -512,6 +521,7 @@ for service in (
     "oauth2-proxy-langfuse-trace-chat",
     "oauth2-proxy-langfuse-tool-agent",
     "oauth2-proxy-langfuse-eval-runner",
+    "oauth2-proxy-langfuse-mcp-agent",
 ):
     assert service in allowed_services, service
 
