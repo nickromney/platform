@@ -79,6 +79,7 @@ write_fake_curl() {
 #!/usr/bin/env bash
 set -euo pipefail
 url="${*: -1}"
+printf '%s\n' "$*" >>"${CURL_ARGS_LOG:-/dev/null}"
 cat >/dev/null
 case "${url}" in
   */repos/mikefarah/yq/releases/latest)
@@ -279,4 +280,54 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "$(cat "${TOOLCHAIN_VERSIONS_FILE}")" == *'LEFTHOOK_VERSION="${LEFTHOOK_VERSION:-v2.2.0}"'* ]]
+}
+
+@test "tools resolver sends a bearer token to the GitHub API when GITHUB_TOKEN is set" {
+  write_fake_curl
+  write_toolchain_fixture
+  unset UPDATE_VERSIONS_TOOL_REPORT_TSV
+  export CURL_ARGS_LOG="${BATS_TEST_TMPDIR}/curl-args.log"
+  export GITHUB_TOKEN="test-token-123"
+
+  run "${SCRIPT}" --execute --only tools
+
+  [ "${status}" -eq 0 ]
+  grep -q "Authorization: Bearer test-token-123" "${CURL_ARGS_LOG}"
+}
+
+@test "tools resolver stays anonymous when no token source is available" {
+  write_fake_curl
+  write_toolchain_fixture
+  unset UPDATE_VERSIONS_TOOL_REPORT_TSV
+  export CURL_ARGS_LOG="${BATS_TEST_TMPDIR}/curl-args.log"
+  unset GITHUB_TOKEN GH_TOKEN
+  printf '#!/usr/bin/env bash\nexit 1\n' >"${BATS_TEST_TMPDIR}/bin/gh"
+  chmod +x "${BATS_TEST_TMPDIR}/bin/gh"
+
+  run "${SCRIPT}" --execute --only tools
+
+  [ "${status}" -eq 0 ]
+  grep -q "repos/mikefarah/yq/releases/latest" "${CURL_ARGS_LOG}"
+  ! grep -q "Authorization" "${CURL_ARGS_LOG}"
+}
+
+@test "GitHub token is never sent to non-GitHub hosts" {
+  write_fake_curl
+  unset UPDATE_VERSIONS_DEVCONTAINER_REPORT_TSV
+  export CURL_ARGS_LOG="${BATS_TEST_TMPDIR}/curl-args.log"
+  export GITHUB_TOKEN="test-token-123"
+  export DEVCONTAINER_DOCKERFILE="${BATS_TEST_TMPDIR}/Dockerfile"
+  export DEVCONTAINER_CONFIG="${BATS_TEST_TMPDIR}/devcontainer.json"
+  cat >"${DEVCONTAINER_DOCKERFILE}" <<'EOF'
+FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
+EOF
+  cat >"${DEVCONTAINER_CONFIG}" <<'EOF'
+{"features":{}}
+EOF
+
+  run "${SCRIPT}" --execute --only devcontainer
+
+  [ "${status}" -eq 0 ]
+  grep -q "v2/devcontainers/base/tags/list" "${CURL_ARGS_LOG}"
+  ! grep "v2/devcontainers/base/tags/list" "${CURL_ARGS_LOG}" | grep -q "Authorization"
 }
