@@ -38,6 +38,11 @@ Options:
   --only LIST  Comma-separated domain filter. Domains: tools, devcontainer,
                charts, packages, providers, images.
 
+Environment:
+  GITHUB_TOKEN / GH_TOKEN  Optional GitHub API token for release lookups;
+                           falls back to 'gh auth token', then anonymous
+                           requests (60/hour rate limit).
+
 $(shell_cli_standard_options)
 EOF
 }
@@ -183,11 +188,36 @@ print_section() {
   printf '\n== %s ==\n' "$1"
 }
 
+GITHUB_API_TOKEN_RESOLVED=0
+GITHUB_API_TOKEN_VALUE=""
+
+github_api_token() {
+  if [[ "${GITHUB_API_TOKEN_RESOLVED}" -eq 0 ]]; then
+    GITHUB_API_TOKEN_VALUE="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+    if [[ -z "${GITHUB_API_TOKEN_VALUE}" ]] && command -v gh >/dev/null 2>&1; then
+      GITHUB_API_TOKEN_VALUE="$(gh auth token 2>/dev/null || true)"
+    fi
+    GITHUB_API_TOKEN_RESOLVED=1
+  fi
+  printf '%s' "${GITHUB_API_TOKEN_VALUE}"
+}
+
 http_get() {
   local url="$1"
+  local token
+  local -a auth_args=()
+  # Only ever send the GitHub token to the GitHub API host, not MCR or
+  # other registries this function may be pointed at.
+  if [[ "${url}" == "${UPDATE_VERSIONS_GITHUB_API_BASE%/}"/* ]]; then
+    token="$(github_api_token)"
+    if [[ -n "${token}" ]]; then
+      auth_args=(-H "Authorization: Bearer ${token}")
+    fi
+  fi
   curl -fsSL \
     -H "Accept: application/vnd.github+json" \
     -H "User-Agent: platform-check-version" \
+    ${auth_args[@]+"${auth_args[@]}"} \
     "${url}" </dev/null
 }
 
