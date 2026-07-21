@@ -1,0 +1,76 @@
+name: kind-aks-ai-foundry
+
+x-runtime-hardening: &runtime-hardening
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  aifoundry-simulator:
+    <<: *runtime-hardening
+    build:
+      context: ${AIFOUNDRY_SIMULATOR_ROOT:-../../../aifoundry-simulator}
+      args:
+        PYTHON_BUILD_IMAGE: ${PYTHON_BUILD_IMAGE:-dhi.io/python:3.13-debian13-dev}
+        PYTHON_RUNTIME_IMAGE: ${PYTHON_RUNTIME_IMAGE:-dhi.io/python:3.13-debian13}
+        APP_UID: ${APP_UID:-65532}
+        APP_GID: ${APP_GID:-65532}
+    image: kind-aks-ai-foundry/aifoundry-simulator:local
+    ports:
+      - "127.0.0.1:${FOUNDRY_PORT:-8020}:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/foundry/health')
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 3s
+    networks:
+      - external-ai
+
+  apim-simulator:
+    <<: *runtime-hardening
+    build:
+      context: ${APIM_SIMULATOR_ROOT:-../../../apim-simulator}
+      args:
+        PYTHON_BUILD_IMAGE: ${PYTHON_BUILD_IMAGE:-dhi.io/python:3.13-debian13-dev}
+        PYTHON_RUNTIME_IMAGE: ${PYTHON_RUNTIME_IMAGE:-dhi.io/python:3.13-debian13}
+        APP_UID: ${APP_UID:-65532}
+        APP_GID: ${APP_GID:-65532}
+    image: kind-aks-ai-foundry/apim-simulator:local
+    ports:
+      - "127.0.0.1:${APIM_GATEWAY_PORT:-8100}:8000"
+    environment:
+      APIM_CONFIG_PATH: /tmp/kind-aks-ai-foundry-apim.json
+      APIM_CONFIG_SOURCE_PATH: /experiment/apim.json
+      APIM_CONFIG_TEMPLATE_SUBSTITUTE: "true"
+      OTEL_SERVICE_NAME: kind-aks-ai-foundry-apim
+    volumes:
+      - ./apim.json:/experiment/apim.json:ro
+    depends_on:
+      aifoundry-simulator:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/apim/health')
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 3s
+    networks:
+      - external-ai
+
+networks:
+  external-ai:
+    internal: false

@@ -1,0 +1,268 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aks-sim
+  labels:
+    app.kubernetes.io/part-of: kind-aks-ai-foundry
+    platform.local/cluster-shape: aks
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: external-apim-ai-foundry-auth
+  namespace: agentgateway-system
+  labels:
+    app.kubernetes.io/part-of: kind-aks-ai-foundry
+type: Opaque
+stringData:
+  Authorization: Bearer aks-workload-subscription-key
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: external-apim-ai-foundry
+  namespace: agentgateway-system
+  labels:
+    app.kubernetes.io/part-of: kind-aks-ai-foundry
+    app.kubernetes.io/component: apim-egress
+spec:
+  static:
+    host: host.docker.internal
+    port: 8100
+  policies:
+    auth:
+      secretRef:
+        name: external-apim-ai-foundry-auth
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: external-apim-ai-foundry
+  namespace: agentgateway-system
+  labels:
+    app.kubernetes.io/part-of: kind-aks-ai-foundry
+    app.kubernetes.io/component: llm-route
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: agentgateway-ai-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /foundry/v1
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            set:
+              - name: x-apim-trace
+                value: "true"
+      backendRefs:
+        - group: agentgateway.dev
+          kind: AgentgatewayBackend
+          name: external-apim-ai-foundry
+          weight: 1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-chat-aks-sim
+  namespace: aks-sim
+  labels:
+    app.kubernetes.io/name: auth-chat-aks-sim
+    app.kubernetes.io/component: ai-workload
+    app.kubernetes.io/part-of: kind-aks-ai-foundry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auth-chat-aks-sim
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: auth-chat-aks-sim
+        app.kubernetes.io/component: ai-workload
+        app.kubernetes.io/part-of: kind-aks-ai-foundry
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.azure.com/agentpool: experiment
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: server
+          image: platform-auth-chat:kind-aks-ai-foundry
+          imagePullPolicy: Never
+          env:
+            - name: PORT
+              value: "8080"
+            - name: PUBLIC_BASE_URL
+              value: http://auth-chat-aks-sim.aks-sim.svc.cluster.local:8080
+            - name: AUTH_METHOD
+              value: none
+            - name: API_AUTH_METHOD
+              value: none
+            - name: AUTH_CHAT_API_AUTH_METHOD
+              value: none
+            - name: AUTH_CHAT_LLM_URL
+              value: http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/foundry/v1/chat/completions
+            - name: AUTH_CHAT_LLM_MODEL
+              value: gpt-demo
+            - name: AUTH_CHAT_LLM_TIMEOUT_SECONDS
+              value: "15"
+            - name: AUTH_CHAT_LLM_MAX_TOKENS
+              value: "32"
+            - name: AUTH_CHAT_SHOW_NETWORK_PATH
+              value: "true"
+            - name: AUTH_CHAT_NETWORK_HOPS
+              value: '[{"label":"AKS-shaped workload","detail":"aks-sim/auth-chat-aks-sim","role":"OpenAI-compatible client"},{"label":"agentgateway","detail":"agentgateway-system/agentgateway-ai-gateway","role":"In-cluster AI route"},{"label":"APIM simulator","detail":"host.docker.internal:8100","role":"Subscription and token policy"},{"label":"AI Foundry simulator","detail":"external Docker network","role":"Model endpoint"}]'
+            - name: HOME
+              value: /tmp
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 3
+            timeoutSeconds: 2
+            failureThreshold: 20
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+              ephemeral-storage: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+              ephemeral-storage: 128Mi
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-chat-aks-sim
+  namespace: aks-sim
+  labels:
+    app.kubernetes.io/name: auth-chat-aks-sim
+    app.kubernetes.io/part-of: kind-aks-ai-foundry
+spec:
+  selector:
+    app.kubernetes.io/name: auth-chat-aks-sim
+  ports:
+    - name: http
+      appProtocol: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: auth-chat-aks-sim-egress
+  namespace: aks-sim
+  labels:
+    app.kubernetes.io/part-of: kind-aks-ai-foundry
+spec:
+  description: >-
+    The experiment workload accepts only local operator probes and can egress
+    only to DNS and the in-cluster agentgateway. It cannot reach Docker-hosted
+    APIM or AI Foundry directly.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/component: ai-workload
+      app.kubernetes.io/part-of: kind-aks-ai-foundry
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: agentgateway-system
+            k8s:app.kubernetes.io/name: agentgateway-ai-gateway
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+            - port: "8080"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: kind-aks-ai-foundry-agentgateway
+  labels:
+    app.kubernetes.io/part-of: kind-aks-ai-foundry
+spec:
+  description: >-
+    Add the isolated AKS-shaped client as an agentgateway caller and allow the
+    experiment APIM host port as an additional external AI egress destination.
+  endpointSelector:
+    matchLabels:
+      k8s:io.kubernetes.pod.namespace: agentgateway-system
+      k8s:app.kubernetes.io/name: agentgateway-ai-gateway
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: aks-sim
+            k8s:app.kubernetes.io/name: auth-chat-aks-sim
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+            - port: "8080"
+              protocol: TCP
+  egress:
+    - toFQDNs:
+        - matchName: host.docker.internal
+      toPorts:
+        - ports:
+            - port: "8100"
+              protocol: TCP

@@ -1,0 +1,69 @@
+{
+  "allowed_origins": [],
+  "allow_anonymous": true,
+  "trace_enabled": true,
+  "tenant_access": {
+    "enabled": true,
+    "primary_key": "local-dev-tenant-key",
+    "secondary_key": "local-dev-tenant-key-secondary"
+  },
+  "portal": {
+    "enabled": false
+  },
+  "products": {
+    "aks-ai-workloads": {
+      "name": "AKS-shaped AI workloads",
+      "description": "Token-metered access from the local Kind experiment",
+      "require_subscription": true
+    }
+  },
+  "subscription": {
+    "required": true,
+    "header_names": [
+      "Ocp-Apim-Subscription-Key",
+      "X-Ocp-Apim-Subscription-Key",
+      "api-key",
+      "Authorization"
+    ],
+    "subscriptions": {
+      "aks-workload": {
+        "id": "sub-aks-workload",
+        "name": "aks-workload",
+        "keys": {
+          "primary": "Bearer aks-workload-subscription-key",
+          "secondary": "Bearer aks-workload-subscription-key-secondary"
+        },
+        "products": [
+          "aks-ai-workloads"
+        ],
+        "created_by": "publisher"
+      }
+    }
+  },
+  "backends": {
+    "aifoundry-simulator": {
+      "url": "http://aifoundry-simulator:8000",
+      "description": "External Docker-hosted AI Foundry simulator"
+    }
+  },
+  "apis": {
+    "foundry-v1": {
+      "name": "AI Foundry v1 through APIM",
+      "path": "foundry/v1",
+      "upstream_base_url": "http://aifoundry-simulator:8000",
+      "upstream_path_prefix": "/openai/v1",
+      "backend": "aifoundry-simulator",
+      "products": [
+        "aks-ai-workloads"
+      ],
+      "policies_xml": "<policies><inbound><set-header name=\"api-key\" exists-action=\"override\"><value>local-foundry-key-alpha</value></set-header><llm-token-limit counter-key=\"@(context.Subscription.Id)\" tokens-per-minute=\"3000\" estimate-prompt-tokens=\"false\" remaining-tokens-header-name=\"x-apim-remaining-tokens\" tokens-consumed-header-name=\"x-apim-tokens-consumed\" /></inbound><backend /><outbound /><on-error /></policies>",
+      "operations": {
+        "chat-completions": {
+          "name": "Chat Completions",
+          "method": "POST",
+          "url_template": "/chat/completions"
+        }
+      }
+    }
+  }
+}
