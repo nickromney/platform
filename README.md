@@ -73,6 +73,7 @@ The stage ladder is cumulative:
 | Best-effort Lima VM workflow, validated on demand | [`kubernetes/lima`](kubernetes/lima) | `make -C kubernetes/lima help` |
 | App and frontend work | [`apps`](apps) | `make -C apps help` |
 | Docker Compose experiments | [`docker/compose`](docker/compose) | `make -C docker/compose help` |
+| AKS-shaped Kind to external AI Foundry experiment | [`experiments/kind-aks-ai-foundry`](experiments/kind-aks-ai-foundry) | `make -C experiments/kind-aks-ai-foundry help` |
 
 Kind is the reference substrate for this repository. Lima remains available as
 a best-effort path and is validated on demand rather than as the default local
