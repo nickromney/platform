@@ -886,3 +886,159 @@ EOF
   [[ "${output}" =~ processed:a$'\n'processed:b$'\n'processed:c$'\n'__MAX_ACTIVE__= ]]
   [[ "${output}" =~ __MAX_ACTIVE__=2 ]]
 }
+
+write_chart_cooldown_index() {
+  local cache_dir="$1"
+  local recent old
+
+  recent="$(date -u -v-1d '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -d '1 day ago' '+%Y-%m-%dT%H:%M:%SZ')"
+  old="$(date -u -v-30d '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -d '30 days ago' '+%Y-%m-%dT%H:%M:%SZ')"
+
+  mkdir -p "${cache_dir}"
+  cat >"${cache_dir}/demo-index.yaml" <<__INDEX__
+apiVersion: v1
+entries:
+  demo-chart:
+    - version: 10.3.0
+      created: "${recent}"
+    - version: 10.2.1
+      created: "${old}"
+    - version: 10.2.2-rc.1
+      created: "${old}"
+    - version: 9.9.9
+      created: "${recent}"
+    - version: 10.1.0
+      created: "${old}"
+__INDEX__
+}
+
+@test "check-version chart cooldown resolves newest stable version older than the cooldown window" {
+  local cache_dir="${BATS_TEST_TMPDIR}/helm-cache"
+  write_chart_cooldown_index "${cache_dir}"
+
+  run bash -lc "
+    export CHECK_VERSION_LIB_ONLY=1
+    export CHECK_VERSION_HELM_REPOSITORY_CACHE='${cache_dir}'
+    source '${SCRIPT}'
+    helm_latest_eligible_chart_version demo demo-chart 604800
+  "
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "10.2.1" ]
+}
+
+@test "check-version chart cooldown ignores recent backported releases when sorting by version" {
+  local cache_dir="${BATS_TEST_TMPDIR}/helm-cache"
+  write_chart_cooldown_index "${cache_dir}"
+
+  run bash -lc "
+    export CHECK_VERSION_LIB_ONLY=1
+    export CHECK_VERSION_HELM_REPOSITORY_CACHE='${cache_dir}'
+    source '${SCRIPT}'
+    helm_latest_eligible_chart_version demo demo-chart 0
+  "
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "10.3.0" ]
+}
+
+@test "check-version chart cooldown falls back to helm search when the repo index is missing" {
+  run bash -lc "
+    export CHECK_VERSION_LIB_ONLY=1
+    export CHECK_VERSION_HELM_REPOSITORY_CACHE='${BATS_TEST_TMPDIR}/no-such-cache'
+    source '${SCRIPT}'
+    ensure_helm_repo_ready() { :; }
+    helm() {
+      if [ \"\$1\" = 'search' ]; then
+        printf '[{\"version\":\"10.3.0\"}]\n'
+      fi
+    }
+    helm_latest_chart_version demo https://example.invalid demo-chart
+  "
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "10.3.0" ]
+}
+
+@test "check-version chart cooldown disabled resolves the absolute newest version via helm search" {
+  local cache_dir="${BATS_TEST_TMPDIR}/helm-cache"
+  write_chart_cooldown_index "${cache_dir}"
+
+  run bash -lc "
+    export CHECK_VERSION_LIB_ONLY=1
+    export CHECK_VERSION_HELM_REPOSITORY_CACHE='${cache_dir}'
+    export CHECK_VERSION_CHART_MIN_RELEASE_AGE=0
+    source '${SCRIPT}'
+    ensure_helm_repo_ready() { :; }
+    helm() {
+      if [ \"\$1\" = 'search' ]; then
+        printf '[{\"version\":\"99.0.0\"}]\n'
+      fi
+    }
+    helm_latest_chart_version demo https://example.invalid demo-chart
+  "
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "99.0.0" ]
+}
+
+@test "check-version chart cooldown emits a held-version row with the eligible date" {
+  local cache_dir="${BATS_TEST_TMPDIR}/helm-cache"
+  write_chart_cooldown_index "${cache_dir}"
+
+  local expected_date
+  expected_date="$(date -u -v+6d '+%Y-%m-%d' 2>/dev/null || date -u -d '+6 days' '+%Y-%m-%d')"
+
+  run bash -lc "
+    export CHECK_VERSION_LIB_ONLY=1
+    export CHECK_VERSION_HELM_REPOSITORY_CACHE='${cache_dir}'
+    source '${SCRIPT}'
+    chart_cooldown_row 'demo chart' demo demo-chart 10.2.1
+  "
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf 'demo chart\t10.2.1\t10.3.0\t%s' "${expected_date}")" ]
+}
+
+@test "check-version chart cooldown emits no row when the eligible version is the overall newest" {
+  local cache_dir="${BATS_TEST_TMPDIR}/helm-cache"
+  write_chart_cooldown_index "${cache_dir}"
+
+  run bash -lc "
+    export CHECK_VERSION_LIB_ONLY=1
+    export CHECK_VERSION_HELM_REPOSITORY_CACHE='${cache_dir}'
+    source '${SCRIPT}'
+    chart_cooldown_row 'demo chart' demo demo-chart 10.3.0
+  "
+
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "check-version JSON report marks a cooldown-held chart component as cooldown_active" {
+  run bash -lc "
+    export CHECK_VERSION_LIB_ONLY=1
+    source '${SCRIPT}'
+    EXPECTED_CLUSTER_NAME='kind-local'
+    CLUSTER_OK=1
+    EXPECT_KIND_PROVISIONING='true'
+    CODE_ARGOCD_IMAGE_REF=''
+    CONFIGURED_ARGOCD_IMAGE_STATUS=''
+    LATEST_PREFERRED_ARGOCD_IMAGE_REF=''
+    LATEST_PREFERRED_ARGOCD_IMAGE_STATUS=''
+    row=\"\$(print_row 'argo-cd chart' '10.2.1' '10.2.1' '10.2.1' 'v3.4.5' 'v3.4.5' '' 'v3.4.5' '0')\"
+    cooldown=\$'argo-cd chart\t10.2.1\t10.3.0\t2026-08-12'
+    emit_json_report \"\${row}\" '' '' '' '' \"\${cooldown}\" | jq -r '
+      [
+        .components[0].status_code,
+        .components[0].status_group,
+        .components[0].latest_overall,
+        .components[0].cooldown_eligible_date,
+        (.chart_cooldowns | length | tostring),
+        (.summary.component_cooldown_count | tostring)
+      ] | @tsv'
+  "
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf 'cooldown_active\tcooldown\t10.3.0\t2026-08-12\t1\t1')" ]
+}

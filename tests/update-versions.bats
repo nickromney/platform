@@ -18,6 +18,21 @@ setup() {
       "latest": "1.1.0",
       "status_code": "update_available",
       "update_available": true
+    },
+    {
+      "component": "argo-cd chart",
+      "codebase": "10.2.1",
+      "latest": "10.2.1",
+      "status_code": "cooldown_active",
+      "update_available": false
+    }
+  ],
+  "chart_cooldowns": [
+    {
+      "component": "argo-cd chart",
+      "latest_eligible": "10.2.1",
+      "latest_overall": "10.3.0",
+      "eligible_date": "2026-08-11"
     }
   ],
   "app_dependencies": [
@@ -91,6 +106,12 @@ case "${url}" in
   */repos/evilmartians/lefthook/releases/latest)
     printf '{"tag_name":"v2.2.0"}\n'
     ;;
+  */repos/opentofu/opentofu/releases/latest)
+    printf '{"tag_name":"v1.12.5","published_at":"2020-01-01T00:00:00Z"}\n'
+    ;;
+  */repos/smallstep/cli/releases/latest)
+    printf '{"tag_name":"0.31.0","published_at":"2020-01-01T00:00:00Z"}\n'
+    ;;
   */v2/devcontainers/base/tags/list)
     printf '{"name":"devcontainers/base","tags":["ubuntu-22.04","ubuntu-24.04","ubuntu-24.10"]}\n'
     ;;
@@ -145,6 +166,14 @@ EOF
   [[ "${output}" == *"sites/docs:vite"* ]]
   [[ "${output}" == *"BLOCKED by cooldown"* ]]
   [[ "${output}" == *"2026-07-14"* ]]
+}
+
+@test "charts report surfaces cooldown-held chart versions with eligible dates" {
+  run "${SCRIPT}" --execute --only charts
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *$'argo-cd chart\t10.2.1\t10.3.0\tBLOCKED by cooldown\t2026-08-11'* ]]
+  [[ "${output}" == *$'kyverno chart\t1.0.0\t1.1.0\tupdate available'* ]]
 }
 
 @test "--only filters domains" {
@@ -244,6 +273,48 @@ EOF
   expected_file+=$'  "yq=v4.2.0"\n'
   expected_file+=$')'
   [ "$(cat "${TOOLCHAIN_VERSIONS_FILE}")" = "${expected_file}" ]
+}
+
+write_pin_style_fixture() {
+  local opentofu_pin="$1"
+  export TOOLCHAIN_VERSIONS_FILE="${BATS_TEST_TMPDIR}/toolchain-versions.sh"
+  export TOOLCHAIN_SOURCES_FILE="${BATS_TEST_TMPDIR}/toolchain-sources.tsv"
+  cat >"${TOOLCHAIN_VERSIONS_FILE}" <<EOF
+#!/usr/bin/env bash
+
+OPENTOFU_VERSION="\${OPENTOFU_VERSION:-${opentofu_pin}}"
+STEP_VERSION="\${STEP_VERSION:-v0.30.6}"
+EOF
+  cat >"${TOOLCHAIN_SOURCES_FILE}" <<'EOF'
+opentofu	github:opentofu/opentofu	OPENTOFU_VERSION
+step	github:smallstep/cli	STEP_VERSION
+EOF
+}
+
+@test "tools apply preserves each pin's leading-v style when the upstream tag differs" {
+  write_fake_curl
+  write_pin_style_fixture "1.12.3"
+  unset UPDATE_VERSIONS_TOOL_REPORT_TSV
+
+  run "${SCRIPT}" --execute --apply --only tools
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *$'opentofu\t1.12.3\t1.12.5\tupdate available'* ]]
+  [[ "${output}" == *"Updated tools: opentofu 1.12.3 -> 1.12.5"* ]]
+  [[ "${output}" == *"Updated tools: step v0.30.6 -> v0.31.0"* ]]
+  [[ "$(cat "${TOOLCHAIN_VERSIONS_FILE}")" == *'OPENTOFU_VERSION="${OPENTOFU_VERSION:-1.12.5}"'* ]]
+  [[ "$(cat "${TOOLCHAIN_VERSIONS_FILE}")" == *'STEP_VERSION="${STEP_VERSION:-v0.31.0}"'* ]]
+}
+
+@test "tools report treats a pin as current when only the leading-v style differs from the tag" {
+  write_fake_curl
+  write_pin_style_fixture "1.12.5"
+  unset UPDATE_VERSIONS_TOOL_REPORT_TSV
+
+  run "${SCRIPT}" --execute --only tools
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *$'opentofu\t1.12.5\t1.12.5\tcurrent'* ]]
 }
 
 @test "devcontainer domain reports a newer same-family base tag" {

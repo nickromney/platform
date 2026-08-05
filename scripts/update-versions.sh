@@ -303,6 +303,23 @@ tool_current_pin() {
   esac
 }
 
+# Upstream release tags do not always match the pin style consumed by the
+# devcontainer scripts (e.g. OpenTofu tags are v-prefixed while the
+# OPENTOFU_VERSION pin must stay bare for the official installer). Preserve the
+# existing pin's leading-v style when reporting and applying the new version.
+normalize_tag_to_pin_style() {
+  local current="$1"
+  local latest="$2"
+
+  if [[ "${current}" == v[0-9]* && "${latest}" == [0-9]* ]]; then
+    printf 'v%s\n' "${latest}"
+  elif [[ "${current}" == [0-9]* && "${latest}" == v[0-9]* ]]; then
+    printf '%s\n' "${latest#v}"
+  else
+    printf '%s\n' "${latest}"
+  fi
+}
+
 tool_resolved_row() {
   local tool="$1"
   local source="$2"
@@ -320,6 +337,9 @@ tool_resolved_row() {
       repo="${source#github:}"
       release_row="$(github_latest_release "${repo}" 2>/dev/null || true)"
       IFS=$'\t' read -r latest published_at <<< "${release_row}"
+      if [[ -n "${latest}" ]]; then
+        latest="$(normalize_tag_to_pin_style "${current}" "${latest}")"
+      fi
       IFS=$'\t' read -r status eligible_date <<< "$(status_for_latest "${current}" "${latest}" "${published_at}")"
       printf '%s\t%s\t%s\t%s\t%s\n' "${tool}" "${current}" "${latest}" "${status}" "${eligible_date}"
       ;;
@@ -519,9 +539,16 @@ report_charts() {
   printf 'source: terraform/kubernetes/scripts/check-component-version.sh JSON components\n'
   ensure_component_report || return 1
   jq -r '
-    .components[]
+    ((.chart_cooldowns // []) | map({key: .component, value: .}) | from_entries) as $cooldown_by_component
+    | .components[]
     | select((.component | test("chart|otel-collector|policy-reporter|cert-manager|oauth2-proxy|victoria-logs")) or (.update_available == true))
-    | [.component, .codebase, .latest, .status_code, ""] | @tsv
+    | ($cooldown_by_component[.component] // null) as $cooldown
+    | if $cooldown != null and .codebase == $cooldown.latest_eligible then
+        [.component, .codebase, $cooldown.latest_overall, "cooldown_active", ($cooldown.eligible_date // "unknown")]
+      else
+        [.component, .codebase, .latest, .status_code, ""]
+      end
+    | @tsv
   ' "${COMPONENT_REPORT_FILE}" | render_update_rows
   if [[ "${MODE}" == "apply" ]]; then
     run_applier "charts" "${UPDATE_VERSIONS_CHARTS_APPLY_CMD:-}"

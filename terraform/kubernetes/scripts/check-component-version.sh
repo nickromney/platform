@@ -14,6 +14,8 @@ source "${REPO_ROOT}/scripts/lib/parallel.sh"
 CHECK_VERSION_FORMAT="${CHECK_VERSION_FORMAT:-text}"
 CHECK_VERSION_CI_MODE="${CHECK_VERSION_CI_MODE:-0}"
 CHECK_VERSION_DEPLOYED_REASON="${CHECK_VERSION_DEPLOYED_REASON:-cluster unreachable}"
+CHECK_VERSION_CHART_MIN_RELEASE_AGE="${CHECK_VERSION_CHART_MIN_RELEASE_AGE:-604800}"
+CHECK_VERSION_HELM_REPOSITORY_CACHE="${CHECK_VERSION_HELM_REPOSITORY_CACHE:-}"
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -70,6 +72,10 @@ Environment:
                                       All prerelease channels default to off
   CHECK_VERSION_CI_MODE=1             Same as --ci; skips live cluster inspection and Docker manifest probes
   CHECK_VERSION_RUNTIME_ROOT=...      Store temp/cache state under a repo-owned .run/check-version root
+  CHECK_VERSION_CHART_MIN_RELEASE_AGE=SECONDS
+                                      Cooldown for Helm chart latest-version resolution: report the
+                                      newest chart version published at least SECONDS ago (default
+                                      604800 = 7 days; 0 reports the absolute newest version)
 
 $(shell_cli_standard_options)
 EOF
@@ -1583,12 +1589,146 @@ chart_app_version_cache_file() {
   printf "%s/%s\n" "${CHECK_VERSION_CACHE_DIR}" "$(printf '%s__%s__%s' "${repo_name}" "${chart}" "${version}" | tr '/:@' '____')"
 }
 
+chart_cooldown_cutoff_iso() {
+  local min_age="$1"
+  local cutoff_epoch
+
+  cutoff_epoch="$(($(date -u '+%s') - min_age))"
+  date -u -r "${cutoff_epoch}" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null ||
+    date -u -d "@${cutoff_epoch}" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null ||
+    return 1
+}
+
+helm_repo_index_file() {
+  local repo_name="$1"
+  local cache_dir="${CHECK_VERSION_HELM_REPOSITORY_CACHE}"
+
+  if [ -z "${cache_dir}" ]; then
+    cache_dir="$(helm env HELM_REPOSITORY_CACHE 2>/dev/null || true)"
+  fi
+  [ -n "${cache_dir}" ] || return 1
+  printf '%s/%s-index.yaml\n' "${cache_dir}" "${repo_name}"
+}
+
+helm_latest_eligible_chart_version() {
+  local repo_name="$1"
+  local chart="$2"
+  local min_age="$3"
+  local index_file cutoff_iso
+
+  command -v yq >/dev/null 2>&1 || return 1
+  index_file="$(helm_repo_index_file "${repo_name}")" || return 1
+  [ -f "${index_file}" ] || return 1
+  cutoff_iso="$(chart_cooldown_cutoff_iso "${min_age}")" || return 1
+
+  yq -o=json ".entries[\"${chart}\"] // []" "${index_file}" 2>/dev/null |
+    jq -r --arg cutoff "${cutoff_iso}" '
+      map(select((.version // "") | test("^v?[0-9]+\\.[0-9]+\\.[0-9]+$")))
+      | map(select((.created // "") != "" and .created <= $cutoff))
+      | sort_by(.version | ltrimstr("v") | split(".") | map(tonumber))
+      | (last.version // empty)
+    ' 2>/dev/null
+}
+
+chart_iso_to_epoch() {
+  local value="$1"
+
+  value="${value%%.*}"
+  value="${value%Z}Z"
+  date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "${value}" '+%s' 2>/dev/null ||
+    date -u -d "${value}" '+%s' 2>/dev/null ||
+    return 1
+}
+
+chart_epoch_to_date() {
+  local epoch="$1"
+
+  date -u -r "${epoch}" '+%Y-%m-%d' 2>/dev/null ||
+    date -u -d "@${epoch}" '+%Y-%m-%d' 2>/dev/null ||
+    return 1
+}
+
+# Newest stable chart version in the repo index regardless of cooldown, as
+# "version<TAB>created". Used to report what a cooldown is currently holding.
+helm_overall_latest_chart_row() {
+  local repo_name="$1"
+  local chart="$2"
+  local index_file
+
+  command -v yq >/dev/null 2>&1 || return 1
+  index_file="$(helm_repo_index_file "${repo_name}")" || return 1
+  [ -f "${index_file}" ] || return 1
+
+  yq -o=json ".entries[\"${chart}\"] // []" "${index_file}" 2>/dev/null |
+    jq -r '
+      map(select((.version // "") | test("^v?[0-9]+\\.[0-9]+\\.[0-9]+$")))
+      | sort_by(.version | ltrimstr("v") | split(".") | map(tonumber))
+      | (last // {})
+      | [(.version // ""), (.created // "")] | @tsv
+    ' 2>/dev/null
+}
+
+# When the chart cooldown is holding back a newer release, emit
+# "component<TAB>latest_eligible<TAB>latest_overall<TAB>eligible_date".
+# Emits nothing when the cooldown is disabled, the index is unavailable, or
+# the eligible version already is the overall newest.
+chart_cooldown_row() {
+  local component="$1"
+  local repo_name="$2"
+  local chart="$3"
+  local eligible="$4"
+  local overall created eligible_date published_epoch
+
+  [ -n "${eligible}" ] || return 0
+  [ "${CHECK_VERSION_CHART_MIN_RELEASE_AGE}" -gt 0 ] 2>/dev/null || return 0
+
+  IFS=$'\t' read -r overall created <<EOF
+$(helm_overall_latest_chart_row "${repo_name}" "${chart}" || true)
+EOF
+  [ -n "${overall}" ] || return 0
+  [ "${overall}" != "${eligible}" ] || return 0
+
+  eligible_date=""
+  if [ -n "${created}" ]; then
+    published_epoch="$(chart_iso_to_epoch "${created}" 2>/dev/null || true)"
+    if [ -n "${published_epoch}" ]; then
+      eligible_date="$(chart_epoch_to_date "$((published_epoch + CHECK_VERSION_CHART_MIN_RELEASE_AGE))" 2>/dev/null || true)"
+    fi
+  fi
+
+  printf '%s\t%s\t%s\t%s\n' "${component}" "${eligible}" "${overall}" "${eligible_date}"
+}
+
+CHART_COOLDOWN_ROWS=""
+
+append_chart_cooldown_row() {
+  local row
+
+  row="$(chart_cooldown_row "$@" || true)"
+  [ -n "${row}" ] || return 0
+  if [ -n "${CHART_COOLDOWN_ROWS}" ]; then
+    CHART_COOLDOWN_ROWS="${CHART_COOLDOWN_ROWS}"$'\n'"${row}"
+  else
+    CHART_COOLDOWN_ROWS="${row}"
+  fi
+}
+
 helm_latest_chart_version() {
   local repo_name="$1"
   local repo_url="$2"
   local chart="$3"
+  local eligible=""
 
   ensure_helm_repo_ready "${repo_name}" "${repo_url}"
+
+  if [ "${CHECK_VERSION_CHART_MIN_RELEASE_AGE}" -gt 0 ] 2>/dev/null; then
+    eligible="$(helm_latest_eligible_chart_version "${repo_name}" "${chart}" "${CHECK_VERSION_CHART_MIN_RELEASE_AGE}" || true)"
+    if [ -n "${eligible}" ]; then
+      printf '%s\n' "${eligible}"
+      return 0
+    fi
+  fi
+
   helm search repo "${repo_name}/${chart}" --versions -o json 2>/dev/null | jq -r '.[0].version // empty' || true
 }
 
@@ -3279,8 +3419,15 @@ emit_json_report() {
   local kind_rows="$3"
   local dependency_rows="$4"
   local external_image_rows="$5"
+  local chart_cooldown_rows="${6:-}"
   local components_json preferred_images_json kind_versions_json dependencies_json external_images_json
+  local chart_cooldowns_json
   local cluster_ok_json expect_kind_provisioning_json argo_cd_image_override_active_json
+
+  chart_cooldowns_json="$(
+    printf '%s\n' "${chart_cooldown_rows}" | \
+      tsv_rows_to_json_array '["component","latest_eligible","latest_overall","eligible_date"]'
+  )"
 
   components_json="$(
     printf '%s\n' "${component_rows}" | \
@@ -3490,6 +3637,34 @@ emit_json_report() {
       '
   )"
 
+  # Attach cooldown context to chart component rows. A chart pinned to the
+  # newest cooldown-eligible version reports cooldown_active (instead of
+  # current) while a newer release is still inside the cooldown window.
+  components_json="$(
+    jq --argjson cooldowns "${chart_cooldowns_json}" '
+      ($cooldowns | map({key: .component, value: .}) | from_entries) as $cooldown_by_component
+      | map(
+          . as $row
+          | ($cooldown_by_component[$row.component] // null) as $cooldown
+          | if $cooldown == null then
+              $row
+            else
+              $row + {
+                latest_overall: $cooldown.latest_overall,
+                cooldown_eligible_date: $cooldown.eligible_date
+              }
+              + (
+                if ($row.status_code == "current" or $row.status_code == "not_deployed_current") and $row.codebase == $cooldown.latest_eligible then
+                  {status_code: "cooldown_active", status_group: "cooldown"}
+                else
+                  {}
+                end
+              )
+            end
+        )
+    ' <<<"${components_json}"
+  )"
+
   if [ "${CLUSTER_OK}" -eq 1 ]; then
     cluster_ok_json=true
   else
@@ -3514,6 +3689,7 @@ emit_json_report() {
     --argjson cluster_ok "${cluster_ok_json}" \
     --argjson expect_kind_provisioning "${expect_kind_provisioning_json}" \
     --argjson components "${components_json}" \
+    --argjson chart_cooldowns "${chart_cooldowns_json}" \
     --argjson preferred_images "${preferred_images_json}" \
     --argjson kind_versions "${kind_versions_json}" \
     --argjson app_dependencies "${dependencies_json}" \
@@ -3536,6 +3712,7 @@ emit_json_report() {
           expect_kind_provisioning: $expect_kind_provisioning
         },
         components: $components,
+        chart_cooldowns: $chart_cooldowns,
         preferred_images: $preferred_images,
         kind_versions: $kind_versions,
         app_dependencies: $app_dependencies,
@@ -3550,6 +3727,7 @@ emit_json_report() {
         summary: {
           component_count: ($components | length),
           component_update_count: ($components | map(select(.update_available == true)) | length),
+          component_cooldown_count: ($components | map(select(has("latest_overall"))) | length),
           component_status_counts: count_by_status_code($components),
           dependency_count: ($app_dependencies | length),
           dependency_update_count: ($app_dependencies | map(select(.status_text == "update available")) | length),
@@ -3629,6 +3807,18 @@ main() {
   LATEST_POLICY_REPORTER=$(helm_latest_chart_version "kyverno" "https://kyverno.github.io/policy-reporter" "policy-reporter")
   LATEST_CERT_MANAGER=$(helm_latest_chart_version "jetstack" "https://charts.jetstack.io" "cert-manager")
   LATEST_OAUTH2_PROXY=$(helm_latest_chart_version "oauth2-proxy" "https://oauth2-proxy.github.io/manifests" "oauth2-proxy")
+  append_chart_cooldown_row "argo-cd chart" "argo" "argo-cd" "${LATEST_ARGOCD}"
+  append_chart_cooldown_row "gitea chart" "gitea" "gitea" "${LATEST_GITEA}"
+  append_chart_cooldown_row "cilium chart" "cilium" "cilium" "${LATEST_CILIUM}"
+  if [ "${EXPECT_PROMETHEUS}" = "true" ]; then append_chart_cooldown_row "prometheus chart" "prometheus-community" "prometheus" "${LATEST_PROMETHEUS}"; fi
+  if [ "${EXPECT_GRAFANA}" = "true" ]; then append_chart_cooldown_row "grafana chart" "grafana" "grafana" "${LATEST_GRAFANA}"; fi
+  if [ "${EXPECT_VICTORIA_LOGS}" = "true" ]; then append_chart_cooldown_row "victoria-logs" "vm" "victoria-logs-single" "${LATEST_VICTORIA_LOGS}"; fi
+  append_chart_cooldown_row "otel-collector" "open-telemetry" "opentelemetry-collector" "${LATEST_OTEL_COLLECTOR}"
+  append_chart_cooldown_row "headlamp chart" "headlamp" "headlamp" "${LATEST_HEADLAMP}"
+  append_chart_cooldown_row "kyverno chart" "kyverno" "kyverno" "${LATEST_KYVERNO}"
+  append_chart_cooldown_row "policy-reporter" "kyverno" "policy-reporter" "${LATEST_POLICY_REPORTER}"
+  append_chart_cooldown_row "cert-manager" "jetstack" "cert-manager" "${LATEST_CERT_MANAGER}"
+  append_chart_cooldown_row "oauth2-proxy" "oauth2-proxy" "oauth2-proxy" "${LATEST_OAUTH2_PROXY}"
   stop_heartbeat
 
   progress "Resolving appVersion metadata for configured chart versions"
@@ -3898,7 +4088,8 @@ main() {
       "${preferred_image_rows_sorted}" \
       "${kind_rows_sorted}" \
       "${dependency_rows}" \
-      "${image_audit_rows}"
+      "${image_audit_rows}" \
+      "${CHART_COOLDOWN_ROWS}"
     return 0
   fi
 
