@@ -413,13 +413,13 @@ variable "public_demo_allow_actions_runner_host_mounts" {
 variable "cilium_version" {
   description = "Cilium chart version."
   type        = string
-  default     = "1.19.5"
+  default     = "1.20.0"
 }
 
 variable "argocd_chart_version" {
   description = "Argo CD chart version."
   type        = string
-  default     = "10.1.3"
+  default     = "10.2.1"
 }
 
 variable "argocd_image_repository" {
@@ -455,19 +455,19 @@ variable "argocd_notifications_enabled" {
 variable "gitea_chart_version" {
   description = "Gitea chart version."
   type        = string
-  default     = "12.6.0"
+  default     = "12.7.0"
 }
 
 variable "prometheus_chart_version" {
   description = "Prometheus chart version (prometheus-community/prometheus)."
   type        = string
-  default     = "29.14.0"
+  default     = "29.20.0"
 }
 
 variable "prometheus_image_tag" {
   description = "Prometheus container image tag."
   type        = string
-  default     = "v3.13.0"
+  default     = "v3.13.1"
 }
 
 variable "grafana_chart_version" {
@@ -559,7 +559,7 @@ variable "grafana_liveness_initial_delay_seconds" {
 variable "victoria_logs_chart_version" {
   description = "VictoriaLogs chart version (victoria-metrics/victoria-logs-single)."
   type        = string
-  default     = "0.13.8"
+  default     = "0.13.9"
 }
 
 
@@ -567,7 +567,7 @@ variable "victoria_logs_chart_version" {
 variable "headlamp_chart_version" {
   description = "Headlamp chart version."
   type        = string
-  default     = "0.43.0"
+  default     = "0.44.0"
 }
 
 variable "metrics_server_chart_version" {
@@ -603,13 +603,13 @@ variable "kyverno_chart_version" {
 variable "policy_reporter_chart_version" {
   description = "Policy Reporter chart version."
   type        = string
-  default     = "3.8.1"
+  default     = "3.9.1"
 }
 
 variable "cert_manager_chart_version" {
   description = "cert-manager chart version (Jetstack)."
   type        = string
-  default     = "v1.21.0"
+  default     = "v1.21.1"
 }
 
 variable "hardened_image_registry" {
