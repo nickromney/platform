@@ -53,6 +53,7 @@ ENSURE_LOCAL_IMAGE_CACHE := $(K8S_SCRIPTS_DIR)/ensure-local-image-cache.sh
 SYNC_LOCAL_IMAGE_CACHE := $(K8S_SCRIPTS_DIR)/sync-local-image-cache.sh
 RENDER_OPERATOR_OVERRIDES := $(SCRIPTS_DIR)/render-operator-overrides.sh
 DELETE_KIND_CLUSTER := $(SCRIPTS_DIR)/delete-kind-cluster.sh
+ENSURE_NODE_HOST_ALIAS := $(SCRIPTS_DIR)/ensure-node-host-alias.sh
 RESOLVE_TFVAR_VALUE := $(K8S_SCRIPTS_DIR)/resolve-tfvar-value.sh
 TEST_IDEMPOTENCE := $(K8S_SCRIPTS_DIR)/test-idempotence.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
@@ -77,7 +78,11 @@ KIND_WORKER_COUNT ?= 1
 KIND_PRELOAD_IMAGES_MODE ?= off
 KIND_IMAGE_DISTRIBUTION_MODE ?= registry
 KIND_BAKED_NODE_IMAGE ?=
-KIND_ENABLE_BACKSTAGE ?= auto
+# Opt-in: Backstage is heavy, and the old "auto" default meant an identical
+# command built a different stack per host (Docker Engine on Linux reports
+# host RAM and cleared the 10GiB gate; a Docker Desktop VM sized below that
+# did not). Set KIND_ENABLE_BACKSTAGE=on to include it.
+KIND_ENABLE_BACKSTAGE ?= off
 KIND_BACKSTAGE_MIN_DOCKER_MEMORY_BYTES ?= 10737418240
 KIND_LOCAL_IMAGE_CACHE_HOST ?= host.docker.internal:5002
 ifeq ($(PLATFORM_DEVCONTAINER),1)
@@ -123,7 +128,7 @@ VALID_STAGE_HELPERS := $(KUBERNETES_STAGE_READONLY_HELPERS)
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state state-snapshot state-restore check-stage-monotonicity check-docker-daemon check-memory check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status dhi-creds-offline docker-health docker-prune-estimate docker-safe-clean memory-report stop-kind stop start-kind start prereqs playwright-install image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state state-snapshot state-restore check-stage-monotonicity check-docker-daemon check-memory check-kind-state ensure-kind-running ensure-node-host-alias check-kubeconfig check-kind-host-ports check-lima-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status dhi-creds-offline docker-health docker-prune-estimate docker-safe-clean memory-report stop-kind stop start-kind start prereqs playwright-install image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 MAKE_UNKNOWN_GOAL_GUARD_DEFER_GOALS := $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
@@ -289,7 +294,7 @@ help:
 	@echo "  KIND_WORKER_COUNT=1|2|...                            -> worker node count (default: 1, so 2 total nodes)"
 	@echo "  KIND_IMAGE_DISTRIBUTION_MODE=load|registry|hybrid|baked -> image distribution mode (default: registry)"
 	@echo "  KIND_BAKED_NODE_IMAGE=<image-ref>                    -> required for KIND_IMAGE_DISTRIBUTION_MODE=hybrid|baked"
-	@echo "  KIND_ENABLE_BACKSTAGE=auto|on|off                    -> Backstage portal gate (auto requires >=10GiB Docker memory)"
+	@echo "  KIND_ENABLE_BACKSTAGE=off|on|auto                    -> Backstage portal gate (default: off; auto requires >=10GiB Docker memory)"
 	@echo "  CHECK_VERSION_FORMAT=text|json                       -> render version audits as human text or machine-readable JSON (default: text)"
 	@echo "  OIDC_RECOVERY_FORMAT=text|json                       -> render the OIDC recovery exercise as human text or machine-readable JSON (default: text)"
 	@echo "  OIDC_RECOVERY_FORCE_MODE=nginx-rollout               -> controlled perturbation used to force the explicit recovery branch (default: nginx-rollout)"
@@ -453,6 +458,12 @@ check-kubeconfig:
 		echo "OK   kubie lint"; \
 	fi
 
+.PHONY: ensure-node-host-alias
+ensure-node-host-alias:
+	@TARGET_CLUSTER_NAME="$${TARGET_CLUSTER_NAME:-kind-local}" \
+	KIND_CLUSTER_NAME="$${TARGET_CLUSTER_NAME:-kind-local}" \
+	"$(ENSURE_NODE_HOST_ALIAS)" $(READONLY_MODE_FLAG)
+
 .PHONY: ensure-kind-running
 ensure-kind-running:
 	@set -euo pipefail; \
@@ -586,6 +597,7 @@ plan: workflow-validate-stage
 	@$(MAKE) check-conflicting-clusters-stopped
 	@$(MAKE) check-docker-daemon && $(MAKE) check-kind-state
 	@$(MAKE) ensure-kind-running
+	@$(MAKE) ensure-node-host-alias
 	@$(MAKE) check-kubeconfig >/dev/null
 	@set -euo pipefail; \
 	. "$(PROFILE_LIB)"; \
@@ -654,6 +666,7 @@ apply: workflow-validate-stage
 	@$(MAKE) check-conflicting-clusters-stopped
 	@$(MAKE) check-docker-daemon && $(MAKE) check-kind-state
 	@$(MAKE) ensure-kind-running
+	@$(MAKE) ensure-node-host-alias
 	@$(MAKE) check-kubeconfig >/dev/null
 	@set -euo pipefail; \
 	. "$(PROFILE_LIB)"; \

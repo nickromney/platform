@@ -111,6 +111,18 @@ EOF
   grep -F 'enable_backstage = true' "${OUTPUT_FILE}"
 }
 
+@test "render-operator-overrides leaves Backstage off when the mode is unset" {
+  # Backstage is opt-in: an unset KIND_ENABLE_BACKSTAGE must not enable it,
+  # regardless of how much memory the host Docker daemon reports.
+  run env \
+    KIND_OPERATOR_OVERRIDES_FILE="${OUTPUT_FILE}" \
+    KIND_IMAGE_DISTRIBUTION_MODE=load \
+    "${RENDER_SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  grep -F 'enable_backstage = false' "${OUTPUT_FILE}"
+}
+
 @test "render-operator-overrides accepts explicit Backstage on and off modes" {
   run env \
     KIND_OPERATOR_OVERRIDES_FILE="${OUTPUT_FILE}" \

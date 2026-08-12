@@ -47,10 +47,29 @@ registry_require_tools
 [ -f "${PRELOAD_IMAGES_SCRIPT}" ] || skip_or_fail "preload helper not found: ${PRELOAD_IMAGES_SCRIPT}"
 http_fetch -fsS "http://${CACHE_PUSH_HOST}/v2/" >/dev/null 2>&1 || skip_or_fail "local cache not reachable at http://${CACHE_PUSH_HOST}/v2/"
 
+# Run pulls and pushes under a scratch Docker config so no credential helper is
+# invoked for the insecure localhost cache registry, which can hang or prompt.
+#
+# The scratch config must still carry the caller's registry credentials: this
+# mirrors authenticated registries such as dhi.io, and an empty config makes
+# every pull anonymous. dhi.io answers anonymous requests with 401, and Docker
+# Hub applies anonymous rate limits, so a credential-free config silently
+# degraded most of the image list to "could not pull".
 if [ -z "${DOCKER_CONFIG:-}" ]; then
   docker_config_dir="$(mktemp -d)"
   mkdir -p "${docker_config_dir}"
-  printf '{}\n' >"${docker_config_dir}/config.json"
+  source_docker_config="${HOME}/.docker/config.json"
+  if [ -f "${source_docker_config}" ] && command -v jq >/dev/null 2>&1; then
+    # Keep auths and helper bindings, minus any binding for the cache host.
+    jq --arg cache "${CACHE_PUSH_HOST}" '
+      {auths: (.auths // {})}
+      + (if .credsStore then {credsStore: .credsStore} else {} end)
+      + (if .credHelpers then {credHelpers: (.credHelpers | del(.[$cache]))} else {} end)
+    ' "${source_docker_config}" >"${docker_config_dir}/config.json" 2>/dev/null ||
+      printf '{}\n' >"${docker_config_dir}/config.json"
+  else
+    printf '{}\n' >"${docker_config_dir}/config.json"
+  fi
   export DOCKER_CONFIG="${docker_config_dir}"
   trap 'rm -rf "${docker_config_dir}"' EXIT
 fi
@@ -81,9 +100,20 @@ mirror_remote_image() {
     warn "could not tag ${source_ref} as ${cache_ref}"
     return 0
   fi
-  if ! docker push "${cache_ref}" >/dev/null 2>&1; then
-    warn "could not push ${cache_ref}"
+  if docker push "${cache_ref}" >/dev/null 2>&1; then
+    return 0
   fi
+
+  # With the containerd image store (the default for recent Docker Engine on
+  # Linux) a multi-arch reference stays an index locally, and pushing a tag
+  # that points at one fails with "does not provide any platform". The classic
+  # store used by Docker Desktop resolves to a single image, so this never
+  # showed up there. Copy registry-to-registry instead, which handles both.
+  if docker buildx imagetools create --tag "${cache_ref}" "${source_ref}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  warn "could not push ${cache_ref}"
 }
 
 image_stream() {

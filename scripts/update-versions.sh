@@ -223,6 +223,13 @@ http_get() {
 
 epoch_from_iso() {
   local value="$1"
+  # Normalise both "2026-07-29T18:24:33.123Z" and "2026-07-29T18:24:33Z" to a
+  # single trailing Z. Dropping the existing Z first matters: GitHub timestamps
+  # carry no fractional part, so "${value%%.*}Z" alone appended a second Z and
+  # produced "...:33ZZ", which no date implementation parses. That silently
+  # turned every cooldown evaluation into cooldown_unknown, permanently
+  # blocking tool bumps.
+  value="${value%Z}"
   value="${value%%.*}Z"
   date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "${value}" '+%s' 2>/dev/null ||
     date -u -d "${value}" '+%s' 2>/dev/null ||
@@ -240,6 +247,27 @@ github_latest_release() {
   local repo="$1"
   http_get "${UPDATE_VERSIONS_GITHUB_API_BASE%/}/repos/${repo}/releases/latest" |
     jq -r '[.tag_name // "", .published_at // ""] | @tsv'
+}
+
+# The newest published release that has already cleared the cooldown window.
+# "Latest eligible" has to mean exactly that: picking the newest release and
+# then testing its age blocks the whole tool whenever the very newest build is
+# days old, even when an older release is past the window and safe to take.
+github_latest_eligible_release() {
+  local repo="$1"
+  local cutoff_epoch="$2"
+
+  http_get "${UPDATE_VERSIONS_GITHUB_API_BASE%/}/repos/${repo}/releases?per_page=50" |
+    jq -r --argjson cutoff "${cutoff_epoch}" '
+      [ .[]
+        | select((.prerelease // false) == false)
+        | select((.draft // false) == false)
+        | select((.published_at // "") != "")
+        | select((.published_at | fromdateiso8601) <= $cutoff)
+      ]
+      | (first // {})
+      | [(.tag_name // ""), (.published_at // "")]
+      | @tsv'
 }
 
 status_for_latest() {
@@ -335,13 +363,32 @@ tool_resolved_row() {
   case "${source}" in
     github:*)
       repo="${source#github:}"
-      release_row="$(github_latest_release "${repo}" 2>/dev/null || true)"
-      IFS=$'\t' read -r latest published_at <<< "${release_row}"
+      local newest_tag newest_at cutoff_epoch eligible_row
+      cutoff_epoch="$(( $(date -u '+%s') - UPDATE_VERSIONS_MIN_RELEASE_AGE_SECONDS ))"
+
+      eligible_row="$(github_latest_eligible_release "${repo}" "${cutoff_epoch}" 2>/dev/null || true)"
+      IFS=$'\t' read -r latest published_at <<< "${eligible_row}"
       if [[ -n "${latest}" ]]; then
         latest="$(normalize_tag_to_pin_style "${current}" "${latest}")"
       fi
-      IFS=$'\t' read -r status eligible_date <<< "$(status_for_latest "${current}" "${latest}" "${published_at}")"
-      printf '%s\t%s\t%s\t%s\t%s\n' "${tool}" "${current}" "${latest}" "${status}" "${eligible_date}"
+
+      if [[ -n "${latest}" && "${latest}" != "${current}" ]]; then
+        # Already past the window, so report it as takeable.
+        IFS=$'\t' read -r status eligible_date <<< "$(status_for_latest "${current}" "${latest}" "${published_at}")"
+        printf '%s\t%s\t%s\t%s\t%s\n' "${tool}" "${current}" "${latest}" "${status}" "${eligible_date}"
+        return 0
+      fi
+
+      # Nothing eligible beyond the current pin. Fall back to the newest
+      # release so a still-cooling version is reported with its eligible date
+      # rather than silently looking "current".
+      release_row="$(github_latest_release "${repo}" 2>/dev/null || true)"
+      IFS=$'\t' read -r newest_tag newest_at <<< "${release_row}"
+      if [[ -n "${newest_tag}" ]]; then
+        newest_tag="$(normalize_tag_to_pin_style "${current}" "${newest_tag}")"
+      fi
+      IFS=$'\t' read -r status eligible_date <<< "$(status_for_latest "${current}" "${newest_tag}" "${newest_at}")"
+      printf '%s\t%s\t%s\t%s\t%s\n' "${tool}" "${current}" "${newest_tag}" "${status}" "${eligible_date}"
       ;;
     audit-only)
       printf '%s\t%s\t%s\t%s\t%s\n' "${tool}" "${current}" "" "audit-only" ""

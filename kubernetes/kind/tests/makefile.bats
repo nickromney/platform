@@ -24,7 +24,7 @@ setup() {
   [[ "${output}" == *"split by default"* ]]
   [[ "${output}" == *"KIND_WORKER_COUNT=1|2|..."* ]]
   [[ "${output}" == *"KIND_IMAGE_DISTRIBUTION_MODE=load|registry|hybrid|baked"* ]]
-  [[ "${output}" == *"KIND_ENABLE_BACKSTAGE=auto|on|off"* ]]
+  [[ "${output}" == *"KIND_ENABLE_BACKSTAGE=off|on|auto"* ]]
   [[ "${output}" == *"image distribution mode (default: registry)"* ]]
   [[ "${output}" == *"make status"* ]]
   [[ "${output}" == *"make state-snapshot [TFSTATE_SNAPSHOT_KEEP=5]"* ]]
