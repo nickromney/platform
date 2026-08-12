@@ -239,7 +239,7 @@ EOF
   run "${SCRIPT}" --execute
 
   [ "${status}" -eq 1 ]
-  [[ "${output}" == *"FAIL Docker VM budget: 6.0GiB found; threshold is 8GiB (8 via KIND_PREFLIGHT_MIN_DOCKER_MEM_GB); remediation: increase Docker Desktop memory to at least 8GiB"* ]]
+  [[ "${output}" == *"FAIL Docker VM budget: 6.0GiB found; threshold is 8GiB (8 via KIND_PREFLIGHT_MIN_DOCKER_MEM_GB); remediation: raise your Docker VM memory to at least 8GiB (Docker Desktop: Settings > Resources; colima: colima start --memory 8)"* ]]
   [[ "${output}" == *"OK   host memory: 16.0GiB total, 9.2GiB available"* ]]
 }
 

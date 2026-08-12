@@ -32,7 +32,7 @@ esac
 EOF
   chmod +x "${TEST_BIN}/uname"
 
-  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute --plain k3sup-pro docker jq kubie kyverno yamllint
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" INSTALL_TOOL_HINTS_MANAGERS="brew curl" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute --plain k3sup-pro docker jq kubie kyverno yamllint
 
   [ "${status}" -eq 0 ]
   [[ "${output}" != *"Install hints for"* ]]
@@ -69,7 +69,7 @@ esac
 EOF
   chmod +x "${TEST_BIN}/uname"
 
-  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute --plain docker jq node npx yamllint
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" INSTALL_TOOL_HINTS_MANAGERS="apt curl" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute --plain docker jq node npx yamllint
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"docker: sudo apt-get update && sudo apt-get install -y docker.io"* ]]
@@ -87,10 +87,10 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/arkade"
 
-  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute --plain kubie
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" INSTALL_TOOL_HINTS_MANAGERS="arkade curl" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute --plain kubie
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"kubie: sudo arkade get kubie --path /usr/local/bin"* ]]
+  [[ "${output}" == *"kubie: arkade get kubie@0.28.0"* ]]
 }
 
 @test "install-tool-hints supports bun and npx" {
@@ -101,11 +101,85 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/brew"
 
-  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute --plain bun npx
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" INSTALL_TOOL_HINTS_MANAGERS="brew curl" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute --plain bun npx
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"bun: brew install bun"* ]]
   [[ "${output}" == *"npx: brew install node"* ]]
+}
+
+@test "install-tool-hints prefers mise and maps repo tool names onto registry names" {
+  cat >"${TEST_BIN}/mise" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/mise"
+
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" INSTALL_TOOL_HINTS_MANAGERS="mise curl" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute --plain jq tofu limactl hubble npx k3sup-pro
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"jq: mise use jq@1.8.2"* ]]
+  [[ "${output}" == *"tofu: mise use opentofu@1.12.5"* ]]
+  [[ "${output}" == *"limactl: mise use lima@2.2.0"* ]]
+  [[ "${output}" == *"hubble: mise use github:cilium/hubble@1.19.4"* ]]
+  [[ "${output}" == *"npx: mise use node@24.15.0"* ]]
+  [[ "${output}" == *"k3sup-pro: mise use k3sup@0.13.12"* ]]
+}
+
+@test "install-tool-hints uses pacman on Arch and picks go-yq for mikefarah yq" {
+  cat >"${TEST_BIN}/pacman" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/pacman"
+
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" INSTALL_TOOL_HINTS_MANAGERS="pacman curl" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute --plain docker yq mkcert gh step tofu node
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"docker: sudo pacman -S --needed docker"* ]]
+  [[ "${output}" == *"yq: sudo pacman -S --needed go-yq"* ]]
+  [[ "${output}" == *"mkcert: sudo pacman -S --needed mkcert nss"* ]]
+  [[ "${output}" == *"gh: sudo pacman -S --needed github-cli"* ]]
+  [[ "${output}" == *"step: sudo pacman -S --needed step-cli"* ]]
+  [[ "${output}" == *"tofu: sudo pacman -S --needed opentofu"* ]]
+  [[ "${output}" == *"node: sudo pacman -S --needed nodejs npm"* ]]
+}
+
+@test "install-tool-hints ranks self-updating managers ahead of arkade" {
+  for stub in mise pacman arkade; do
+    cat >"${TEST_BIN}/${stub}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+    chmod +x "${TEST_BIN}/${stub}"
+  done
+
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute --plain kubectl docker
+
+  [ "${status}" -eq 0 ]
+  # mise carries kubectl, so arkade must not win it.
+  [[ "${output}" == *"kubectl: mise use kubectl@1.36.3"* ]]
+  # docker is in neither mise nor arkade, so pacman handles it.
+  [[ "${output}" == *"docker: sudo pacman -S --needed docker"* ]]
+}
+
+@test "install-tool-hints falls back to arkade only for tools no manager carries" {
+  cat >"${TEST_BIN}/arkade" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/arkade"
+
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" INSTALL_TOOL_HINTS_MANAGERS="arkade curl" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute --plain kyverno step bun
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"kyverno: arkade get kyverno@1.18.2"* ]]
+  [[ "${output}" == *"step: arkade get step@0.30.6"* ]]
+  [[ "${output}" == *"bun: arkade get bun@1.3.14"* ]]
 }
 
 @test "install-tool-hints reports missing platform facts without unknown placeholders" {
@@ -116,7 +190,7 @@ exit 1
 EOF
   chmod +x "${TEST_BIN}/uname"
 
-  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute docker
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" INSTALL_TOOL_HINTS_MANAGERS="brew pacman apt arkade curl" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute docker
 
   [ "${status}" -eq 0 ]
   [[ "${output}" != *"unknown"* ]]

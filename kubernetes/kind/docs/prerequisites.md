@@ -2,14 +2,42 @@
 
 This kind path is the repo's Docker-backed teaching target.
 
-Supported host shapes:
-
-- macOS with Docker Desktop
-- Linux with Docker Engine or Docker Desktop
+Supported host shapes: any host with a reachable Docker daemon. The daemon
+flavour does not matter — Docker Desktop, colima, OrbStack, and plain Docker
+Engine all work on both macOS and Linux.
 
 ## Install
 
-Install a working Docker daemon first. On macOS that usually means Docker Desktop. On Linux, Docker Engine is enough. Then install the CLI tools; the examples below use Homebrew because it works on both macOS and Ubuntu.
+Install a working Docker daemon first.
+
+- macOS: Docker Desktop is the usual choice, but Docker Engine via colima or
+  OrbStack works just as well.
+- Debian/Ubuntu: `sudo apt-get install docker.io`.
+- Arch/Omarchy: `sudo pacman -S --needed docker`, then
+  `sudo systemctl enable --now docker.socket` so the daemon starts on demand.
+
+Then install the CLI tools. Rather than copying the lists below by hand, ask
+the repo what is missing on this host and how to install it:
+
+```bash
+make -C kubernetes/kind prereqs
+```
+
+`prereqs` names every missing tool and prints an install command tailored to
+the managers you actually have. It prefers `mise`, because mise installs the
+same versions on macOS and Linux and pins them to the versions in
+`.devcontainer/toolchain-versions.sh` that this repo was validated against.
+Hints are deliberately repo-scoped (`mise use`, not `mise use -g`), so the
+platform writes its pins to `./mise.toml` and never edits your global tool
+config.
+
+The manager preference order is mise, Homebrew, pacman, apt, arkade, curl.
+Everything above arkade has a one-command upgrade path; arkade pins a binary
+with no upgrade sweep, so it is used only for tools the others do not carry.
+Override the order with `INSTALL_TOOL_HINTS_MANAGERS`, for example
+`INSTALL_TOOL_HINTS_MANAGERS="pacman curl"`.
+
+The Homebrew lists below still work on macOS and Ubuntu if you prefer them.
 
 Core tools:
 

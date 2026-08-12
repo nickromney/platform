@@ -8,7 +8,17 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 REGISTRY="dhi.io"
 TARGET_HELPER_NAME="platform-file"
-SOURCE_HELPER_NAME="${PLATFORM_DHI_SOURCE_HELPER:-desktop}"
+# docker-credential-desktop ships with Docker Desktop. Docker Engine on Linux
+# has no equivalent, so default to the libsecret helper that distro docker
+# packages pair with; override for pass-based setups.
+default_source_helper() {
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    printf 'desktop\n'
+  else
+    printf 'secretservice\n'
+  fi
+}
+SOURCE_HELPER_NAME="${PLATFORM_DHI_SOURCE_HELPER:-$(default_source_helper)}"
 HELPER_BIN_DIR="${PLATFORM_DOCKER_CREDENTIAL_HELPER_BIN_DIR:-${HOME}/.local/bin}"
 CREDS_FILE="${PLATFORM_DOCKER_CREDS_FILE:-${HOME}/.config/platform/docker-creds.json}"
 HELPER_SCRIPT="${REPO_ROOT}/kubernetes/scripts/docker-credential-platform-file.sh"
@@ -100,7 +110,12 @@ read_source_credential() {
   local key=""
   local output=""
 
-  command -v "${helper_bin}" >/dev/null 2>&1 || fail "${helper_bin} not found in PATH; unlock your session and install/login to Docker Desktop first"
+  if ! command -v "${helper_bin}" >/dev/null 2>&1; then
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+      fail "${helper_bin} not found in PATH; unlock your session and install/login to Docker Desktop first"
+    fi
+    fail "${helper_bin} not found in PATH; install a Docker credential helper (docker-credential-secretservice or docker-credential-pass), run docker login ${REGISTRY}, or point PLATFORM_DHI_SOURCE_HELPER at the helper suffix you use"
+  fi
 
   while IFS= read -r key; do
     if output="$(printf '%s' "${key}" | "${helper_bin}" get 2>/dev/null)"; then

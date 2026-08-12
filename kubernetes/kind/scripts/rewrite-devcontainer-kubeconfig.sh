@@ -3,7 +3,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
-PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/go/bin:/usr/local/bin:${PATH}"
+# Make/terragrunt can invoke this with a trimmed PATH, so re-add the usual
+# toolchain locations. Homebrew prefixes only exist on macOS; appending rather
+# than prepending keeps whatever the caller already resolved (mise shims,
+# pacman-installed go) in front.
+PATH="${PATH}:/usr/local/go/bin:/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin"
 export GOCACHE="${GOCACHE:-${REPO_ROOT}/.run/go-cache}"
 
 absolute_path() {

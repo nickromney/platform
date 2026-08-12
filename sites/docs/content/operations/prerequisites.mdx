@@ -11,6 +11,26 @@ the source of truth.
 
 ## Default Kind Toolchain
 
+Let the repo tell you what is missing rather than copying a list:
+
+```bash
+make -C kubernetes/kind prereqs
+mkcert -install
+```
+
+`prereqs` prints an install command per missing tool, tailored to the managers
+present on the host. It prefers `mise` (same versions on macOS and Linux) and
+emits the version pinned in `.devcontainer/toolchain-versions.sh`, so a fresh
+host lands on the toolchain the repo was validated against instead of
+resolving `latest`. Hints use `mise use`, not `mise use -g`: pins land in
+`./mise.toml` in the repo and your global tool config is left alone.
+
+Preference order is mise, Homebrew, pacman, apt, arkade, curl — self-updating
+managers first, arkade only for what they do not carry. Override with
+`INSTALL_TOOL_HINTS_MANAGERS`.
+
+The Homebrew equivalent, if you prefer it on macOS or Ubuntu:
+
 ```bash
 brew install jq kind kubernetes-cli make opentofu terragrunt
 brew install bun node
@@ -18,8 +38,12 @@ brew install cilium-cli helm hubble kubectx kubie kyverno mkcert yamllint yq
 mkcert -install
 ```
 
-On macOS, Docker Desktop must be running before you plan, apply, or reset the
-Kind stack. On Linux, Docker Engine is enough for Kind.
+Docker must be reachable before you plan, apply, or reset the Kind stack.
+
+- macOS: start Docker Desktop.
+- Linux: Docker Engine is enough. On systemd distros, prefer socket activation
+  (`sudo systemctl enable --now docker.socket`) so the daemon starts on demand
+  rather than idling at boot. `prereqs` reports which of the two you have.
 
 ## Check the Target
 

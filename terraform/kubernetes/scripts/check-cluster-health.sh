@@ -1413,7 +1413,7 @@ if [[ "${EXPECT_KIND_PROVISIONING}" == "true" ]]; then
     if [[ "$(uname -s)" == "Darwin" ]]; then
       fail "docker daemon not reachable (is Docker Desktop running?)"
     fi
-    fail "docker daemon not reachable"
+    fail "docker daemon not reachable (try: sudo systemctl start docker)"
   fi
   if ! kind get clusters 2>/dev/null | grep -qx "${EXPECTED_CLUSTER_NAME}"; then
     fail "${EXPECTED_CLUSTER_NAME} cluster not found"

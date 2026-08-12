@@ -26,14 +26,30 @@ target to verify your machine.
 
 ## Kind
 
+Ask the repo what this host is missing; it prints an install command per tool
+using the managers you have, pinned to the versions in
+`.devcontainer/toolchain-versions.sh`:
+
+```bash
+make -C kubernetes/kind prereqs
+```
+
+Preference order is mise, Homebrew, pacman, apt, arkade, curl. mise leads
+because it installs identical versions on macOS and Linux; arkade sits near
+the bottom because it pins a binary with no upgrade sweep. Hints are
+repo-scoped (`mise use` writes `./mise.toml`) and never touch your global tool
+config. Override with `INSTALL_TOOL_HINTS_MANAGERS`.
+
+The Homebrew equivalent, for macOS or Ubuntu:
+
 ```bash
 brew install jq kind kubernetes-cli make opentofu terragrunt
 brew install bun node
 brew install cilium-cli helm hubble kubectx kubie kyverno mkcert yamllint yq
 ```
 
-Also required: Docker Desktop on macOS, or Docker Engine/Docker Desktop on
-Linux.
+Also required: any reachable Docker daemon. Docker Desktop, colima, OrbStack,
+and plain Docker Engine all work, on either OS.
 
 ## Lima Platform Target
 

@@ -1,0 +1,4 @@
+[tools]
+mkcert = "1.4.4"
+opentofu = "1.12.5"
+kyverno = "1.18.2"

@@ -38,6 +38,11 @@ STOP_PLATFORM_RUNTIMES := $(K8S_SCRIPTS_DIR)/stop-platform-runtimes.sh
 BUILD_LOCAL_PLATFORM_IMAGES := $(abspath $(K8S_SCRIPTS_DIR)/build-local-platform-images.sh)
 BUILD_LOCAL_WORKLOAD_IMAGES := $(abspath $(K8S_SCRIPTS_DIR)/build-local-workload-images.sh)
 CHECK_DOCKER_REGISTRY_AUTH := $(SCRIPTS_DIR)/check-docker-registry-auth.sh
+# Hardened dhi.io images are consumed only by policies (600), observability
+# (800), and sso (900). Stages below this pull nothing from dhi.io, so missing
+# credentials warn instead of blocking the cluster bootstrap. A bare
+# `make prereqs` (no STAGE) still fails, since it reports whole-path readiness.
+KIND_DHI_REQUIRED_FROM_STAGE ?= 600
 CHECK_MEMORY_PREFLIGHT := $(SCRIPTS_DIR)/check-memory-preflight.sh
 DHI_CREDS_OFFLINE := $(SCRIPTS_DIR)/dhi-creds-offline.sh
 DOCKER_PRUNE_ESTIMATE := $(SCRIPTS_DIR)/docker-prune-estimate.sh
@@ -376,15 +381,11 @@ check-docker-daemon:
 	command -v docker >/dev/null 2>&1 || { echo "docker not found in PATH"; exit 1; }; \
 	if ! docker info >/dev/null 2>&1; then \
 		if [ "$$(uname -s)" = "Darwin" ]; then \
-			echo "docker daemon not reachable (is Docker Desktop running?)"; \
+			echo "docker daemon not reachable (start Docker Desktop, colima, or whichever Docker runtime you use)"; \
 		else \
-			echo "docker daemon not reachable"; \
+			echo "docker daemon not reachable (try: sudo systemctl start docker)"; \
 		fi; \
 		exit 1; \
-	fi; \
-	os="$$(docker info --format '{{.OperatingSystem}}' 2>/dev/null || true)"; \
-	if [ "$$(uname -s)" = "Darwin" ] && ! echo "$$os" | grep -q "Docker Desktop"; then \
-		echo "docker is reachable but Docker Desktop was not detected (OperatingSystem=$$os)"; \
 	fi
 
 .PHONY: check-memory
@@ -1185,21 +1186,36 @@ prereqs:
 	if echo "$$os" | grep -q "Docker Desktop"; then \
 		echo "OK   Docker Desktop detected"; \
 	else \
-		if [ "$$(uname -s)" = "Linux" ]; then \
-			echo "OK   Docker Engine detected (Linux; Docker Desktop not required)"; \
-		else \
-			echo "WARN Docker Desktop not detected (OperatingSystem=$$os)"; \
-		fi; \
+		echo "OK   Docker Engine detected (OperatingSystem=$$os; Docker Desktop not required)"; \
 	fi; \
 	echo "OK   Docker context: $$(docker context show)"; \
+	if [ "$$(uname -s)" = "Linux" ] && command -v systemctl >/dev/null 2>&1; then \
+		if systemctl is-enabled docker.socket >/dev/null 2>&1; then \
+			echo "OK   Docker starts on demand (docker.socket enabled)"; \
+		elif systemctl is-enabled docker.service >/dev/null 2>&1; then \
+			echo "OK   Docker starts at boot (docker.service enabled)"; \
+		else \
+			echo "WARN Docker is running but will not start automatically after a reboot"; \
+			echo "     enable socket activation: sudo systemctl enable --now docker.socket"; \
+		fi; \
+	fi; \
 	echo ""; \
 	echo "Memory preflight:"; \
 	"$(CHECK_MEMORY_PREFLIGHT)" $(READONLY_MODE_FLAG); \
 	echo ""; \
 	echo "Docker registry auth:"; \
 	if ! "$(CHECK_DOCKER_REGISTRY_AUTH)" --execute dhi.io "Docker Hardened Images (dhi.io)"; then \
-		echo "FAIL Docker Hardened Images (dhi.io) credentials are required (run: docker login dhi.io)" >&2; \
-		exit 1; \
+		dhi_stage="$${STAGE:-}"; \
+		case "$$dhi_stage" in \
+			''|*[!0-9]*) dhi_required=1 ;; \
+			*) if [ "$$dhi_stage" -lt "$(KIND_DHI_REQUIRED_FROM_STAGE)" ]; then dhi_required=0; else dhi_required=1; fi ;; \
+		esac; \
+		if [ "$$dhi_required" -eq 1 ]; then \
+			echo "FAIL Docker Hardened Images (dhi.io) credentials are required (run: docker login dhi.io)" >&2; \
+			exit 1; \
+		fi; \
+		echo "WARN Docker Hardened Images (dhi.io) credentials are missing, but stage $$dhi_stage does not pull hardened images"; \
+		echo "     stages >= $(KIND_DHI_REQUIRED_FROM_STAGE) do (policies, observability, sso); run: docker login dhi.io before then"; \
 	fi; \
 	echo ""; \
 	playwright_mode="$${PLATFORM_PLAYWRIGHT_MODE:-docker}"; \
@@ -1293,7 +1309,11 @@ reset:
 		echo ""; \
 		echo "FAIL reset cannot continue because Docker is not reachable."; \
 		echo "kind clusters are Docker containers, so reset cannot delete or inspect them while the daemon is down."; \
-		echo "Start Docker Desktop or the Docker service and rerun: make reset AUTO_APPROVE=1"; \
+		if [ "$$(uname -s)" = "Darwin" ]; then \
+			echo "Start Docker Desktop and rerun: make reset AUTO_APPROVE=1"; \
+		else \
+			echo "Start the Docker daemon (sudo systemctl start docker) and rerun: make reset AUTO_APPROVE=1"; \
+		fi; \
 		exit 1; \
 	fi; \
 	echo "  - Docker daemon reachable"; \

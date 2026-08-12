@@ -10,15 +10,29 @@ have_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
 
+# Ordered by upgrade story, not convenience. mise, brew, pacman, and apt all
+# have a one-command upgrade path (mise upgrade, brew upgrade, pacman -Syu,
+# apt upgrade), so they come first; mise leads because it installs the same
+# versions on macOS and Linux. arkade pins a binary and offers no upgrade
+# sweep, so it sits just above raw curl as the fallback for tools the managers
+# above do not carry.
+INSTALL_TOOL_HINTS_MANAGERS="${INSTALL_TOOL_HINTS_MANAGERS:-mise brew pacman apt arkade curl}"
+
 usage() {
   cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
 Usage: @SCRIPT_NAME@ [--plain] [--tool TOOL]... [--dry-run] [--execute]
 
 Print install commands for missing tools using this preference order:
-  1. arkade
-  2. Homebrew
-  3. apt
-  4. curl
+  1. mise      (cross-platform, "mise upgrade")
+  2. Homebrew  ("brew upgrade")
+  3. pacman    ("pacman -Syu")
+  4. apt       ("apt upgrade")
+  5. arkade    (pinned binary, no upgrade sweep)
+  6. curl      (last resort)
+
+Only managers present on PATH are used. Override the order (or narrow it to a
+single manager) with INSTALL_TOOL_HINTS_MANAGERS, for example:
+  INSTALL_TOOL_HINTS_MANAGERS="pacman curl" @SCRIPT_NAME@ --execute docker
 
 Options:
   --plain      suppress the environment header
@@ -43,9 +57,11 @@ normalize_tool() {
   esac
 }
 
+# Verified against `arkade get -o list`. Tools arkade does not carry (bats,
+# node, shellcheck) fall through to the next manager in the chain.
 tool_supports_arkade_get() {
   case "$1" in
-    cilium|gh|helm|hubble|jq|k3sup|kind|kubectl|kubie|kubectx|mkcert|terragrunt|tofu|yq)
+    argocd|bun|cilium|gh|helm|hubble|jq|k3sup|k9s|kind|kubectl|kubie|kubectx|kyverno|mkcert|starship|step|terragrunt|tofu|trivy|yq)
       return 0
       ;;
     *)
@@ -67,9 +83,17 @@ tool_supports_arkade_system() {
 
 arkade_hint() {
   local tool="$1"
+  local pinned=""
 
   if tool_supports_arkade_get "${tool}"; then
-    printf 'sudo arkade get %s --path /usr/local/bin\n' "${tool}"
+    pinned="$(pinned_version_for_tool "${tool}" || true)"
+    # No sudo, no /usr/local/bin: installing into the arkade-owned user
+    # directory keeps the platform out of system-wide PATH.
+    if [[ -n "${pinned}" ]]; then
+      printf 'arkade get %s@%s\n' "${tool}" "${pinned}"
+    else
+      printf 'arkade get %s\n' "${tool}"
+    fi
     return 0
   fi
 
@@ -79,6 +103,105 @@ arkade_hint() {
   fi
 
   return 1
+}
+
+# .devcontainer/toolchain-versions.sh is the repo's single source of truth for
+# tool versions. Hints must reproduce those pins rather than resolving
+# "latest", so that a fresh host lands on the same versions the repo was
+# validated against, and so that no install bypasses the release-age cooldown
+# that governs when those pins move.
+TOOLCHAIN_VERSIONS_FILE="${TOOLCHAIN_VERSIONS_FILE:-${SCRIPT_DIR}/../.devcontainer/toolchain-versions.sh}"
+toolchain_pins_loaded=0
+
+load_toolchain_pins() {
+  [[ "${toolchain_pins_loaded}" -eq 0 ]] || return 0
+  toolchain_pins_loaded=1
+  [[ -r "${TOOLCHAIN_VERSIONS_FILE}" ]] || return 0
+  # shellcheck source=/dev/null
+  source "${TOOLCHAIN_VERSIONS_FILE}" 2>/dev/null || true
+}
+
+# Pins carry tool-specific prefixes (v0.19.7, jq-1.8.2, bun-v1.3.14). Reduce
+# them to the bare version that mise and arkade both accept.
+normalize_pin() {
+  local raw="$1"
+
+  raw="${raw#jq-}"
+  raw="${raw#bun-}"
+  raw="${raw#v}"
+  printf '%s\n' "${raw}"
+}
+
+pinned_version_for_tool() {
+  local tool="$1"
+  local entry="" name="" value="" var_name=""
+
+  load_toolchain_pins
+
+  for entry in "${DEVCONTAINER_ARKADE_TOOLS[@]-}"; do
+    name="${entry%%=*}"
+    if [[ "${name}" == "${tool}" ]]; then
+      normalize_pin "${entry#*=}"
+      return 0
+    fi
+  done
+
+  case "${tool}" in
+    bun|kyverno|lima|limactl|mkcert|starship|step) ;;
+    tofu) var_name="OPENTOFU_VERSION" ;;
+    node|npm|npx) var_name="DEVCONTAINER_NODE_VERSION" ;;
+    *) return 1 ;;
+  esac
+
+  if [[ -z "${var_name}" ]]; then
+    case "${tool}" in
+      limactl) var_name="LIMA_VERSION" ;;
+      *) var_name="$(printf '%s' "${tool}" | tr '[:lower:]' '[:upper:]')_VERSION" ;;
+    esac
+  fi
+
+  value="${!var_name-}"
+  [[ -n "${value}" ]] || return 1
+  normalize_pin "${value}"
+}
+
+mise_tool() {
+  case "$1" in
+    bats|bun|gh|go|helm|jq|k3sup|kind|kubectl|kubectx|kyverno|mkcert|node|shellcheck|starship|step|terragrunt|yamllint|yq)
+      printf '%s\n' "$1"
+      ;;
+    cilium)
+      printf 'cilium-cli\n'
+      ;;
+    hubble)
+      printf 'github:cilium/hubble\n'
+      ;;
+    limactl)
+      printf 'lima\n'
+      ;;
+    npm|npx)
+      printf 'node\n'
+      ;;
+    tofu)
+      printf 'opentofu\n'
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+mise_hint() {
+  local tool="$1"
+  local mise_name="" pinned=""
+
+  mise_name="$(mise_tool "${tool}" || true)"
+  [[ -n "${mise_name}" ]] || return 1
+  pinned="$(pinned_version_for_tool "${tool}" || true)"
+  # Deliberately NOT "mise use -g": the global config is the engineer's own
+  # (often dotfiles-managed) file. This writes ./mise.toml in the repo instead,
+  # so the platform's pins stay scoped to the platform.
+  printf 'mise use %s@%s\n' "${mise_name}" "${pinned:-latest}"
 }
 
 brew_formula() {
@@ -134,6 +257,57 @@ brew_hint() {
   formula="$(brew_formula "${tool}" "${os_name}" || true)"
   [[ -n "${formula}" ]] || return 1
   printf 'brew install %s\n' "${formula}"
+}
+
+pacman_packages() {
+  case "$1" in
+    bats)
+      printf 'bats\n'
+      ;;
+    bun)
+      printf 'bun\n'
+      ;;
+    cilium|hubble)
+      printf 'cilium-cli\n'
+      ;;
+    curl|docker|git|helm|jq|kind|kubectl|kubectx|podman|podman-compose|shellcheck|starship|terragrunt|yamllint)
+      printf '%s\n' "$1"
+      ;;
+    gh)
+      printf 'github-cli\n'
+      ;;
+    mkcert)
+      printf 'mkcert nss\n'
+      ;;
+    node|npm|npx)
+      printf 'nodejs npm\n'
+      ;;
+    ssh|ssh-keygen)
+      printf 'openssh\n'
+      ;;
+    step)
+      printf 'step-cli\n'
+      ;;
+    tofu)
+      printf 'opentofu\n'
+      ;;
+    # Arch ships kislyuk/yq as "yq"; the repo uses mikefarah/yq syntax.
+    yq)
+      printf 'go-yq\n'
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+pacman_hint() {
+  local tool="$1"
+  local packages=""
+
+  packages="$(pacman_packages "${tool}" || true)"
+  [[ -n "${packages}" ]] || return 1
+  printf 'sudo pacman -S --needed %s\n' "${packages}"
 }
 
 apt_packages() {
@@ -258,25 +432,43 @@ curl_hint() {
   return 1
 }
 
+manager_available() {
+  case "$1" in
+    mise) [[ "${have_mise}" == "1" ]] ;;
+    arkade) [[ "${have_arkade}" == "1" ]] ;;
+    brew) [[ "${have_brew}" == "1" ]] ;;
+    pacman) [[ "${have_pacman}" == "1" ]] ;;
+    apt) [[ "${have_apt}" == "1" ]] ;;
+    curl) [[ "${have_curl}" == "1" ]] ;;
+    *) return 1 ;;
+  esac
+}
+
+manager_hint() {
+  local manager="$1"
+  local tool="$2"
+  local os_name="$3"
+
+  case "${manager}" in
+    mise) mise_hint "${tool}" ;;
+    arkade) arkade_hint "${tool}" ;;
+    brew) brew_hint "${tool}" "${os_name}" ;;
+    pacman) pacman_hint "${tool}" ;;
+    apt) apt_hint "${tool}" ;;
+    curl) curl_hint "${tool}" "${os_name}" ;;
+    *) return 1 ;;
+  esac
+}
+
 hint_for_tool() {
   local tool="$1"
   local os_name="$2"
+  local manager=""
 
-  if [[ "${have_arkade}" == "1" ]]; then
-    arkade_hint "${tool}" && return 0
-  fi
-
-  if [[ "${have_brew}" == "1" ]]; then
-    brew_hint "${tool}" "${os_name}" && return 0
-  fi
-
-  if [[ "${have_apt}" == "1" ]]; then
-    apt_hint "${tool}" && return 0
-  fi
-
-  if [[ "${have_curl}" == "1" ]]; then
-    curl_hint "${tool}" "${os_name}" && return 0
-  fi
+  for manager in ${INSTALL_TOOL_HINTS_MANAGERS}; do
+    manager_available "${manager}" || continue
+    manager_hint "${manager}" "${tool}" "${os_name}" && return 0
+  done
 
   return 1
 }
@@ -340,22 +532,28 @@ if [[ "${os_name}" == "Linux" ]] && grep -Eiq '(microsoft|wsl)' /proc/version 2>
   platform_label="Linux (WSL)"
 fi
 
+have_mise=0
 have_arkade=0
 have_brew=0
+have_pacman=0
 have_apt=0
 have_curl=0
 
+have_cmd mise && have_mise=1
 have_cmd arkade && have_arkade=1
 have_cmd brew && have_brew=1
+have_cmd pacman && have_pacman=1
 have_cmd apt-get && have_apt=1
 have_cmd curl && have_curl=1
 
 if [[ "${plain_output}" != "1" ]]; then
-  printf 'Install hints for %s %s (arkade=%s, brew=%s, apt=%s, curl=%s):\n' \
+  printf 'Install hints for %s %s (mise=%s, arkade=%s, brew=%s, pacman=%s, apt=%s, curl=%s):\n' \
     "${platform_label}" \
     "${arch_name}" \
+    "${have_mise}" \
     "${have_arkade}" \
     "${have_brew}" \
+    "${have_pacman}" \
     "${have_apt}" \
     "${have_curl}"
 fi

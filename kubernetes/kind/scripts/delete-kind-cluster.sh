@@ -105,7 +105,11 @@ while (( attempt <= retries )); do
   fi
 
   if (( attempt == retries )); then
-    echo "delete-kind-cluster: giving up after ${retries} attempts; restart Docker Desktop if this persists" >&2
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+      echo "delete-kind-cluster: giving up after ${retries} attempts; restart Docker Desktop if this persists" >&2
+    else
+      echo "delete-kind-cluster: giving up after ${retries} attempts; restart the Docker daemon (sudo systemctl restart docker) if this persists" >&2
+    fi
     exit "${rc}"
   fi
 

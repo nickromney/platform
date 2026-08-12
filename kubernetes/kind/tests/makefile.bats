@@ -609,6 +609,19 @@ EOF
   [ "${status}" -eq 0 ]
 }
 
+@test "kind prereqs only enforces dhi.io auth from the first hardened-image stage" {
+  run grep -Fn 'KIND_DHI_REQUIRED_FROM_STAGE ?= 600' "${REPO_ROOT}/kubernetes/kind/Makefile"
+  [ "${status}" -eq 0 ]
+
+  # Stages below the threshold must warn rather than exit non-zero.
+  run grep -Fn 'WARN Docker Hardened Images (dhi.io) credentials are missing, but stage $$dhi_stage does not pull hardened images' "${REPO_ROOT}/kubernetes/kind/Makefile"
+  [ "${status}" -eq 0 ]
+
+  # A bare `make prereqs` with no STAGE stays strict.
+  run grep -Fn "''|*[!0-9]*) dhi_required=1 ;; \\" "${REPO_ROOT}/kubernetes/kind/Makefile"
+  [ "${status}" -eq 0 ]
+}
+
 @test "kind prereqs runs memory preflight before registry auth" {
   run bash -c 'prereqs=$(sed -n "/^prereqs:/,/^preload-images:/p" "$1"); memory_line=$(printf "%s\n" "$prereqs" | grep -n "Memory preflight" | head -n1 | cut -d: -f1); registry_line=$(printf "%s\n" "$prereqs" | grep -n "Docker registry auth" | head -n1 | cut -d: -f1); test -n "$memory_line" && test -n "$registry_line" && test "$memory_line" -lt "$registry_line"' _ \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
