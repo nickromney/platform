@@ -947,7 +947,7 @@ EXPECT_ACTIONS_RUNNER=$(expected_from_tfvars enable_actions_runner)
 EXPECT_APIM_SIMULATOR=$(expected_from_tfvars enable_apim_simulator)
 EXPECT_SUBNETCALC_APIM_GATEWAY=$(tfvar_or_default enable_subnetcalc_apim_gateway true)
 EXPECT_AGENTGATEWAY_AI_GATEWAY=$(expected_from_tfvars enable_agentgateway_ai_gateway)
-EXPECT_BACKSTAGE=$(tfvar_or_default enable_backstage true)
+EXPECT_BACKSTAGE=$(tfvar_or_default enable_backstage false)
 EXPECT_APP_REPO_SUBNET_CALC=$(expected_from_tfvars enable_app_repo_subnetcalc)
 EXPECT_APP_REPO_SENTIMENT=$(expected_from_tfvars enable_app_repo_sentiment)
 EXPECT_LANGFUSE=$(expected_from_tfvars enable_langfuse)
@@ -1413,7 +1413,7 @@ if [[ "${EXPECT_KIND_PROVISIONING}" == "true" ]]; then
     if [[ "$(uname -s)" == "Darwin" ]]; then
       fail "docker daemon not reachable (is Docker Desktop running?)"
     fi
-    fail "docker daemon not reachable"
+    fail "docker daemon not reachable (try: sudo systemctl start docker)"
   fi
   if ! kind get clusters 2>/dev/null | grep -qx "${EXPECTED_CLUSTER_NAME}"; then
     fail "${EXPECTED_CLUSTER_NAME} cluster not found"

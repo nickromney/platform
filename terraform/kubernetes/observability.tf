@@ -425,7 +425,7 @@ ${local.grafana_plugins_values_yaml}
                         "type": "prometheus",
                         "uid": "prometheus"
                       },
-                      "description": "https://grafana.admin.127.0.0.1.sslip.io/d/backstage-observability/backstage-observability",
+                      "description": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-app-overview/platform-app-golden-signals",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -469,79 +469,6 @@ ${local.grafana_plugins_values_yaml}
                         "y": 3
                       },
                       "id": 2,
-                      "links": [
-                        {
-                          "targetBlank": true,
-                          "title": "Open Backstage Observability",
-                          "url": "https://grafana.admin.127.0.0.1.sslip.io/d/backstage-observability/backstage-observability"
-                        }
-                      ],
-                      "options": {
-                        "colorMode": "background",
-                        "graphMode": "none"
-                      },
-                      "targets": [
-                        {
-                          "datasource": {
-                            "type": "prometheus",
-                            "uid": "prometheus"
-                          },
-                          "expr": "((max(kube_deployment_status_replicas_available{namespace=\"idp\",deployment=\"backstage\"}) > bool 0) or max(argocd_app_info{name=\"idp\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))",
-                          "refId": "A"
-                        }
-                      ],
-                      "title": "Backstage Observability",
-                      "type": "stat"
-                    },
-                    {
-                      "datasource": {
-                        "type": "prometheus",
-                        "uid": "prometheus"
-                      },
-                      "description": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-app-overview/platform-app-golden-signals",
-                      "fieldConfig": {
-                        "defaults": {
-                          "color": {
-                            "mode": "thresholds"
-                          },
-                          "mappings": [
-                            {
-                              "options": {
-                                "0": {
-                                  "text": "Down"
-                                },
-                                "1": {
-                                  "text": "Healthy"
-                                }
-                              },
-                              "type": "value"
-                            }
-                          ],
-                          "max": 1,
-                          "min": 0,
-                          "thresholds": {
-                            "mode": "absolute",
-                            "steps": [
-                              {
-                                "color": "red",
-                                "value": 0
-                              },
-                              {
-                                "color": "green",
-                                "value": 1
-                              }
-                            ]
-                          },
-                          "unit": "short"
-                        }
-                      },
-                      "gridPos": {
-                        "h": 5,
-                        "w": 6,
-                        "x": 6,
-                        "y": 3
-                      },
-                      "id": 3,
                       "links": [
                         {
                           "targetBlank": true,
@@ -611,10 +538,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 12,
+                        "x": 6,
                         "y": 3
                       },
-                      "id": 4,
+                      "id": 3,
                       "links": [
                         {
                           "targetBlank": true,
@@ -684,10 +611,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 18,
+                        "x": 12,
                         "y": 3
                       },
-                      "id": 5,
+                      "id": 4,
                       "links": [
                         {
                           "targetBlank": true,
@@ -757,10 +684,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 0,
-                        "y": 8
+                        "x": 18,
+                        "y": 3
                       },
-                      "id": 6,
+                      "id": 5,
                       "links": [
                         {
                           "targetBlank": true,
@@ -830,10 +757,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 6,
+                        "x": 0,
                         "y": 8
                       },
-                      "id": 7,
+                      "id": 6,
                       "links": [
                         {
                           "targetBlank": true,
@@ -903,10 +830,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 12,
+                        "x": 6,
                         "y": 8
                       },
-                      "id": 8,
+                      "id": 7,
                       "links": [
                         {
                           "targetBlank": true,
@@ -976,10 +903,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 18,
+                        "x": 12,
                         "y": 8
                       },
-                      "id": 9,
+                      "id": 8,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1049,10 +976,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 0,
-                        "y": 13
+                        "x": 18,
+                        "y": 8
                       },
-                      "id": 10,
+                      "id": 9,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1122,10 +1049,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 6,
+                        "x": 0,
                         "y": 13
                       },
-                      "id": 11,
+                      "id": 10,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1195,10 +1122,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 12,
+                        "x": 6,
                         "y": 13
                       },
-                      "id": 12,
+                      "id": 11,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1268,10 +1195,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 18,
+                        "x": 12,
                         "y": 13
                       },
-                      "id": 13,
+                      "id": 12,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1294,79 +1221,6 @@ ${local.grafana_plugins_values_yaml}
                         }
                       ],
                       "title": "Platform MCP Endpoint",
-                      "type": "stat"
-                    },
-                    {
-                      "datasource": {
-                        "type": "prometheus",
-                        "uid": "prometheus"
-                      },
-                      "description": "https://portal.127.0.0.1.sslip.io",
-                      "fieldConfig": {
-                        "defaults": {
-                          "color": {
-                            "mode": "thresholds"
-                          },
-                          "mappings": [
-                            {
-                              "options": {
-                                "0": {
-                                  "text": "Down"
-                                },
-                                "1": {
-                                  "text": "Healthy"
-                                }
-                              },
-                              "type": "value"
-                            }
-                          ],
-                          "max": 1,
-                          "min": 0,
-                          "thresholds": {
-                            "mode": "absolute",
-                            "steps": [
-                              {
-                                "color": "red",
-                                "value": 0
-                              },
-                              {
-                                "color": "green",
-                                "value": 1
-                              }
-                            ]
-                          },
-                          "unit": "short"
-                        }
-                      },
-                      "gridPos": {
-                        "h": 5,
-                        "w": 6,
-                        "x": 0,
-                        "y": 18
-                      },
-                      "id": 14,
-                      "links": [
-                        {
-                          "targetBlank": true,
-                          "title": "Open Developer Portal",
-                          "url": "https://portal.127.0.0.1.sslip.io"
-                        }
-                      ],
-                      "options": {
-                        "colorMode": "background",
-                        "graphMode": "none"
-                      },
-                      "targets": [
-                        {
-                          "datasource": {
-                            "type": "prometheus",
-                            "uid": "prometheus"
-                          },
-                          "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-backstage\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"idp\",deployment=\"backstage\"}) > bool 0)) or vector(0))",
-                          "refId": "A"
-                        }
-                      ],
-                      "title": "Developer Portal",
                       "type": "stat"
                     },
                     {
@@ -1414,10 +1268,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 6,
-                        "y": 18
+                        "x": 18,
+                        "y": 13
                       },
-                      "id": 15,
+                      "id": 13,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1487,10 +1341,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 12,
+                        "x": 0,
                         "y": 18
                       },
-                      "id": 16,
+                      "id": 14,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1560,10 +1414,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 18,
+                        "x": 6,
                         "y": 18
                       },
-                      "id": 17,
+                      "id": 15,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1633,10 +1487,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 0,
-                        "y": 23
+                        "x": 12,
+                        "y": 18
                       },
-                      "id": 18,
+                      "id": 16,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1706,10 +1560,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 6,
-                        "y": 23
+                        "x": 18,
+                        "y": 18
                       },
-                      "id": 19,
+                      "id": 17,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1779,10 +1633,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 12,
+                        "x": 0,
                         "y": 23
                       },
-                      "id": 20,
+                      "id": 18,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1852,10 +1706,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 18,
+                        "x": 6,
                         "y": 23
                       },
-                      "id": 21,
+                      "id": 19,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1925,10 +1779,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 0,
-                        "y": 28
+                        "x": 12,
+                        "y": 23
                       },
-                      "id": 22,
+                      "id": 20,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1998,10 +1852,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 6,
-                        "y": 28
+                        "x": 18,
+                        "y": 23
                       },
-                      "id": 23,
+                      "id": 21,
                       "links": [
                         {
                           "targetBlank": true,
@@ -2071,10 +1925,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 12,
+                        "x": 0,
                         "y": 28
                       },
-                      "id": 24,
+                      "id": 22,
                       "links": [
                         {
                           "targetBlank": true,
@@ -2144,10 +1998,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 18,
+                        "x": 6,
                         "y": 28
                       },
-                      "id": 25,
+                      "id": 23,
                       "links": [
                         {
                           "targetBlank": true,
@@ -2217,10 +2071,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 0,
-                        "y": 33
+                        "x": 12,
+                        "y": 28
                       },
-                      "id": 26,
+                      "id": 24,
                       "links": [
                         {
                           "targetBlank": true,
@@ -2290,10 +2144,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 6,
-                        "y": 33
+                        "x": 18,
+                        "y": 28
                       },
-                      "id": 27,
+                      "id": 25,
                       "links": [
                         {
                           "targetBlank": true,

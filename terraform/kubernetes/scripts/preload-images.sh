@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pre-pull container images to Docker Desktop and load them into a kind cluster.
+# Pre-pull container images to the local Docker daemon and load them into a kind cluster.
 #
 # Usage:
 #   preload-images.sh [OPTIONS]
@@ -27,7 +27,7 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<'EOF'
-Pre-pull container images to Docker Desktop and load them into a kind cluster.
+Pre-pull container images to the local Docker daemon and load them into a kind cluster.
 
 Usage:
   preload-images.sh [OPTIONS]

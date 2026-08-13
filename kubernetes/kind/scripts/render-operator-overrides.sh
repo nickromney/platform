@@ -25,7 +25,7 @@ mode="${KIND_IMAGE_DISTRIBUTION_MODE:-load}"
 worker_count="${KIND_WORKER_COUNT:-1}"
 cache_host="${KIND_LOCAL_IMAGE_CACHE_HOST:-host.docker.internal:5002}"
 baked_node_image="${KIND_BAKED_NODE_IMAGE:-}"
-backstage_mode="${KIND_ENABLE_BACKSTAGE:-auto}"
+backstage_mode="${KIND_ENABLE_BACKSTAGE:-off}"
 backstage_min_docker_memory_bytes="${KIND_BACKSTAGE_MIN_DOCKER_MEMORY_BYTES:-10737418240}"
 output_file="${KIND_OPERATOR_OVERRIDES_FILE:-}"
 

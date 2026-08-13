@@ -402,3 +402,72 @@ EOF
   grep -q "v2/devcontainers/base/tags/list" "${CURL_ARGS_LOG}"
   ! grep "v2/devcontainers/base/tags/list" "${CURL_ARGS_LOG}" | grep -q "Authorization"
 }
+
+write_release_list_curl() {
+  mkdir -p "${BATS_TEST_TMPDIR}/bin"
+  cat >"${BATS_TEST_TMPDIR}/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+url="${*: -1}"
+cat >/dev/null
+now="$(date -u '+%s')"
+# Newest release is 2 days old (still cooling); the one before it is 30 days
+# old and therefore the newest cooldown-eligible version.
+too_new="$(date -u -d "@$((now - 2 * 86400))" '+%Y-%m-%dT%H:%M:%SZ')"
+eligible="$(date -u -d "@$((now - 30 * 86400))" '+%Y-%m-%dT%H:%M:%SZ')"
+case "${url}" in
+  */repos/mikefarah/yq/releases\?per_page=*)
+    printf '[{"tag_name":"v4.9.0","published_at":"%s","prerelease":false,"draft":false},' "${too_new}"
+    printf '{"tag_name":"v4.5.0","published_at":"%s","prerelease":false,"draft":false},' "${eligible}"
+    printf '{"tag_name":"v4.1.0","published_at":"2020-01-01T00:00:00Z","prerelease":false,"draft":false}]\n'
+    ;;
+  */repos/mikefarah/yq/releases/latest)
+    printf '{"tag_name":"v4.9.0","published_at":"%s"}\n' "${too_new}"
+    ;;
+  */releases\?per_page=*)
+    printf '[]\n'
+    ;;
+  */repos/kyverno/kyverno/releases/latest)
+    printf '{"tag_name":"v1.17.2","published_at":"2020-01-01T00:00:00Z"}\n'
+    ;;
+  */repos/evilmartians/lefthook/releases/latest)
+    printf '{"tag_name":"v2.1.9","published_at":"2020-01-01T00:00:00Z"}\n'
+    ;;
+  *)
+    printf 'unexpected curl URL: %s\n' "${url}" >&2
+    exit 22
+    ;;
+esac
+EOF
+  chmod +x "${BATS_TEST_TMPDIR}/bin/curl"
+  export PATH="${BATS_TEST_TMPDIR}/bin:${PATH}"
+}
+
+@test "tools resolver picks the newest cooldown-eligible release, not the newest overall" {
+  write_release_list_curl
+  write_toolchain_fixture
+  unset UPDATE_VERSIONS_TOOL_REPORT_TSV
+
+  run "${SCRIPT}" --execute --only tools
+
+  [ "${status}" -eq 0 ]
+  # v4.9.0 is only 2 days old, so the takeable version is v4.5.0. Reporting
+  # v4.9.0 here would block yq entirely despite an eligible release existing.
+  [[ "${output}" == *$'yq\tv4.0.0\tv4.5.0\tupdate available'* ]]
+  [[ "${output}" != *"v4.9.0"* ]]
+}
+
+@test "release timestamps without fractional seconds resolve a cooldown date" {
+  # GitHub publishes "2020-01-01T00:00:00Z" with no fractional part. Appending
+  # a Z unconditionally produced "...:00ZZ", which no date implementation
+  # parses, so every cooldown check silently degraded to unknown.
+  write_fake_curl
+  write_toolchain_fixture
+  unset UPDATE_VERSIONS_TOOL_REPORT_TSV
+
+  run "${SCRIPT}" --execute --only tools
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *$'yq\tv4.0.0\tv4.2.0\tupdate available\t2020-01-08'* ]]
+  [[ "${output}" != *$'yq\tv4.0.0\tv4.2.0\tBLOCKED by unknown cooldown'* ]]
+}

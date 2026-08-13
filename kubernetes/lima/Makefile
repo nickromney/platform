@@ -354,7 +354,11 @@ prereqs:
 	echo ""; \
 	echo "Docker daemon verification:"; \
 	if ! docker info >/dev/null 2>&1; then \
-		echo "FAIL docker daemon not reachable (is Docker Desktop running?)"; \
+		if [ "$$(uname -s)" = "Darwin" ]; then \
+			echo "FAIL docker daemon not reachable (is Docker Desktop running?)"; \
+		else \
+			echo "FAIL docker daemon not reachable (try: sudo systemctl start docker)"; \
+		fi; \
 		exit 1; \
 	fi; \
 	echo "OK   Docker context: $$(docker context show)"; \
@@ -447,7 +451,11 @@ check-docker-daemon:
 	@set -euo pipefail; \
 	command -v docker >/dev/null 2>&1 || { echo "docker not found in PATH"; exit 1; }; \
 	if ! docker info >/dev/null 2>&1; then \
-		echo "docker daemon not reachable (is Docker Desktop running?)"; \
+		if [ "$$(uname -s)" = "Darwin" ]; then \
+			echo "docker daemon not reachable (is Docker Desktop running?)"; \
+		else \
+			echo "docker daemon not reachable (try: sudo systemctl start docker)"; \
+		fi; \
 		exit 1; \
 	fi
 

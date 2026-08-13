@@ -24,7 +24,7 @@ setup() {
   [[ "${output}" == *"split by default"* ]]
   [[ "${output}" == *"KIND_WORKER_COUNT=1|2|..."* ]]
   [[ "${output}" == *"KIND_IMAGE_DISTRIBUTION_MODE=load|registry|hybrid|baked"* ]]
-  [[ "${output}" == *"KIND_ENABLE_BACKSTAGE=auto|on|off"* ]]
+  [[ "${output}" == *"KIND_ENABLE_BACKSTAGE=off|on|auto"* ]]
   [[ "${output}" == *"image distribution mode (default: registry)"* ]]
   [[ "${output}" == *"make status"* ]]
   [[ "${output}" == *"make state-snapshot [TFSTATE_SNAPSHOT_KEEP=5]"* ]]
@@ -606,6 +606,19 @@ EOF
   run grep -Fn 'FAIL Docker Hardened Images (dhi.io) credentials are required (run: docker login dhi.io)' "${REPO_ROOT}/kubernetes/kind/Makefile"
   [ "${status}" -eq 0 ]
 
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind prereqs only enforces dhi.io auth from the first hardened-image stage" {
+  run grep -Fn 'KIND_DHI_REQUIRED_FROM_STAGE ?= 600' "${REPO_ROOT}/kubernetes/kind/Makefile"
+  [ "${status}" -eq 0 ]
+
+  # Stages below the threshold must warn rather than exit non-zero.
+  run grep -Fn 'WARN Docker Hardened Images (dhi.io) credentials are missing, but stage $$dhi_stage does not pull hardened images' "${REPO_ROOT}/kubernetes/kind/Makefile"
+  [ "${status}" -eq 0 ]
+
+  # A bare `make prereqs` with no STAGE stays strict.
+  run grep -Fn "''|*[!0-9]*) dhi_required=1 ;; \\" "${REPO_ROOT}/kubernetes/kind/Makefile"
   [ "${status}" -eq 0 ]
 }
 

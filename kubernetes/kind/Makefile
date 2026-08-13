@@ -38,6 +38,11 @@ STOP_PLATFORM_RUNTIMES := $(K8S_SCRIPTS_DIR)/stop-platform-runtimes.sh
 BUILD_LOCAL_PLATFORM_IMAGES := $(abspath $(K8S_SCRIPTS_DIR)/build-local-platform-images.sh)
 BUILD_LOCAL_WORKLOAD_IMAGES := $(abspath $(K8S_SCRIPTS_DIR)/build-local-workload-images.sh)
 CHECK_DOCKER_REGISTRY_AUTH := $(SCRIPTS_DIR)/check-docker-registry-auth.sh
+# Hardened dhi.io images are consumed only by policies (600), observability
+# (800), and sso (900). Stages below this pull nothing from dhi.io, so missing
+# credentials warn instead of blocking the cluster bootstrap. A bare
+# `make prereqs` (no STAGE) still fails, since it reports whole-path readiness.
+KIND_DHI_REQUIRED_FROM_STAGE ?= 600
 CHECK_MEMORY_PREFLIGHT := $(SCRIPTS_DIR)/check-memory-preflight.sh
 DHI_CREDS_OFFLINE := $(SCRIPTS_DIR)/dhi-creds-offline.sh
 DOCKER_PRUNE_ESTIMATE := $(SCRIPTS_DIR)/docker-prune-estimate.sh
@@ -48,6 +53,7 @@ ENSURE_LOCAL_IMAGE_CACHE := $(K8S_SCRIPTS_DIR)/ensure-local-image-cache.sh
 SYNC_LOCAL_IMAGE_CACHE := $(K8S_SCRIPTS_DIR)/sync-local-image-cache.sh
 RENDER_OPERATOR_OVERRIDES := $(SCRIPTS_DIR)/render-operator-overrides.sh
 DELETE_KIND_CLUSTER := $(SCRIPTS_DIR)/delete-kind-cluster.sh
+ENSURE_NODE_HOST_ALIAS := $(SCRIPTS_DIR)/ensure-node-host-alias.sh
 RESOLVE_TFVAR_VALUE := $(K8S_SCRIPTS_DIR)/resolve-tfvar-value.sh
 TEST_IDEMPOTENCE := $(K8S_SCRIPTS_DIR)/test-idempotence.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
@@ -72,7 +78,11 @@ KIND_WORKER_COUNT ?= 1
 KIND_PRELOAD_IMAGES_MODE ?= off
 KIND_IMAGE_DISTRIBUTION_MODE ?= registry
 KIND_BAKED_NODE_IMAGE ?=
-KIND_ENABLE_BACKSTAGE ?= auto
+# Opt-in: Backstage is heavy, and the old "auto" default meant an identical
+# command built a different stack per host (Docker Engine on Linux reports
+# host RAM and cleared the 10GiB gate; a Docker Desktop VM sized below that
+# did not). Set KIND_ENABLE_BACKSTAGE=on to include it.
+KIND_ENABLE_BACKSTAGE ?= off
 KIND_BACKSTAGE_MIN_DOCKER_MEMORY_BYTES ?= 10737418240
 KIND_LOCAL_IMAGE_CACHE_HOST ?= host.docker.internal:5002
 ifeq ($(PLATFORM_DEVCONTAINER),1)
@@ -118,7 +128,7 @@ VALID_STAGE_HELPERS := $(KUBERNETES_STAGE_READONLY_HELPERS)
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state state-snapshot state-restore check-stage-monotonicity check-docker-daemon check-memory check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status dhi-creds-offline docker-health docker-prune-estimate docker-safe-clean memory-report stop-kind stop start-kind start prereqs playwright-install image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state state-snapshot state-restore check-stage-monotonicity check-docker-daemon check-memory check-kind-state ensure-kind-running ensure-node-host-alias check-kubeconfig check-kind-host-ports check-lima-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status dhi-creds-offline docker-health docker-prune-estimate docker-safe-clean memory-report stop-kind stop start-kind start prereqs playwright-install image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 MAKE_UNKNOWN_GOAL_GUARD_DEFER_GOALS := $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
@@ -284,7 +294,7 @@ help:
 	@echo "  KIND_WORKER_COUNT=1|2|...                            -> worker node count (default: 1, so 2 total nodes)"
 	@echo "  KIND_IMAGE_DISTRIBUTION_MODE=load|registry|hybrid|baked -> image distribution mode (default: registry)"
 	@echo "  KIND_BAKED_NODE_IMAGE=<image-ref>                    -> required for KIND_IMAGE_DISTRIBUTION_MODE=hybrid|baked"
-	@echo "  KIND_ENABLE_BACKSTAGE=auto|on|off                    -> Backstage portal gate (auto requires >=10GiB Docker memory)"
+	@echo "  KIND_ENABLE_BACKSTAGE=off|on|auto                    -> Backstage portal gate (default: off; auto requires >=10GiB Docker memory)"
 	@echo "  CHECK_VERSION_FORMAT=text|json                       -> render version audits as human text or machine-readable JSON (default: text)"
 	@echo "  OIDC_RECOVERY_FORMAT=text|json                       -> render the OIDC recovery exercise as human text or machine-readable JSON (default: text)"
 	@echo "  OIDC_RECOVERY_FORCE_MODE=nginx-rollout               -> controlled perturbation used to force the explicit recovery branch (default: nginx-rollout)"
@@ -376,15 +386,11 @@ check-docker-daemon:
 	command -v docker >/dev/null 2>&1 || { echo "docker not found in PATH"; exit 1; }; \
 	if ! docker info >/dev/null 2>&1; then \
 		if [ "$$(uname -s)" = "Darwin" ]; then \
-			echo "docker daemon not reachable (is Docker Desktop running?)"; \
+			echo "docker daemon not reachable (start Docker Desktop, colima, or whichever Docker runtime you use)"; \
 		else \
-			echo "docker daemon not reachable"; \
+			echo "docker daemon not reachable (try: sudo systemctl start docker)"; \
 		fi; \
 		exit 1; \
-	fi; \
-	os="$$(docker info --format '{{.OperatingSystem}}' 2>/dev/null || true)"; \
-	if [ "$$(uname -s)" = "Darwin" ] && ! echo "$$os" | grep -q "Docker Desktop"; then \
-		echo "docker is reachable but Docker Desktop was not detected (OperatingSystem=$$os)"; \
 	fi
 
 .PHONY: check-memory
@@ -451,6 +457,12 @@ check-kubeconfig:
 	elif command -v kubie >/dev/null 2>&1; then \
 		echo "OK   kubie lint"; \
 	fi
+
+.PHONY: ensure-node-host-alias
+ensure-node-host-alias:
+	@TARGET_CLUSTER_NAME="$${TARGET_CLUSTER_NAME:-kind-local}" \
+	KIND_CLUSTER_NAME="$${TARGET_CLUSTER_NAME:-kind-local}" \
+	"$(ENSURE_NODE_HOST_ALIAS)" $(READONLY_MODE_FLAG)
 
 .PHONY: ensure-kind-running
 ensure-kind-running:
@@ -585,6 +597,7 @@ plan: workflow-validate-stage
 	@$(MAKE) check-conflicting-clusters-stopped
 	@$(MAKE) check-docker-daemon && $(MAKE) check-kind-state
 	@$(MAKE) ensure-kind-running
+	@$(MAKE) ensure-node-host-alias
 	@$(MAKE) check-kubeconfig >/dev/null
 	@set -euo pipefail; \
 	. "$(PROFILE_LIB)"; \
@@ -653,6 +666,7 @@ apply: workflow-validate-stage
 	@$(MAKE) check-conflicting-clusters-stopped
 	@$(MAKE) check-docker-daemon && $(MAKE) check-kind-state
 	@$(MAKE) ensure-kind-running
+	@$(MAKE) ensure-node-host-alias
 	@$(MAKE) check-kubeconfig >/dev/null
 	@set -euo pipefail; \
 	. "$(PROFILE_LIB)"; \
@@ -1108,6 +1122,7 @@ start-kind:
 	fi; \
 	echo "Starting kind-local node containers..."; \
 	docker start $$nodes >/dev/null; \
+	$(MAKE) ensure-node-host-alias; \
 	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)" --execute || true; \
 	echo "Started: $$nodes"; \
 
@@ -1185,21 +1200,36 @@ prereqs:
 	if echo "$$os" | grep -q "Docker Desktop"; then \
 		echo "OK   Docker Desktop detected"; \
 	else \
-		if [ "$$(uname -s)" = "Linux" ]; then \
-			echo "OK   Docker Engine detected (Linux; Docker Desktop not required)"; \
-		else \
-			echo "WARN Docker Desktop not detected (OperatingSystem=$$os)"; \
-		fi; \
+		echo "OK   Docker Engine detected (OperatingSystem=$$os; Docker Desktop not required)"; \
 	fi; \
 	echo "OK   Docker context: $$(docker context show)"; \
+	if [ "$$(uname -s)" = "Linux" ] && command -v systemctl >/dev/null 2>&1; then \
+		if systemctl is-enabled docker.socket >/dev/null 2>&1; then \
+			echo "OK   Docker starts on demand (docker.socket enabled)"; \
+		elif systemctl is-enabled docker.service >/dev/null 2>&1; then \
+			echo "OK   Docker starts at boot (docker.service enabled)"; \
+		else \
+			echo "WARN Docker is running but will not start automatically after a reboot"; \
+			echo "     enable socket activation: sudo systemctl enable --now docker.socket"; \
+		fi; \
+	fi; \
 	echo ""; \
 	echo "Memory preflight:"; \
 	"$(CHECK_MEMORY_PREFLIGHT)" $(READONLY_MODE_FLAG); \
 	echo ""; \
 	echo "Docker registry auth:"; \
 	if ! "$(CHECK_DOCKER_REGISTRY_AUTH)" --execute dhi.io "Docker Hardened Images (dhi.io)"; then \
-		echo "FAIL Docker Hardened Images (dhi.io) credentials are required (run: docker login dhi.io)" >&2; \
-		exit 1; \
+		dhi_stage="$${STAGE:-}"; \
+		case "$$dhi_stage" in \
+			''|*[!0-9]*) dhi_required=1 ;; \
+			*) if [ "$$dhi_stage" -lt "$(KIND_DHI_REQUIRED_FROM_STAGE)" ]; then dhi_required=0; else dhi_required=1; fi ;; \
+		esac; \
+		if [ "$$dhi_required" -eq 1 ]; then \
+			echo "FAIL Docker Hardened Images (dhi.io) credentials are required (run: docker login dhi.io)" >&2; \
+			exit 1; \
+		fi; \
+		echo "WARN Docker Hardened Images (dhi.io) credentials are missing, but stage $$dhi_stage does not pull hardened images"; \
+		echo "     stages >= $(KIND_DHI_REQUIRED_FROM_STAGE) do (policies, observability, sso); run: docker login dhi.io before then"; \
 	fi; \
 	echo ""; \
 	playwright_mode="$${PLATFORM_PLAYWRIGHT_MODE:-docker}"; \
@@ -1293,7 +1323,11 @@ reset:
 		echo ""; \
 		echo "FAIL reset cannot continue because Docker is not reachable."; \
 		echo "kind clusters are Docker containers, so reset cannot delete or inspect them while the daemon is down."; \
-		echo "Start Docker Desktop or the Docker service and rerun: make reset AUTO_APPROVE=1"; \
+		if [ "$$(uname -s)" = "Darwin" ]; then \
+			echo "Start Docker Desktop and rerun: make reset AUTO_APPROVE=1"; \
+		else \
+			echo "Start the Docker daemon (sudo systemctl start docker) and rerun: make reset AUTO_APPROVE=1"; \
+		fi; \
 		exit 1; \
 	fi; \
 	echo "  - Docker daemon reachable"; \

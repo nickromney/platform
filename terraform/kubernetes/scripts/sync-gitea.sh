@@ -399,7 +399,7 @@ main() {
   export_resolved_bool ENABLE_AGENTGATEWAY_AI_GATEWAY enable_agentgateway_ai_gateway false
   export_resolved_bool ENABLE_LANGFUSE enable_langfuse false
   export_resolved_bool ENABLE_LANGFUSE_DEMOS enable_langfuse_demos false
-  export_resolved_bool_target_or_stage ENABLE_BACKSTAGE enable_backstage true
+  export_resolved_bool_target_or_stage ENABLE_BACKSTAGE enable_backstage false
   export_resolved_bool_target_or_stage PREFER_EXTERNAL_PLATFORM_IMAGES prefer_external_platform_images false
   export_resolved_bool_target_or_stage PREFER_EXTERNAL_WORKLOAD_IMAGES prefer_external_workload_images false
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_GRAFANA grafana

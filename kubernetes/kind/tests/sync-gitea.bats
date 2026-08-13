@@ -72,7 +72,7 @@ EOF
 }
 
 @test "sync-gitea.sh exports local kind toggles from target-or-stage inputs" {
-  run bash -lc "grep -F 'export_resolved_bool_target_or_stage ENABLE_ACTIONS_RUNNER enable_actions_runner true' '${SCRIPT}' && grep -F 'export_resolved_bool_target_or_stage ENABLE_BACKSTAGE enable_backstage true' '${SCRIPT}'"
+  run bash -lc "grep -F 'export_resolved_bool_target_or_stage ENABLE_ACTIONS_RUNNER enable_actions_runner true' '${SCRIPT}' && grep -F 'export_resolved_bool_target_or_stage ENABLE_BACKSTAGE enable_backstage false' '${SCRIPT}'"
 
   [ "${status}" -eq 0 ]
 }

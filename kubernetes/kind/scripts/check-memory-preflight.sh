@@ -156,11 +156,40 @@ check_host_memory() {
   ok "host memory: $(bytes_to_gib "${total_bytes}") total, $(bytes_to_gib "${available_bytes}") available"
 }
 
+# Any reachable Docker daemon works. Docker Desktop is only the most common
+# macOS shape, so macOS messages name it as an example rather than a
+# requirement: colima, OrbStack, and plain Docker Engine are all fine.
+docker_install_remediation() {
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    printf '%s\n' "install a Docker runtime (Docker Desktop, colima, or OrbStack)"
+  else
+    printf '%s\n' "install Docker Engine (see: make -C kubernetes/kind prereqs)"
+  fi
+}
+
+docker_restart_remediation() {
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    printf '%s\n' "restart your Docker runtime (Docker Desktop, colima, or OrbStack)"
+  else
+    printf '%s\n' "sudo systemctl restart docker"
+  fi
+}
+
+# A VM-backed runtime caps memory at a configured size; Docker Engine on Linux
+# shares host RAM, so there is no slider to raise.
+docker_memory_remediation() {
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    printf '%s\n' "raise your Docker VM memory to at least ${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB}GiB (Docker Desktop: Settings > Resources; colima: colima start --memory ${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB})"
+  else
+    printf '%s\n' "Docker Engine uses host RAM directly; free memory or add RAM to reach ${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB}GiB"
+  fi
+}
+
 check_docker_memory() {
   local mem_total threshold_bytes
 
   if ! command -v docker >/dev/null 2>&1; then
-    fail "docker daemon not reachable (docker not found in PATH); threshold is ${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB}GiB (${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB} via KIND_PREFLIGHT_MIN_DOCKER_MEM_GB); remediation: start Docker Desktop"
+    fail "docker daemon not reachable (docker not found in PATH); threshold is ${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB}GiB (${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB} via KIND_PREFLIGHT_MIN_DOCKER_MEM_GB); remediation: $(docker_install_remediation)"
     return 1
   fi
 
@@ -168,20 +197,20 @@ check_docker_memory() {
     if [[ "$(uname -s)" == "Darwin" ]]; then
       fail "docker daemon not reachable (is Docker Desktop running?); threshold is ${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB}GiB (${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB} via KIND_PREFLIGHT_MIN_DOCKER_MEM_GB); remediation: open -a Docker"
     else
-      fail "docker daemon not reachable; threshold is ${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB}GiB (${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB} via KIND_PREFLIGHT_MIN_DOCKER_MEM_GB); remediation: sudo systemctl start docker"
+      fail "docker daemon not reachable; threshold is ${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB}GiB (${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB} via KIND_PREFLIGHT_MIN_DOCKER_MEM_GB); remediation: sudo systemctl start docker (or enable socket activation: sudo systemctl enable --now docker.socket)"
     fi
     return 1
   fi
 
   mem_total="$(docker info --format '{{.MemTotal}}' 2>/dev/null || true)"
   if [[ -z "${mem_total}" || "${mem_total}" == "<no value>" || "${mem_total}" == *[!0-9]* ]]; then
-    fail "Docker VM budget: unknown; threshold is ${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB}GiB (${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB} via KIND_PREFLIGHT_MIN_DOCKER_MEM_GB); remediation: restart Docker Desktop"
+    fail "Docker VM budget: unknown; threshold is ${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB}GiB (${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB} via KIND_PREFLIGHT_MIN_DOCKER_MEM_GB); remediation: $(docker_restart_remediation)"
     return 1
   fi
 
   threshold_bytes="$(gb_to_bytes "${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB}")"
   if bytes_less_than_threshold "${mem_total}" "${threshold_bytes}"; then
-    fail "Docker VM budget: $(bytes_to_gib "${mem_total}") found; threshold is ${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB}GiB (${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB} via KIND_PREFLIGHT_MIN_DOCKER_MEM_GB); remediation: increase Docker Desktop memory to at least ${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB}GiB"
+    fail "Docker VM budget: $(bytes_to_gib "${mem_total}") found; threshold is ${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB}GiB (${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB} via KIND_PREFLIGHT_MIN_DOCKER_MEM_GB); remediation: $(docker_memory_remediation)"
     return 1
   fi
 
@@ -191,8 +220,12 @@ check_docker_memory() {
 is_vm_process_name() {
   local text="$1"
 
+  # macOS hypervisors first, then the ones a Linux host is likely to be running.
   case "${text}" in
     *com.apple.Virtualization.VirtualMachine*|*vfkit*|*krunkit*|*qemu-system*)
+      return 0
+      ;;
+    *cloud-hypervisor*|*crosvm*|*VirtualBoxVM*|*vmware-vmx*)
       return 0
       ;;
   esac

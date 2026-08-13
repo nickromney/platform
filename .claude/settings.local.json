@@ -16,7 +16,8 @@
       "Bash(GONOSUMDB=platform.local go work *)",
       "Bash(make -C apps chatgpt-sim-test)",
       "Bash(make -C apps js-check)",
-      "Bash(bats tests/app-layout-consistency.bats tests/validate-app-runtime-surfaces.bats)"
+      "Bash(bats tests/app-layout-consistency.bats tests/validate-app-runtime-surfaces.bats)",
+      "Bash(gh pr *)"
     ]
   }
 }
