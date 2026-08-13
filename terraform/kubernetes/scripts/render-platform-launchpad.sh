@@ -27,6 +27,7 @@ Environment variables:
   STACK_DIR         Stack root (default: inferred from script path)
   INVENTORY_FILE    Launchpad inventory JSON file
   ENABLE_SSO
+  ENABLE_BACKSTAGE
   ENABLE_HEADLAMP
   ENABLE_APP_REPO_SENTIMENT
   ENABLE_APP_REPO_SUBNETCALC
@@ -77,6 +78,7 @@ set_default_targets() {
 
 build_toggles_json() {
   local enable_sso=false
+  local enable_backstage=false
   local enable_headlamp=false
   local enable_sentiment=false
   local enable_subnetcalc=false
@@ -84,6 +86,9 @@ build_toggles_json() {
   local enable_langfuse_demos=false
 
   if is_true "${ENABLE_SSO:-true}"; then enable_sso=true; fi
+  # Backstage is opt-in, so this defaults to false: a tile for a portal that
+  # was never deployed renders as permanently Down and fails health checks.
+  if is_true "${ENABLE_BACKSTAGE:-false}"; then enable_backstage=true; fi
   if is_true "${ENABLE_HEADLAMP:-true}"; then enable_headlamp=true; fi
   if is_true "${ENABLE_APP_REPO_SENTIMENT:-true}"; then enable_sentiment=true; fi
   if is_true "${ENABLE_APP_REPO_SUBNETCALC:-true}"; then enable_subnetcalc=true; fi
@@ -92,6 +97,7 @@ build_toggles_json() {
 
   jq -cn \
     --argjson sso "${enable_sso}" \
+    --argjson backstage "${enable_backstage}" \
     --argjson headlamp "${enable_headlamp}" \
     --argjson sentiment "${enable_sentiment}" \
     --argjson subnetcalc "${enable_subnetcalc}" \
@@ -99,6 +105,7 @@ build_toggles_json() {
     --argjson langfuse_demos "${enable_langfuse_demos}" \
     '{
       ENABLE_SSO: $sso,
+      ENABLE_BACKSTAGE: $backstage,
       ENABLE_HEADLAMP: $headlamp,
       ENABLE_APP_REPO_SENTIMENT: $sentiment,
       ENABLE_APP_REPO_SUBNETCALC: $subnetcalc,

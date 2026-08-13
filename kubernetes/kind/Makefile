@@ -1122,6 +1122,7 @@ start-kind:
 	fi; \
 	echo "Starting kind-local node containers..."; \
 	docker start $$nodes >/dev/null; \
+	$(MAKE) ensure-node-host-alias; \
 	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)" --execute || true; \
 	echo "Started: $$nodes"; \
 

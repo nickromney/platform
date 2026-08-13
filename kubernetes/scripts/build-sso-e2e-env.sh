@@ -107,7 +107,7 @@ done < <(
   "${BUILD_TFVAR_ARGS}" "${build_tfvar_args[@]}"
 )
 
-enable_backstage="$("${RESOLVE_TFVAR_VALUE}" --execute enable_backstage true "${tfvar_files[@]}")"
+enable_backstage="$("${RESOLVE_TFVAR_VALUE}" --execute enable_backstage false "${tfvar_files[@]}")"
 tfvar_files_joined="$(join_by_colon "${tfvar_files[@]}")"
 
 emit_assignment "SSO_E2E_ENABLE_BACKSTAGE" "${enable_backstage}"

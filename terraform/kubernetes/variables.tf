@@ -1299,9 +1299,9 @@ variable "prefer_external_platform_images" {
 }
 
 variable "enable_backstage" {
-  description = "Deploy the Backstage developer portal. Kind writes this through an operator override after checking local Docker memory."
+  description = "Deploy the Backstage developer portal. Opt-in, like enable_apim_simulator: kind writes it through an operator override driven by KIND_ENABLE_BACKSTAGE."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "external_platform_image_refs" {
