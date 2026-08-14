@@ -742,3 +742,67 @@ Not fixed here, because the options differ in what they change:
 
 The second is the smallest change that removes the sharp edge. The first is the
 correct one. This needs a decision, not an implementation.
+
+## 13. Two CI Failures That Predate This Branch
+
+Found on 2026-08-14 while checking whether PR #196 was ready to merge. Not
+caused by it, and not fixed by it.
+
+`main` is red. A `workflow_dispatch` run of `ci.yml` against `main`
+(run 31814946743) fails four tests in the hermetic bats subset:
+
+```text
+not ok 222 root status supports json output without requiring platform env
+not ok 234 docker compose prereqs fails cleanly when the repo env file is missing
+not ok 266 the reference variant owns the machine when kind is serving traffic
+not ok 288 sentiment prereqs fails cleanly when the repo env file is missing
+```
+
+The branch for #196 fails only the middle pair, so it reduces the count from
+four to two rather than adding any. That is the reason it was proposed for
+merge with CI red.
+
+### The two that remain
+
+Both assert the same thing in different Makefiles:
+
+- `tests/makefile.bats:458` (docker compose)
+- `tests/sentiment-makefile.bats:49` (sentiment)
+
+Each runs the target with `PLATFORM_ENV_FILE` pointed at a file that does not
+exist, and expects the failure to name it:
+
+```bash
+[[ "${output}" == *"Missing platform env file:"*"/missing.env"* ]]
+```
+
+The exit status assertion on the preceding line passes, so the target does fail
+— it just fails without that message. The shared signature across two unrelated
+Makefiles suggests one root cause, not two.
+
+### What has already been ruled out
+
+- **Not a regression from this branch.** `mk/common.mk`, which owns the
+  message, is unchanged since PR #126. Neither test file was touched.
+- **Not target ordering.** `prereqs` calls `check-platform-env` first in both
+  Makefiles, so the env check runs before the docker and mkcert checks.
+- **Not the missing host tooling.** Reproduced locally with `env -i` and a PATH
+  containing only coreutils, without `docker` or `mkcert`: the message still
+  appears and the test still passes.
+- **Not a stale `.env`.** The tests pass an explicit path, and the conditional
+  `include` in `docker/compose/Makefile` is guarded by `wildcard`.
+
+### What the next attempt needs
+
+The captured output, which bats does not print. It reports only the failed
+assertion, so the actual `make` output on the runner is unknown, and every
+local reproduction so far produces the passing output instead. Get that first:
+a temporary `echo "${output}"` in the test, or `--print-output-on-failure`, on
+a branch pushed for the purpose.
+
+Worth carrying section 1's lesson into it: a test in the hermetic subset that
+behaves differently on a runner than on a workstation is reading host state
+somewhere, and the interesting question is which piece.
+
+That `main` is red at all belongs to section 1's thesis rather than this
+section's. The gate exists, it runs, and nobody is looking at the result.
