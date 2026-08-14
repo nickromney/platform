@@ -454,16 +454,43 @@ EOF
 
   run env PLATFORM_ENV_FILE="${missing_env}" make -C "${REPO_ROOT}/docker/compose" prereqs
 
-  echo "TEMP-DIAG status=${status}" >&3
-  echo "TEMP-DIAG output-begin" >&3
-  echo "${output}" >&3
-  echo "TEMP-DIAG output-end" >&3
-  echo "TEMP-DIAG /bin/sh -> $(readlink -f /bin/sh)" >&3
-  echo "TEMP-DIAG make SHELL=$(make -C "${REPO_ROOT}/docker/compose" -p -n help 2>/dev/null | grep -m1 '^SHELL =')" >&3
-
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"Missing platform env file:"*"/missing.env"* ]]
   [[ "${output}" != *"Unknown make goal '${missing_env}'"* ]]
+}
+
+# The test above passed on Arch and failed on the Ubuntu runner for months.
+# mk/common.mk said `SHELL ?= /bin/bash`, which never fires because GNU make
+# always has a SHELL defined, so recipes ran under /bin/sh: Bash on Arch, dash
+# on Ubuntu. dash aborts on `set -o pipefail`, so check-platform-env died before
+# printing anything and only the exit status survived. Assert the shell rather
+# than the symptom, because the symptom is invisible on the machine that writes
+# the code.
+@test "mk/common.mk pins a Bash recipe shell for the Makefiles that include it" {
+  probe_makefile="${BATS_TEST_TMPDIR}/shell-probe.mk"
+
+  cat >"${probe_makefile}" <<EOF
+include ${REPO_ROOT}/mk/common.mk
+
+.PHONY: shell-probe
+shell-probe:
+	@set -euo pipefail; \\
+	names=(pipefail); \\
+	printf 'recipe-shell=%s accepts=%s\\n' "\$(SHELL)" "\$\${names[0]}"
+EOF
+
+  run make -f "${probe_makefile}" shell-probe
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"recipe-shell="*"bash"* ]]
+  [[ "${output}" == *"accepts=pipefail"* ]]
+}
+
+@test "no repo Makefile sets SHELL with the conditional assignment that never fires" {
+  run bash -c "cd '${REPO_ROOT}' && git ls-files -z '*Makefile' '*.mk' | xargs -0 grep -n '^[[:space:]]*SHELL[[:space:]]*?=' || true"
+
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
 }
 
 @test "root lint delegates to the repo validation scripts" {
