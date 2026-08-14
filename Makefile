@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-MAKE_KNOWN_GOALS := help prereqs test test-ci status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+MAKE_KNOWN_GOALS := help prereqs init-env test test-ci test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
 APP_ENTRYPOINT_DIRS_CMD := { printf '%s\n' apps; find apps -mindepth 2 -maxdepth 2 -name Makefile -print | xargs -n 1 dirname; } | LC_ALL=C sort
@@ -24,12 +24,28 @@ PLATFORM_TUI_CMD ?= cd tools/platform-tui && $(PLATFORM_TUI_GO_BIN) run ./cmd/pl
 PLATFORM_TUI_BUILD_CMD ?= $(MAKE) --no-print-directory -C tools/platform-tui build
 PLATFORM_WORKFLOW_UI_SCRIPT ?= scripts/platform-workflow-ui.sh
 RESET_LOCAL_STATE_SCRIPT ?= scripts/reset-local-state.sh
+INIT_ENV_SCRIPT ?= scripts/init-env.sh
 INSTALL_GIT_HOOKS_SCRIPT ?= scripts/hooks/install-lefthook-hooks.sh
 STATUS_FORMAT ?= text
 WORKFLOW_UI_HOST ?= console.127.0.0.1.sslip.io
 WORKFLOW_UI_PORT ?= 8443
 WORKFLOW_UI_HTTP ?= h2
 CI_UV_CACHE_DIR ?= $(CURDIR)/.run/uv-cache
+CHECK_WORKTREE_UNCHANGED ?= scripts/check-worktree-unchanged.sh
+CI_WORKTREE_SNAPSHOT ?= $(CURDIR)/.run/worktree-status
+# Tests that depend only on the host toolchain: no cluster, no Docker, no
+# network. This is the subset that must also pass on macOS, where the stock awk
+# is BSD rather than gawk and the stock bash is 3.2. Everything here either
+# stubs its external commands or exercises pure functions.
+HOST_PORTABLE_BATS_TESTS := \
+	kubernetes/kind/tests/check-policy-drift.bats \
+	kubernetes/kind/tests/dependency-audit.bats \
+	kubernetes/kind/tests/ensure-node-host-alias.bats \
+	kubernetes/kind/tests/install-host-alias-timer.bats \
+	tests/check-bash32-compat.bats \
+	tests/check-worktree-unchanged.bats \
+	tests/locale-independence.bats
+
 CI_BATS_TESTS := \
 	kubernetes/kind/tests/stage-tfvars-no-duplicate-attributes.bats \
 	kubernetes/kind/tests/sync-gitea-policies.bats \
@@ -38,6 +54,7 @@ CI_BATS_TESTS := \
 	tests/audit-shell-scripts.bats \
 	tests/check-bash32-compat.bats \
 	tests/check-version.bats \
+	tests/check-worktree-unchanged.bats \
 	tests/ci-workflow.bats \
 	tests/ddd-consistency.bats \
 	tests/dependabot-config.bats \
@@ -72,6 +89,7 @@ CI_BATS_TESTS := \
 	tests/lint-yaml.bats \
 	tests/local-idp-contracts.bats \
 	tests/local-registry-lib.bats \
+	tests/locale-independence.bats \
 	tests/make-target-surfaces.bats \
 	tests/makefile.bats \
 	tests/observability-log-quality.bats \
@@ -98,7 +116,7 @@ CI_BATS_TESTS := \
 
 include mk/common.mk
 
-.PHONY: default help prereqs test test-ci status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+.PHONY: default help prereqs init-env test test-ci test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 
 default:
 	@$(MAKE) --no-print-directory help
@@ -123,6 +141,7 @@ help:
 		'make docker-safe-clean [AUTO_APPROVE=1]\tPreview or run conservative Docker cleanup that preserves the current kind cluster' \
 		'make fmt\tApply repo-level auto-formatters' \
 		'make hooks\tInstall lefthook-managed repo hooks' \
+		'make init-env\tCreate .env from .env.example and generate any empty local credentials' \
 		'make kubernetes\tShow the staged Kubernetes Makefiles' \
 		'make lint\tRun repo-level reporting checks' \
 		'make lint-bash32\tRun Bash 3.2 shell compatibility checks' \
@@ -199,9 +218,17 @@ test:
 	@echo "  make -C kubernetes/kind test"
 	@echo "  make -C kubernetes/lima test"
 
+test-host-portable:
+	@"$(BATS_BIN)" $(HOST_PORTABLE_BATS_TESTS)
+
 test-ci:
 	@mkdir -p "$(CI_UV_CACHE_DIR)"
-	@UV_CACHE_DIR="$(CI_UV_CACHE_DIR)" "$(BATS_BIN)" $(CI_BATS_TESTS)
+	@"$(CHECK_WORKTREE_UNCHANGED)" --snapshot "$(CI_WORKTREE_SNAPSHOT)"
+	@set -euo pipefail; \
+	rc=0; \
+	UV_CACHE_DIR="$(CI_UV_CACHE_DIR)" "$(BATS_BIN)" $(CI_BATS_TESTS) || rc=$$?; \
+	if ! "$(CHECK_WORKTREE_UNCHANGED)" --verify "$(CI_WORKTREE_SNAPSHOT)"; then rc=1; fi; \
+	exit $$rc
 
 status:
 	@"$(PLATFORM_STATUS_SCRIPT)" --execute --output "$(STATUS_FORMAT)"
@@ -281,6 +308,9 @@ fmt-hcl:
 
 check-version:
 	@"$(CHECK_VERSION_SCRIPT)" --execute
+
+init-env:
+	@"$(INIT_ENV_SCRIPT)" --execute
 
 update-versions:
 	@"$(UPDATE_VERSIONS_SCRIPT)" --execute

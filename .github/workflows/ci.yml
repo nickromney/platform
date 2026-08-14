@@ -2,11 +2,43 @@ name: CI
 
 on:
   workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
 
 jobs:
+  # The Linux job below is the full gate. This one exists because the primary
+  # host is Linux while the platform is also run on macOS, and nothing else
+  # validates that path: stock macOS ships Bash 3.2 and BSD awk rather than
+  # Bash 5 and gawk, so a script can pass every Linux check and still be broken
+  # there. Only the no-cluster, no-Docker, no-network subset runs here.
+  host-portable-bats-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Install Bats and query tools
+        run: |
+          set -euo pipefail
+          brew install bats-core jq yq
+
+      - name: Record the interpreters under test
+        # Recorded rather than asserted: the value is knowing which bash and awk
+        # actually ran when a failure needs explaining.
+        run: |
+          set -euo pipefail
+          /bin/bash --version | head -n 1
+          awk --version 2>/dev/null | head -n 1 || awk -Wversion 2>&1 | head -n 1 || true
+
+      - name: Run host-portable Bats subset
+        run: make test-host-portable
+
   lint-and-hermetic-bats:
     runs-on: ubuntu-latest
 

@@ -15,8 +15,23 @@ setup() {
   install_docker_stub
   install_kind_stub
   install_limactl_stub
+  install_k3sup_stub
   install_lsof_stub
   install_ps_stub
+}
+
+# Without this, k3sup presence leaks in from the host. The lima NOTE column shows
+# only the first blocker, so on a machine with no k3sup the "bootstrap client not
+# found" blocker displaces the shared-host-ports one that tests assert on. That
+# made the suite pass in the devcontainer, where arkade installs k3sup, and fail
+# on a bare host and on CI runners.
+install_k3sup_stub() {
+  cat >"${TEST_BIN}/k3sup" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/k3sup"
 }
 
 install_auth_stub() {

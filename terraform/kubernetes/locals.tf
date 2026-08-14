@@ -1261,3 +1261,22 @@ locals {
     ] : []
   }
 }
+
+locals {
+  # Readiness waits, scaled by var.platform_timeout_scale.
+  #
+  # On slower hosts several of these expired while the underlying work went on to
+  # succeed on its own, so the failure was the deadline rather than the rollout.
+  # Scaling them in one place keeps a slow machine to a single knob instead of
+  # edits scattered across .tf files. Values are the previous hardcoded defaults
+  # at scale 1, so behaviour is unchanged unless an operator opts in.
+  platform_wait_seconds = {
+    helm_release    = ceil(1800 * var.platform_timeout_scale)
+    node_ready      = ceil(180 * var.platform_timeout_scale)
+    node_ready_wrap = ceil(240 * var.platform_timeout_scale)
+    rollout_short   = ceil(180 * var.platform_timeout_scale)
+    rollout_default = ceil(300 * var.platform_timeout_scale)
+    rollout_gitea   = ceil(240 * var.platform_timeout_scale)
+    rollout_long    = ceil(600 * var.platform_timeout_scale)
+  }
+}

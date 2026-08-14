@@ -9,7 +9,10 @@ setup() {
 }
 
 @test "kind help documents the 920 stage ladder" {
-  run make -C "${REPO_ROOT}/kubernetes/kind" help
+  # --no-print-directory matters for the $HOME assertion below: make -C otherwise
+  # prints "Entering directory '<abspath>'", which fails for any checkout living
+  # under the operator's home directory regardless of what help itself emits.
+  run make --no-print-directory -C "${REPO_ROOT}/kubernetes/kind" help
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"make 100 apply"* ]]
@@ -144,7 +147,9 @@ exit 1
 EOF
   chmod +x "${TEST_BIN}/lsof"
 
-  run make -C "${REPO_ROOT}/kubernetes/kind" check-conflicting-clusters-stopped
+  # --no-print-directory keeps make's "Entering directory" chatter out of the
+  # empty-output assertion; the preflight itself is expected to stay silent.
+  run make --no-print-directory -C "${REPO_ROOT}/kubernetes/kind" check-conflicting-clusters-stopped
 
   [ "${status}" -eq 0 ]
   [ -z "${output}" ]
@@ -735,7 +740,9 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/kubectl"
 
-  run make -C "${REPO_ROOT}/kubernetes/kind" check-version \
+  # --no-print-directory is required here: the JSON report is piped straight into
+  # jq below, and make's "Entering directory" line would make it unparseable.
+  run make --no-print-directory -C "${REPO_ROOT}/kubernetes/kind" check-version \
     STACK_DIR="${stub_stack}" \
     ENSURE_KIND_KUBECONFIG="${TEST_BIN}/ensure-kind-kubeconfig.sh" \
     PLATFORM_STATUS_SCRIPT="${status_stub}" \

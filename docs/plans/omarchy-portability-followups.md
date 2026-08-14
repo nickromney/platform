@@ -66,10 +66,144 @@ The host half of that is fixed: `uv` is now pinned in the n-dotfiles global mise
 config next to `ruff`, so it installs on every machine rather than being a
 manual step. `make check-version` passes end to end locally.
 
-Two changes still outstanding, both small:
+Both remaining changes landed on 2026-08-13:
 
-- add a `pull_request` trigger to `ci.yml`
-- install `uv` in `version-audit.yml` (`astral-sh/setup-uv`, or mise)
+- `ci.yml` now triggers on `pull_request` and on `push` to `main`. The push
+  trigger matters as much as the PR one, because the failing tests this section
+  describes were failing *on `main`*, which a PR-only trigger would not catch.
+- `version-audit.yml` now installs `uv` through `astral-sh/setup-uv` and pins
+  `helm` from `toolchain-versions.sh`. `uv` alone was not enough: the component
+  guard calls `require helm` unconditionally in `main()`, so the workflow would
+  have moved its failure one step later rather than passing.
+
+Both tool versions are read from the files that already own them
+(`.devcontainer/Dockerfile` for `uv`, `toolchain-versions.sh` for `helm`) rather
+than restated in the workflow, so this cannot become another drift source.
+
+The four failing tests are also fixed. Three of the four shared a single cause:
+`make -C` prints `Entering directory '<abspath>'`, which broke a `$HOME`
+assertion, an empty-output assertion, and a `jq` parse of a JSON report.
+`--no-print-directory` on those three invocations resolves all of them. The
+fourth was environmental in the same family as the rest of this document: `perl`
+warns when the host locale is not installed, and those warnings landed in the
+middle of the report. The rewrites are byte-level pin substitutions, so they now
+run under `LC_ALL=C`.
+
+`perl` was also an undeclared dependency of `update-versions.sh`, which guarded
+`curl`, `jq` and `awk` but not `perl`. Since the pin rewrites are in place edits
+applied one pin at a time, a missing `perl` would have left the toolchain file
+partially rewritten, so both apply paths now check for it up front.
+
+Enabling the triggers immediately surfaced five more failing tests on `main`,
+none of them caused by this change and all verified against a pristine `HEAD`.
+That is the strongest evidence for this section's claim: `make test-ci` had not
+been running anywhere that anyone was looking.
+
+Two were the *same* two root causes as the original four:
+
+- `tests/makefile.bats` asserts an exact JSON match on `make -C ... status`, so
+  the `Entering directory` line broke it. Fourth instance of that one bug.
+- `sync-gitea-policies.sh` also rewrites with `perl`, and the locale warnings
+  landed inside two rendered golden outputs. The `LC_ALL=C` fix now covers every
+  `perl -0pi` call in that script too, not just `update-versions.sh`.
+
+The other three were host-dependence of a different shape, where the test result
+depends on what the machine happens to have installed:
+
+- `tests/trivy-runner.bats` has two cases asserting the "trivy is missing"
+  behaviour, but the suite prepends its sandbox to the real `PATH`. A host with
+  trivy from mise fails both, while CI passed them for the wrong reason:
+  `ubuntu-latest` simply has no trivy. They now scrub trivy from `PATH`.
+- `tests/platform-status.bats` stubs `limactl` but not `k3sup`. The lima NOTE
+  column shows only the first blocker, so with no `k3sup` on the host the
+  "bootstrap client not found" blocker displaces the shared-host-ports one the
+  test asserts on. This passed only inside the devcontainer, where arkade
+  installs `k3sup`, and would have failed on the CI runner. It now stubs
+  `k3sup` alongside `limactl`.
+
+The pattern worth carrying forward: a test in the "hermetic" subset that reads
+host state is not hermetic, and it fails in exactly one direction depending on
+which machine runs it.
+
+### Correction 2026-08-14: the locale sweep looked for the wrong word
+
+The `LC_ALL=C` fix above was applied to every `perl` invocation, and that was
+the wrong search. Running `make -C kubernetes/kind 900 apply` on this host
+printed **831 lines** of Perl locale warnings before reaching any real work.
+
+The offender is `shasum`, which is itself a Perl script. Nothing at the call
+site says `perl`, so grepping for `perl` could never have found it:
+
+```bash
+find "$@" -type f -print |
+  LC_ALL=C sort |                 # author knew about locale here
+  while IFS= read -r source_file; do
+    shasum -a 256 "${source_file}"  # ... but not here
+  done
+```
+
+`source_fingerprint_tag` in `kubernetes/workflow/image-catalog-lib.sh` calls it
+once per source file, so a single invocation produced roughly sixty 14-line
+warnings. The whole subshell now runs under `LC_ALL=C`, which is correct beyond
+the warnings: every step is byte-level and must not vary by host. The resulting
+digest is unchanged, verified against real files, so no image rebuilds are
+triggered. The remaining seven `shasum` call sites across four scripts were
+swept too.
+
+`make -C kubernetes/kind 900 plan` under the broken locale now emits zero
+warnings, down from 831.
+
+**The host is also misconfigured, and that is the real root cause.**
+`~/.zshrc:56` exports `LANG="en_GB.UTF-8"`, but `/etc/locale.gen:154` still has
+`#en_GB.UTF-8 UTF-8` commented out, so that locale was never generated. Only
+`C.utf8` and `en_US.utf8` exist, and `/etc/locale.conf` disagrees with the
+shell by naming `en_US.UTF-8`. Every Perl-backed tool on the machine warns,
+not just this repo's:
+
+```shell
+sudo sed -i 's/^#en_GB.UTF-8 UTF-8/en_GB.UTF-8 UTF-8/' /etc/locale.gen
+sudo locale-gen
+```
+
+The repo fix and the host fix are both worth having: the host fix stops the
+warnings everywhere, and the repo fix means the platform does not depend on any
+particular host getting its locale right.
+
+Guarded by `tests/locale-independence.bats`, which asserts the behaviour under
+a deliberately uninstalled locale rather than the spelling of the command,
+plus a static backstop that every tracked `shasum` call site sits in an
+`LC_ALL=C` scope. Verified to fire by reverting one call site.
+
+### Fixing the host locale exposed a second, latent bug
+
+Worth stating on its own, because it is the opposite of what a fix usually
+does. Once `en_GB.UTF-8` was actually generated, `sort` began using en_GB
+collation instead of falling back to `C`, and
+`tests/sentiment-go-only.bats` started failing:
+
+```text
+LC_ALL=C sort   -> .gitea, MODEL_CARD.md, Makefile, README.md, app, ...
+en_GB.UTF-8     -> app, catalog-info.yaml, compose.tls.yml, ...
+```
+
+en_GB collation ignores the leading dot and folds case; `C` does not. The test
+asserts an exact `ls -A | sort` listing written in `C` order, so it had been
+passing only because the host locale was broken. The sort now runs under
+`LC_ALL=C`.
+
+The general shape: a broken locale silently pins collation to `C`, so any
+comparison that assumed `C` keeps working. Repairing the locale is what makes
+those assumptions visible. Anywhere the repo sorts and then compares against a
+fixed expectation — golden files, exact-match assertions, hashes over sorted
+input — needs `LC_ALL=C` stated explicitly rather than inherited by accident.
+
+`tests/ci-workflow.bats` asserted `pull_request` and `push` were *absent* from
+`ci.yml`, with no recorded reason. That assertion encoded the defect this
+section describes, so it now requires the triggers instead. While updating it,
+`tests/version-audit-workflow.bats` turned out to check only a known list of
+actions rather than all of them, so an unpinned action could have been added
+without failing anything. It now asserts the set of actions used is exactly the
+set pinned, which matters most in the workflow that audits supply-chain versions.
 
 ## 2. Timeouts Assume Fast Hardware
 
@@ -87,6 +221,20 @@ waits are hardcoded. Introduce a `PLATFORM_TIMEOUT_SCALE` (default `1`)
 multiplied into those waits, so a slow host sets `2` or `3` rather than editing
 `.tf` files.
 
+Done on 2026-08-13. `var.platform_timeout_scale` feeds a
+`local.platform_wait_seconds` map in `terraform/kubernetes/locals.tf`, and the
+kind Makefile exports `PLATFORM_TIMEOUT_SCALE` as `TF_VAR_platform_timeout_scale`.
+Every value equals its previous hardcoded default at scale `1`, so nothing
+changes until an operator opts in:
+
+```shell
+make -C kubernetes/kind 900 apply PLATFORM_TIMEOUT_SCALE=3
+```
+
+Covered: the hubble-ui and cilium rollouts, the argocd repo-server waits, the
+gitea rollout and SSH readiness deadlines, the node-Ready wait, the headlamp and
+langfuse rollouts, and the two 1800s helm release timeouts.
+
 ## 3. Readiness Race In eso-demo
 
 Distinct from the timeouts above, and a real ordering bug.
@@ -103,6 +251,14 @@ A manual resync once the webhook was Ready fixed it permanently
 (`SecretSynced/True`). Proper fix: `argocd.argoproj.io/sync-wave` ordering so
 `eso-demo` lands after the webhook is Ready, or a retry policy that tolerates
 webhook connection errors.
+
+Resolved on 2026-08-13 with the retry policy, because the wave ordering was
+already correct and was not the gap. `external-secrets` is wave 86 and
+`eso-demo` is wave 87; the problem is that a wave advances once the Application
+reports healthy, which does not mean the webhook Service is accepting
+connections. `eso-demo` now carries the same retry profile as
+`cert-manager-config`, the other config app that lands behind a webhook
+(`limit: 20`, 15s backoff, factor 2, 5m cap).
 
 ## 4. gitea Argo Comparison Never Completes
 
@@ -126,6 +282,119 @@ Cilium egress policy on the `argocd` namespace, or a helm cache/permissions
 problem in the repo-server image. Start by comparing a shell in the repo-server
 pod against the same request from a plain pod in the same namespace.
 
+### Resolved 2026-08-14: the Cilium candidate was right
+
+The fix is one line: allowlist the redirect target.
+
+`dl.gitea.io` 301s to `dl.gitea.com`. `argocd-repo-server-helm-egress` (in
+`cluster-policies/cilium/shared/argocd-hardened.yaml`) allowlisted only
+`dl.gitea.io`, so helm followed the redirect into a destination the policy did
+not permit. A `toFQDNs` allowlist applies to the redirect target as well as the
+requested name.
+
+Confirmed by drop trace rather than inference. With only `dl.gitea.io` allowed,
+`cilium-dbg monitor --type drop --related-to <repo-server-endpoint>` shows:
+
+```text
+xx drop (Policy denied) ... identity 4892->world: 10.244.1.142:36662 -> 172.67.75.17:443 tcp SYN
+xx drop (Policy denied) ... identity 4892->world: 10.244.1.142:45904 -> 104.26.2.246:443 tcp SYN
+```
+
+Both destinations are `dl.gitea.com` addresses. Adding
+`- matchName: dl.gitea.com` to the same egress rule makes `helm repo add`
+succeed in under a second, where it previously timed out at 121s.
+
+### Two things that made this look unsolved for longer than it was
+
+Both are worth remembering, because each produced a confident wrong conclusion.
+
+**The FQDN cache check queried the wrong agent.** `cilium-dbg fqdn cache list`
+returned nothing for gitea, which suggested Cilium was never observing the DNS
+responses and so could permit no IPs. That check ran against the control-plane
+agent. `argocd-repo-server` runs on `kind-local-worker`, and on *that* agent the
+cache holds both names correctly:
+
+```text
+680   lookup   dl.gitea.io.    30   104.21.17.32,172.67.220.34
+680   lookup   dl.gitea.com.   30   104.26.3.246,104.26.2.246,172.67.75.17
+```
+
+Endpoint 680 is repo-server. DNS observation was working the whole time. Always
+exec the agent on the node the workload is scheduled to.
+
+**The correct fix was tried and wrongly recorded as "did not fix it."** The
+2026-08-13 session added `dl.gitea.com`, tested, still saw the 121s timeout, and
+concluded the change was necessary-but-not-sufficient. Re-running the same edit
+on 2026-08-14 fixed it immediately. The likely cause of the false negative is
+the self-heal gotcha below reverting the policy before the test landed. Treat a
+negative result here as unreliable unless the live CCNP was re-read *after* the
+test, not just after the apply:
+
+```shell
+kubectl get ccnp argocd-repo-server-helm-egress -o jsonpath='{.spec.egress[*].toFQDNs}'
+```
+
+### Applying it
+
+`kubectl apply` alone does not persist: `cilium-policies` has `selfHeal: true`
+and reverts within seconds. The durable path is `tofu apply`, which re-renders
+the policies repo and retriggers the `sync-gitea-policies.sh` null_resource via
+`repo_render_hash` in `gitops.tf`. For a live test only, pause and restore:
+
+```shell
+kubectl -n argocd patch applications.argoproj.io cilium-policies --type merge \
+  -p '{"spec":{"syncPolicy":{"automated":null}}}'
+kubectl apply --server-side --force-conflicts -f <policy file>
+# ... test ...
+kubectl -n argocd patch applications.argoproj.io cilium-policies --type merge \
+  -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+```
+
+The working tree carries the policy edit. It has **not** been pushed to the
+Gitea policies repo, so the live cluster is back to the pre-fix allowlist:
+
+```text
+$ kubectl get ccnp argocd-repo-server-helm-egress -o jsonpath='{.spec.egress[*].toFQDNs}'
+[{"matchName":"dl.gitea.io"}]
+```
+
+### Do not read the live Application status as evidence here
+
+After the test above, `gitea` reads `sync=Synced, health=Healthy` **despite**
+the allowlist having reverted. The successful fetch during the test populated
+the repo-server's helm cache, so manifest generation now succeeds from cache
+and never re-resolves the host.
+
+That is a cached success on top of an unfixed policy. It will hold until the
+cache is evicted or the repo-server restarts, and then the 121s timeout and
+`sync=Unknown` return. A green `gitea` row is therefore not evidence the fix
+landed; the only reliable check is the CCNP contents above. This is very
+likely the same trap that made the 2026-08-13 result confusing in the first
+place, in the opposite direction.
+
+### Landed 2026-08-14
+
+`tofu apply` at stage 900 put the policy in the cluster. Verified against the
+live cluster rather than the Application row:
+
+```text
+$ kubectl get ccnp argocd-repo-server-helm-egress -o jsonpath='{.spec.egress[*].toFQDNs}'
+[{"matchName":"dl.gitea.io"},{"matchName":"dl.gitea.com"}]
+
+$ terraform/kubernetes/scripts/check-policy-drift.sh --execute
+OK   all 32 Cilium policies match the rendered source
+```
+
+The cached-success caveat above does not apply to this result. The apply
+replaced `null_resource.argocd_repo_server_restart`, so the repo-server
+restarted (14:34:42Z) and its Helm cache was discarded. `helm repo add` inside
+the fresh pod now completes in under a second, where it previously timed out at
+121s, so the fetch is genuinely re-resolving `dl.gitea.com` rather than reading
+a warm index. `gitea` is `Synced/Healthy` on a policy that actually permits the
+fetch.
+
+Section 4 is closed.
+
 ## 5. Two Sources Of Truth For Tool Pins
 
 `install-tool-hints.sh` derives pins from `.devcontainer/toolchain-versions.sh`,
@@ -136,6 +405,13 @@ The committed `mise.toml` is hand-written and will silently go stale the moment
 Either generate `mise.toml` from `toolchain-versions.sh` behind a make target, or
 add a drift assertion to `.devcontainer/check-toolchain-surface.sh`, which
 already guards that surface.
+
+Done on 2026-08-13 with the drift assertion rather than generation, so
+`mise.toml` stays a file an operator can read and edit. `check_mise_pin_drift`
+compares every pin the two files share, normalising the leading `v` that
+`toolchain-versions.sh` carries and `mise.toml` omits. Pins with no devcontainer
+equivalent are reported but not failed, so `mise.toml` can still carry host-only
+tools.
 
 ## 6. Charts Can Never Be Bumped
 
@@ -149,9 +425,24 @@ are genuinely available:
 | prometheus | 29.20.0 | 29.21.0 |
 | otel-collector | 0.165.0 | 0.166.0 |
 
-Determine what `check-component-version.sh` needs to read deployed state, and
-whether the audit should degrade to a version-only comparison when no cluster is
-present rather than blocking all chart bumps.
+Determined and fixed on 2026-08-13, and the framing of "when no cluster is
+present" was too generous. `update-versions.sh` always invokes
+`check-component-version.sh --execute --ci`, and `--ci` forces `CLUSTER_OK=0`,
+which sets all twelve `DEPLOYED_*` values to `Unavailable`. The deployed read was
+therefore never going to succeed for the charts domain on any host, cluster or
+not.
+
+`component_status_code` tested `deployed == "Unavailable"` before it tested for
+an available update, so that branch swallowed every row. It now degrades to a
+version-only comparison: a codebase pin behind upstream reports
+`update_available`, and `deployed_unavailable` is reserved for rows where there
+is genuinely nothing to say. Verified against this document's own table:
+
+```text
+argo-cd chart    10.2.1   10.3.0   update available
+otel-collector   0.165.0  0.168.0  update available
+prometheus chart 29.20.0  29.21.0  update available
+```
 
 ## 7. Backstage Is Outside The Supply-Chain Policy
 
@@ -167,6 +458,53 @@ defaults to `false` like `enable_apim_simulator`, and both Launchpad tiles are
 gated behind `ENABLE_BACKSTAGE`. Remaining options for the dependency tree
 itself: repair the lockfile so it can be audited, extract Backstage to its own
 repository, or drop it.
+
+### Resolved 2026-08-14: the lockfile was never broken
+
+Decision taken: repair the lockfile so the tree can be audited, keeping
+Backstage in-repo. It turned out there was nothing wrong with the lockfile.
+
+`apps/backstage/yarn.lock` is a valid 1.2MB Yarn Berry v8 lockfile. The audit
+could not read it for two independent reasons, both in
+`check-component-version.sh` rather than in Backstage:
+
+1. **Only `bun.lock` was understood.** `emit_js_dependency_rows_for_package_json`
+   called `bun_lock_resolved_version` and nothing else, so a Yarn Berry
+   lockfile resolved no versions at all.
+2. **The lookup never left the package directory.** It resolved
+   `<dirname package.json>/bun.lock`. Backstage is a Yarn *workspace*
+   (`packages/*`, `plugins/*`), and workspace members carry a `package.json`
+   but no lockfile of their own — the single resolved lockfile is at the
+   workspace root. Fixing only (1) would still have missed
+   `packages/{app,backend}`, which is where the ~60 reported packages live.
+
+`lockfile missing or unverified` is emitted whenever `current` comes back
+empty, so both faults presented identically and neither pointed at its cause.
+
+The fix adds `yarn_lock_resolved_version` (Yarn Berry format, handling the
+comma-separated multi-spec entry keys) and `js_lock_resolved_version`, which
+tries `bun.lock` then `yarn.lock` and walks up towards `REPO_ROOT`, stopping at
+the boundary so a lookup can never pick up a lockfile outside the repository.
+
+Result across `apps/backstage` and both workspace members:
+
+```text
+direct deps checked: 81
+now resolved:        81
+still unresolved:   none
+```
+
+All 81 are now version-checked and cooldown-gated like every other dependency,
+so the policy covers the largest JS tree in the repo. Covered by three tests in
+`kubernetes/kind/tests/check-version.bats`, including a prefix-collision case
+(`prefix` must not match `prefix-collide`) and the repo-root boundary.
+
+Two things this does **not** do, both still open if you want them:
+
+- `apps/backstage/.yarn/releases/yarn-4.4.1.cjs` is still a large vendored
+  binary in-tree. That is a separate question from auditability.
+- Extraction and removal remain available. This closes the audit gap, which was
+  the reason the section existed, but it does not settle what the repo is for.
 
 ## 8. Substrate Strategy
 
@@ -186,17 +524,67 @@ Slicer is removed but remnants persist:
 Note the operator has a `slicer` binary installed on the Linux host, so confirm
 intent before purging rather than assuming the removal still stands.
 
+### Decided 2026-08-14: keep both, change nothing
+
+Operator's call on both parts: `kubernetes/docker-desktop/` stays, and the
+Slicer remnants stay. No code moves.
+
+This closes the section as a decision, not as an implementation. The remnants
+listed above are inert, and leaving them costs nothing beyond the confusion of
+reading them, so revisit only if that confusion actually bites. Do not treat
+the remnants as evidence of intent in future passes: they persist because
+removing them was declined, not because it was overlooked.
+
 ## 9. Repo Hygiene And Onboarding
 
-- An empty tracked file named `cp` sits at the repo root, committed in #164 —
-  a mistyped `cp .env.example .env`.
-- `.playwright-mcp/` holds twenty-odd tracked console and page logs from
-  2026-04-27. Should be gitignored.
-- `.skill-loop-progress.md` is a 105KB tracked working file.
-- There is no `make init-env`. The README implies `.env` is just a copy of
-  `.env.example`, but `OAUTH2_PROXY_COOKIE_SECRET` must be hand-generated and
-  stage 100 hard-fails without it. A target that writes `.env` with a generated
-  cookie secret would remove a silent onboarding trap.
+All four done on 2026-08-13.
+
+- The empty tracked `cp` file at the repo root, committed in #164 as a mistyped
+  `cp .env.example .env`, is removed.
+- `.playwright-mcp/` was already in `.gitignore`, but its twenty-odd console and
+  page logs from 2026-04-27 were still tracked, which is why the ignore rule had
+  no effect. They are untracked now and remain on disk.
+- `.skill-loop-progress.md` is untracked and added to `.gitignore`.
+- `make init-env` writes `.env` from `.env.example` and generates
+  `OAUTH2_PROXY_COOKIE_SECRET` along with the two demo passwords, which were the
+  same trap one step further on. It never overwrites a value that is already
+  set, so it is safe to re-run against a configured `.env`, and it fills only
+  keys that are present but empty. The README now points at it instead of
+  `cp .env.example .env`.
+
+### Correction 2026-08-14: `cp` had a generator, and it is still in the tree
+
+The removal above would not have held. `cp` reappeared at the repo root during
+this session, and `make test-ci` recreates it on every run — so the staged
+deletion was being silently undone.
+
+The cause is not the #164 typo but a stray line continuation in
+`kubernetes/kind/tests/sync-gitea-policies.bats`. A `touch` argument list ended
+with a trailing `\`, so it swallowed the following `cp` command:
+
+```bash
+    "${stack_dir}/apps/.../referencegrant-hubble.yaml" \
+  cp "${stack_dir}/apps/platform-gateway-routes/httproute-agentgateway-ai-gateway.yaml" \
+    "${stack_dir}/apps/.../httproute-agentgateway-ai-gateway.yaml"
+```
+
+Bash read that as `touch <7 paths> cp <src> <dst>`. Two consequences, only the
+first of which was visible:
+
+- an empty file named `cp` was created in the working directory, which is the
+  repo root
+- **the copy never ran.** The SSO `httproute-agentgateway-ai-gateway.yaml` was
+  being created empty by `touch` rather than copied, so the fixture that two
+  agentgateway tests render against was not the file the test claims to set up
+
+The suite passed either way, which is why it went unnoticed — the assertions
+never depended on that file's contents. Fixed by deleting the trailing
+backslash; `sync-gitea-policies.bats` is 47/47 and no longer leaves a stray
+`cp` behind.
+
+Worth noting for section 1: this is a case the safety net could not catch,
+because the defect was *in* the safety net and its only outward symptom was an
+untracked file nobody attributed to a test.
 
 ## 10. Credential Hygiene On Linux
 
@@ -206,8 +594,151 @@ a file-backed helper; the Linux equivalent is
 `docker-credential-secretservice` or `docker-credential-pass`, and the
 prerequisites documentation should say so.
 
+Documented on 2026-08-13 in `kubernetes/kind/README.md`, which previously
+covered only the macOS and Docker Desktop side of this. Both the Linux helper
+options and the `dhi.io` account facts below are now recorded there.
+
 Worth recording, because it cost real time: **`dhi.io` authenticates with an
 ordinary Docker Hub account.** There is no separate registration and no paid
 tier for the core images. A `docker login dhi.io` failure is almost always
 either a missing `dhi.io` entry in `config.json` or a password being used where
 the account requires a personal access token.
+
+## 11. The Host Alias Does Not Survive A Restart
+
+Found on 2026-08-13 while confirming the cluster state above, and it is the
+first table row showing up again in a new place.
+
+The stage 900 cluster was up but degraded: 77 pods Running and 12 in
+`ImagePullBackOff`, every one of them pulling from
+`host.docker.internal:5002`. Inside the nodes the name did not resolve at all:
+
+```text
+$ docker exec kind-local-control-plane getent hosts host.docker.internal
+(no output)
+```
+
+`ensure-node-host-alias.sh` exists for exactly this and works correctly. The gap
+is when it runs. It is wired into `plan`, `apply` and `start-kind`, but the node
+containers had been restarted outside those paths (containers up 8 minutes,
+nodes 28 hours old), and a kind node's `/etc/hosts` does not survive a container
+restart. Nothing re-applied the alias, and nothing reported it either:
+`make status` showed the cluster running.
+
+Running the existing target repaired it, and the cluster returned to the
+baseline recorded at the top of this document:
+
+```shell
+make -C kubernetes/kind ensure-node-host-alias
+# OK   host.docker.internal -> 172.18.0.1 added to 2 kind node(s)
+# 89 pods Running, zero unhealthy
+```
+
+So the fix is only a question of where to call it. Options, cheapest first:
+
+- call it from `prereqs`, which operators already run first, and which the
+  script is designed for: it is idempotent and a no-op on Docker Desktop
+- have `check-health` report an unresolvable alias instead of leaving the
+  failure to show up as twelve unexplained `ImagePullBackOff` pods
+
+Not done here, because it changes what a target does rather than fixing a
+defect, and the wiring choice is a judgement call about which target owns this.
+
+### Second occurrence, 2026-08-14
+
+Reproduced by a host reboot, without any `make` target involved. Both node
+containers came back up with the alias gone:
+
+```text
+$ docker exec kind-local-control-plane getent hosts host.docker.internal
+(no output)      # same for kind-local-worker
+```
+
+`make -C kubernetes/kind ensure-node-host-alias` repaired it again. Two points
+this adds to the case above:
+
+- the trigger is a plain host reboot, which no operator would think of as a
+  cluster operation, so no existing entry path is crossed on the way back up
+- it recurs. This is not a one-off from an unusual container restart, it is the
+  steady-state behaviour of a kind node's `/etc/hosts` across any restart
+
+That makes the `prereqs` option the stronger of the two, and the `check-health`
+report worth having regardless: on this occasion the alias was gone *before*
+any workload noticed, and `make status` would again have reported the cluster
+as running.
+
+### Implemented 2026-08-14: both options, split by intent
+
+Repair and reporting are deliberately separate targets, because a diagnostic
+that silently mutates the cluster it is inspecting is worse than the bug.
+
+- `ensure-node-host-alias.sh` gains `--check`: reports per node, never writes,
+  exits 0 either way. It bypasses the `--execute` confirmation gate, which
+  exists to guard writes it does not perform.
+- `prereqs` calls `ensure-node-host-alias` (repair) after `ensure-kind-running`,
+  once the cluster is known up.
+- `check-health` calls the new `check-node-host-alias` target (report only),
+  which names the problem and prints the repair command:
+
+```text
+OK   host.docker.internal already resolves in 1 kind node(s)
+WARN host.docker.internal does not resolve in 1 kind node(s); images referencing it cannot be pulled
+WARN repair: make -C kubernetes/kind ensure-node-host-alias
+```
+
+Verified against the live cluster by deleting the alias from one node, running
+the report (which flagged it and left the node untouched), then repairing.
+Covered by `kubernetes/kind/tests/ensure-node-host-alias.bats`, which had no
+tests before this.
+
+Note `/etc/hosts` in a kind node is a bind mount, so `sed -i` fails with
+`Device or resource busy`. Rewrite it in place instead:
+
+```shell
+docker exec <node> sh -c "grep -v host.docker.internal /etc/hosts > /tmp/h && cat /tmp/h > /etc/hosts"
+```
+
+## 12. `make -n` Is Not A Dry Run Here
+
+Found on 2026-08-14 by running it and applying the stack by accident.
+
+`make -C kubernetes/kind --just-print 900 apply AUTO_APPROVE=1` performs a real
+apply. It took the state lock, ran to completion, and failed a concurrent
+operator-initiated apply with:
+
+```text
+Error: Error acquiring the state lock
+Operation: OperationTypeApply
+Who:       nick@L450
+```
+
+This is documented GNU make behaviour, not a bug in make. From the manual, on
+`-n`, `-t` and `-q`:
+
+> the `-n`, `-t`, and `-q` options do not affect recipe lines that begin with
+> `+` characters or contain the strings `$(MAKE)` or `${MAKE}`.
+
+The `apply` recipe is a single backslash-continued shell block, and that block
+contains `$(MAKE)` in four places (`check-platform-env`, a nested
+`apply STAGE=100`, `check-kind-host-ports`, `ensure-image-cache`). Make treats
+the whole continued block as one recipe line, sees `$(MAKE)` in it, and exempts
+the entire thing from `-n`. Everything else in the block — including the
+terragrunt invocation — executes for real.
+
+`plan` has the same shape, so the same applies there.
+
+The consequence worth stating plainly: the one command an operator would reach
+for to preview a destructive target is the command that performs it, and it
+gives no warning that it did.
+
+Not fixed here, because the options differ in what they change:
+
+- move the terragrunt invocation behind its own `$(MAKE)` sub-target, so the
+  block containing it no longer needs `$(MAKE)` inline and `-n` behaves
+- add an explicit `preview` target that is honestly read-only, and have the
+  Makefile refuse `--just-print` on `plan`/`apply` with a message pointing at it
+- leave it and document it, on the grounds that `plan` already exists as the
+  intended preview path
+
+The second is the smallest change that removes the sharp edge. The first is the
+correct one. This needs a decision, not an implementation.

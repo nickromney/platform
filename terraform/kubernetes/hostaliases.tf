@@ -67,7 +67,7 @@ resource "null_resource" "wait_headlamp_deployment" {
       ns="${kubernetes_namespace_v1.headlamp[0].metadata[0].name}"
       for i in {1..300}; do
         if kubectl -n "${kubernetes_namespace_v1.headlamp[0].metadata[0].name}" get deploy headlamp >/dev/null 2>&1; then
-          kubectl -n "${kubernetes_namespace_v1.headlamp[0].metadata[0].name}" rollout status deploy/headlamp --timeout=600s
+          kubectl -n "${kubernetes_namespace_v1.headlamp[0].metadata[0].name}" rollout status deploy/headlamp --timeout=${local.platform_wait_seconds.rollout_long}s
           exit 0
         fi
         sleep 2
@@ -100,7 +100,7 @@ resource "null_resource" "wait_langfuse_web_deployment" {
 
       for i in {1..300}; do
         if kubectl -n "${kubernetes_namespace_v1.langfuse[0].metadata[0].name}" get deploy langfuse-web >/dev/null 2>&1; then
-          kubectl -n "${kubernetes_namespace_v1.langfuse[0].metadata[0].name}" rollout status deploy/langfuse-web --timeout=600s
+          kubectl -n "${kubernetes_namespace_v1.langfuse[0].metadata[0].name}" rollout status deploy/langfuse-web --timeout=${local.platform_wait_seconds.rollout_long}s
           exit 0
         fi
         sleep 2

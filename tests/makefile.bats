@@ -165,7 +165,9 @@ exit 127
 EOF
   chmod +x "${test_bin}/podman"
 
-  run env PATH="${test_bin}:${PATH}" PLATFORM_ENV_FILE="${BATS_TEST_TMPDIR}/missing.env" make -C "${REPO_ROOT}" status STATUS_FORMAT=json PLATFORM_STATUS_SCRIPT="${status_stub}"
+  # --no-print-directory keeps make's "Entering directory" line out of the exact
+  # JSON match below.
+  run env PATH="${test_bin}:${PATH}" PLATFORM_ENV_FILE="${BATS_TEST_TMPDIR}/missing.env" make --no-print-directory -C "${REPO_ROOT}" status STATUS_FORMAT=json PLATFORM_STATUS_SCRIPT="${status_stub}"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == '{"overall_state":"idle"}' ]]

@@ -54,6 +54,8 @@ SYNC_LOCAL_IMAGE_CACHE := $(K8S_SCRIPTS_DIR)/sync-local-image-cache.sh
 RENDER_OPERATOR_OVERRIDES := $(SCRIPTS_DIR)/render-operator-overrides.sh
 DELETE_KIND_CLUSTER := $(SCRIPTS_DIR)/delete-kind-cluster.sh
 ENSURE_NODE_HOST_ALIAS := $(SCRIPTS_DIR)/ensure-node-host-alias.sh
+CHECK_POLICY_DRIFT := $(STACK_DIR)/scripts/check-policy-drift.sh
+INSTALL_HOST_ALIAS_TIMER := $(SCRIPTS_DIR)/install-host-alias-timer.sh
 RESOLVE_TFVAR_VALUE := $(K8S_SCRIPTS_DIR)/resolve-tfvar-value.sh
 TEST_IDEMPOTENCE := $(K8S_SCRIPTS_DIR)/test-idempotence.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
@@ -128,7 +130,7 @@ VALID_STAGE_HELPERS := $(KUBERNETES_STAGE_READONLY_HELPERS)
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state state-snapshot state-restore check-stage-monotonicity check-docker-daemon check-memory check-kind-state ensure-kind-running ensure-node-host-alias check-kubeconfig check-kind-host-ports check-lima-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status dhi-creds-offline docker-health docker-prune-estimate docker-safe-clean memory-report stop-kind stop start-kind start prereqs playwright-install image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state state-snapshot state-restore check-stage-monotonicity check-docker-daemon check-memory check-kind-state ensure-kind-running ensure-node-host-alias check-node-host-alias check-policy-drift install-host-alias-timer uninstall-host-alias-timer check-kubeconfig check-kind-host-ports check-lima-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status dhi-creds-offline docker-health docker-prune-estimate docker-safe-clean memory-report stop-kind stop start-kind start prereqs playwright-install image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 MAKE_UNKNOWN_GOAL_GUARD_DEFER_GOALS := $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
@@ -161,6 +163,10 @@ export PLATFORM_PROFILE_ENABLE_PLUGIN_CACHE
 export PLATFORM_PROFILE_PLUGIN_CACHE_DIR
 export TF_VAR_gitea_admin_pwd ?= $(PLATFORM_ADMIN_PASSWORD)
 export TF_VAR_gitea_member_user_pwd ?= $(PLATFORM_DEMO_PASSWORD)
+# Slow hosts raise this instead of editing readiness waits in individual .tf
+# files. preload-images.sh already exposes its own timeout knobs separately.
+PLATFORM_TIMEOUT_SCALE ?= 1
+export TF_VAR_platform_timeout_scale := $(PLATFORM_TIMEOUT_SCALE)
 
 ifeq ($(filter $(KIND_PRELOAD_IMAGES_MODE),$(VALID_HELPER_MODES)),)
 $(error Invalid KIND_PRELOAD_IMAGES_MODE="$(KIND_PRELOAD_IMAGES_MODE)". Expected one of: $(VALID_HELPER_MODES))
@@ -299,6 +305,7 @@ help:
 	@echo "  OIDC_RECOVERY_FORMAT=text|json                       -> render the OIDC recovery exercise as human text or machine-readable JSON (default: text)"
 	@echo "  OIDC_RECOVERY_FORCE_MODE=nginx-rollout               -> controlled perturbation used to force the explicit recovery branch (default: nginx-rollout)"
 	@echo "  PLATFORM_PROFILE_MODE=off|on|trace                   -> capture apply/plan timings and logs under $(DISPLAY_PLATFORM_PROFILE_DIR)"
+	@echo "  PLATFORM_TIMEOUT_SCALE=1|2|3                         -> multiply readiness waits for slower hosts (default: 1)"
 
 .PHONY: check-stage-monotonicity
 check-stage-monotonicity:
@@ -463,6 +470,32 @@ ensure-node-host-alias:
 	@TARGET_CLUSTER_NAME="$${TARGET_CLUSTER_NAME:-kind-local}" \
 	KIND_CLUSTER_NAME="$${TARGET_CLUSTER_NAME:-kind-local}" \
 	"$(ENSURE_NODE_HOST_ALIAS)" $(READONLY_MODE_FLAG)
+
+# Installs a user systemd timer that re-applies the node host alias, so a host
+# reboot self-repairs without any target being run. Opt-in: it writes units into
+# the operator's ~/.config/systemd/user.
+.PHONY: install-host-alias-timer
+install-host-alias-timer:
+	@"$(INSTALL_HOST_ALIAS_TIMER)" $(READONLY_MODE_FLAG)
+
+.PHONY: uninstall-host-alias-timer
+uninstall-host-alias-timer:
+	@"$(INSTALL_HOST_ALIAS_TIMER)" --uninstall $(READONLY_MODE_FLAG)
+
+# Compares live Cilium policies against the rendered source. Read-only, and the
+# only reliable signal that a policy change actually landed: a cached Helm index
+# lets an Application read Synced on an allowlist that no longer permits it.
+.PHONY: check-policy-drift
+check-policy-drift:
+	@KUBECONFIG="$(KUBECONFIG_PATH)" "$(CHECK_POLICY_DRIFT)" --execute
+
+# Report-only counterpart to ensure-node-host-alias, for diagnostics that must
+# not change the cluster they are inspecting.
+.PHONY: check-node-host-alias
+check-node-host-alias:
+	@TARGET_CLUSTER_NAME="$${TARGET_CLUSTER_NAME:-kind-local}" \
+	KIND_CLUSTER_NAME="$${TARGET_CLUSTER_NAME:-kind-local}" \
+	"$(ENSURE_NODE_HOST_ALIAS)" --check
 
 .PHONY: ensure-kind-running
 ensure-kind-running:
@@ -666,7 +699,8 @@ apply: workflow-validate-stage
 	@$(MAKE) check-conflicting-clusters-stopped
 	@$(MAKE) check-docker-daemon && $(MAKE) check-kind-state
 	@$(MAKE) ensure-kind-running
-	@$(MAKE) ensure-node-host-alias
+# ensure-node-host-alias is not repeated here: prereqs above now owns it.
+# plan and start-kind still call it directly, because neither runs prereqs.
 	@$(MAKE) check-kubeconfig >/dev/null
 	@set -euo pipefail; \
 	. "$(PROFILE_LIB)"; \
@@ -829,6 +863,8 @@ readiness: ## Check operator and variant readiness
 check-health: workflow-validate-stage
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
 	@$(MAKE) assert-kind-active >/dev/null
+	@$(MAKE) check-node-host-alias
+	@$(MAKE) check-policy-drift
 	@$(MAKE) render-operator-overrides >/dev/null
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
 		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
@@ -1272,6 +1308,7 @@ prereqs:
 		echo ""; \
 	fi; \
 	$(MAKE) ensure-kind-running; \
+	$(MAKE) ensure-node-host-alias; \
 	$(MAKE) check-kubeconfig
 
 .PHONY: preload-images

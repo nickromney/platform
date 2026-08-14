@@ -32,7 +32,7 @@ images="$(
 )"
 
 image_count="$(printf '%s\n' "${images}" | awk 'NF {count++} END {print count+0}')"
-image_set_sha="$(printf '%s\n' "${images}" | awk 'NF' | shasum -a 256 | awk '{print $1}')"
+image_set_sha="$(printf '%s\n' "${images}" | awk 'NF' | LC_ALL=C shasum -a 256 | awk '{print $1}')"
 
 jq -cn \
   --arg image_set_sha "${image_set_sha}" \

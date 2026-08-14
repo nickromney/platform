@@ -118,7 +118,7 @@ for attempt in $(seq 1 60); do
       cluster_ip=""
     fi
     keys_b64="$(printf '%s\n' "${keys}" | base64 | tr -d '\n')"
-    keys_sha1="$(printf '%s\n' "${keys}" | shasum -a 1 | awk '{print $1}')"
+    keys_sha1="$(printf '%s\n' "${keys}" | LC_ALL=C shasum -a 1 | awk '{print $1}')"
     jq -n \
       --arg cluster_ip "${cluster_ip}" \
       --arg keys_b64 "${keys_b64}" \

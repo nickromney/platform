@@ -48,6 +48,9 @@ oci-cache/
 # Generated local stack files
 **/kind-config.yaml
 
+# Local working files
+.skill-loop-progress.md
+
 # Env files
 /.env
 .env

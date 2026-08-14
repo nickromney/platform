@@ -607,6 +607,10 @@ replace_literal() {
   mv "${out}" "${file}"
 }
 
+# LC_ALL=C on every perl rewrite in this script is deliberate. They are all
+# byte-level substitutions where locale carries no meaning, but perl warns on a
+# host whose configured locale is not installed, and those warnings reach stdout
+# of the rendering helpers and corrupt the rendered output.
 replace_literal_block() {
   local file="$1"
   local from="$2"
@@ -614,7 +618,7 @@ replace_literal_block() {
 
   [[ -f "${file}" ]] || return 0
 
-  FILE_PATH="${file}" FROM_LITERAL="${from}" TO_LITERAL="${to}" perl -0pi -e '
+  FILE_PATH="${file}" FROM_LITERAL="${from}" TO_LITERAL="${to}" LC_ALL=C perl -0pi -e '
     my $from = $ENV{"FROM_LITERAL"};
     my $to = $ENV{"TO_LITERAL"};
     s/\Q$from\E/$to/g;
@@ -2187,12 +2191,12 @@ configure_subnetcalc_direct_api() {
   ! is_true "${ENABLE_SUBNETCALC_APIM_GATEWAY}" || return 0
 
   if [[ -f "${workloads_file}" ]]; then
-    perl -0pi -e 's|(name: subnetcalc-router-nginx.*?proxy_pass )http://subnetcalc-apim-simulator\.apim\.svc\.cluster\.local:8000;|${1}http://subnetcalc-api:8000;|s' "${workloads_file}"
-    perl -0pi -e 's|("Subnet router","detail":"dev/uat nginx router","role":"Routes UI and API traffic"},\{"label":")APIM simulator","detail":"apim/subnetcalc-apim-simulator","role":"Gateway auth, policy, tracing"|${1}Subnetcalc API","detail":"subnetcalc-api service","role":"Direct local IDP sample API"|g' "${workloads_file}"
+    LC_ALL=C perl -0pi -e 's|(name: subnetcalc-router-nginx.*?proxy_pass )http://subnetcalc-apim-simulator\.apim\.svc\.cluster\.local:8000;|${1}http://subnetcalc-api:8000;|s' "${workloads_file}"
+    LC_ALL=C perl -0pi -e 's|("Subnet router","detail":"dev/uat nginx router","role":"Routes UI and API traffic"},\{"label":")APIM simulator","detail":"apim/subnetcalc-apim-simulator","role":"Gateway auth, policy, tracing"|${1}Subnetcalc API","detail":"subnetcalc-api service","role":"Direct local IDP sample API"|g' "${workloads_file}"
   fi
 
   if [[ -f "${policy_file}" ]]; then
-    perl -0pi -e '
+    LC_ALL=C perl -0pi -e '
       s/The router sends browser API traffic through the shared APIM simulator\./The router sends browser API traffic directly to the subnetcalc API./g;
       s/The subnetcalc API receives browser traffic only from the shared APIM simulator\./The subnetcalc API receives browser traffic only from the subnetcalc router./g;
       s/"k8s:io\.kubernetes\.pod\.namespace": apim\n//g;
@@ -2229,7 +2233,7 @@ EOF
   fi
 
   if ! grep -Fq "subnetcalc-frontend-canary-service.yaml" "${kustomization_file}"; then
-    perl -0pi -e 's|(resources:\n(?:  - .+\n)+)|${1}  - subnetcalc-frontend-canary-service.yaml\n|' "${kustomization_file}"
+    LC_ALL=C perl -0pi -e 's|(resources:\n(?:  - .+\n)+)|${1}  - subnetcalc-frontend-canary-service.yaml\n|' "${kustomization_file}"
   fi
 
   if grep -Eq '^patches:' "${kustomization_file}"; then

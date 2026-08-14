@@ -114,6 +114,10 @@ spec:
     repository that remains outside the in-cluster Gitea mirror during
     bootstrap: dl.gitea.io. Include a DNS L7 rule so Cilium can observe and
     cache the hostname resolution for this FQDN-pinned destination.
+    dl.gitea.io redirects to dl.gitea.com, so both names must be allowed: an
+    FQDN allowlist applies to the redirect target as well as the name that was
+    requested, and omitting it drops the follow-up connection with no error
+    beyond a timeout.
   endpointSelector:
     matchLabels:
       "k8s:io.kubernetes.pod.namespace": argocd
@@ -134,6 +138,10 @@ spec:
               - matchPattern: "*"
     - toFQDNs:
         - matchName: dl.gitea.io
+        # dl.gitea.io 301s to this host; helm follows the redirect, so without
+        # it the chart index fetch hangs until Argo's manifest generation
+        # deadline and the Application sits at sync=Unknown, health=Healthy.
+        - matchName: dl.gitea.com
       toPorts:
         - ports:
             - port: "443"

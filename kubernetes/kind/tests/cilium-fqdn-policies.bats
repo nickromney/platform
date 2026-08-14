@@ -36,6 +36,16 @@ EOF
   ! grep -Fq 'matchPattern: "*.microsoftonline.com"' "${policy}"
 }
 
+@test "repo-server helm egress allows the gitea chart host and its redirect target" {
+  policy="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/argocd-hardened.yaml"
+
+  # dl.gitea.io 301s to dl.gitea.com. Allowing only the requested name lets the
+  # redirect hit a denied destination, and helm reports nothing but a timeout,
+  # leaving the gitea Application at sync=Unknown.
+  grep -Fq "matchName: dl.gitea.io" "${policy}"
+  grep -Fq "matchName: dl.gitea.com" "${policy}"
+}
+
 @test "rendered Cilium policy set no longer includes the shared Cloudflare policy" {
   run kubectl kustomize "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium"
 

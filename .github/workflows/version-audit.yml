@@ -21,6 +21,62 @@ jobs:
         with:
           node-version: 22
 
+      # The audit scripts need uv (repo guard) and helm (component guard). Both
+      # are pinned from the files that already own those versions rather than
+      # restated here, so this workflow cannot drift from the devcontainer.
+      - name: Resolve pinned tool versions
+        id: tool-versions
+        run: |
+          set -euo pipefail
+
+          uv_version="$(
+            sed -nE 's#^COPY --from=ghcr.io/astral-sh/uv:([^ ]+).*#\1#p' \
+              .devcontainer/Dockerfile
+          )"
+          [ -n "${uv_version}" ] || { echo "could not resolve uv version" >&2; exit 1; }
+
+          source .devcontainer/toolchain-versions.sh
+          helm_version=""
+          for entry in "${DEVCONTAINER_ARKADE_TOOLS[@]}"; do
+            if [[ "${entry%%=*}" == "helm" ]]; then
+              helm_version="${entry#*=}"
+              break
+            fi
+          done
+          [ -n "${helm_version}" ] || { echo "could not resolve helm version" >&2; exit 1; }
+
+          printf 'uv=%s\n' "${uv_version}" >> "${GITHUB_OUTPUT}"
+          printf 'helm=%s\n' "${helm_version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d  # v10.0.0
+        with:
+          version: ${{ steps.tool-versions.outputs.uv }}
+
+      - name: Install Helm
+        run: |
+          set -euo pipefail
+
+          case "$(uname -m)" in
+            x86_64|amd64) go_arch="amd64" ;;
+            aarch64|arm64) go_arch="arm64" ;;
+            *) printf 'unsupported architecture: %s\n' "$(uname -m)" >&2; exit 1 ;;
+          esac
+
+          helm_version="${{ steps.tool-versions.outputs.helm }}"
+          tmp_dir="$(mktemp -d)"
+          trap 'rm -rf "${tmp_dir}"' EXIT
+
+          curl -fsSL \
+            "https://get.helm.sh/helm-${helm_version}-linux-${go_arch}.tar.gz" \
+            | tar -xz -C "${tmp_dir}"
+          sudo install -m 0755 \
+            "${tmp_dir}/linux-${go_arch}/helm" \
+            /usr/local/bin/helm
+
+          uv --version
+          helm version --short
+
       - name: Run repo version guard
         run: make check-version
 
@@ -28,4 +84,8 @@ jobs:
         run: ./terraform/kubernetes/scripts/check-provider-version.sh --execute
 
       - name: Run Kubernetes stack version guard in CI mode
-        run: ./terraform/kubernetes/scripts/check-component-version.sh --execute --ci
+        # --strict fails the run when a dependency version cannot be established
+        # at all, rather than printing it as an ordinary row. Transient upstream
+        # lookups are tolerated; a missing lockfile entry never is, because that
+        # means the supply-chain policy silently does not cover the package.
+        run: ./terraform/kubernetes/scripts/check-component-version.sh --execute --ci --strict --allow-lookup-failures

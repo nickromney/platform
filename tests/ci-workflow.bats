@@ -19,9 +19,21 @@ expected = {
     "actions/setup-node": ("820762786026740c76f36085b0efc47a31fe5020", "v7.0.0"),
 }
 
-assert re.search(r"^on:\n  workflow_dispatch:\n\npermissions:\n", text, re.MULTILINE)
-assert "pull_request:" not in text
-assert "\n  push:" not in text
+# CI has to actually run on changes. This previously asserted the opposite, and
+# a dispatch-only workflow is exactly what let failing tests survive on main
+# unnoticed; see docs/plans/omarchy-portability-followups.md. The push trigger
+# matters alongside pull_request because those tests were failing on main.
+assert re.search(
+    r"^on:\n"
+    r"  workflow_dispatch:\n"
+    r"  pull_request:\n"
+    r"  push:\n"
+    r"    branches:\n"
+    r"      - main\n"
+    r"\npermissions:\n",
+    text,
+    re.MULTILINE,
+)
 assert re.search(r"^permissions:\n  contents: read\n", text, re.MULTILINE)
 assert "runs-on: ubuntu-latest" in text
 assert "run: make lint" in text

@@ -9,12 +9,17 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind-local}"
 HOST_ALIAS="${KIND_NODE_HOST_ALIAS:-host.docker.internal}"
 DOCKER_NETWORK="${KIND_DOCKER_NETWORK:-kind}"
+CHECK_ONLY=0
 
 usage() {
   cat <<EOF
-Usage: ${0##*/} [--name <cluster-name>] [--alias <hostname>] [--dry-run] [--execute]
+Usage: ${0##*/} [--name <cluster-name>] [--alias <hostname>] [--check] [--dry-run] [--execute]
 
 Ensures ${HOST_ALIAS} resolves to the host from inside the kind nodes.
+
+With --check the nodes are only reported on, never modified. Diagnostics use
+this so a missing alias is named directly rather than surfacing later as
+unexplained ImagePullBackOff pods. It reports and exits 0 either way.
 
 Docker Desktop injects that name automatically; Docker Engine on Linux does
 not. The platform points the host-local registry and several image references
@@ -51,6 +56,10 @@ while [[ $# -gt 0 ]]; do
       HOST_ALIAS="$2"
       shift 2
       ;;
+    --check)
+      CHECK_ONLY=1
+      shift
+      ;;
     *)
       shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
       exit 1
@@ -58,8 +67,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-shell_cli_maybe_execute_or_preview_summary usage \
-  "would ensure ${HOST_ALIAS} resolves inside the ${CLUSTER_NAME} kind nodes"
+# --check never writes, so it does not need the --execute confirmation gate.
+if [[ "${CHECK_ONLY}" -eq 0 ]]; then
+  shell_cli_maybe_execute_or_preview_summary usage \
+    "would ensure ${HOST_ALIAS} resolves inside the ${CLUSTER_NAME} kind nodes"
+fi
 
 command -v docker >/dev/null 2>&1 || { warn "docker not found in PATH; skipping host alias check"; exit 0; }
 command -v kind >/dev/null 2>&1 || { warn "kind not found in PATH; skipping host alias check"; exit 0; }
@@ -78,9 +90,15 @@ gateway="$(docker network inspect "${DOCKER_NETWORK}" \
 
 patched=0
 skipped=0
+missing=0
 for node in ${nodes}; do
   if docker exec "${node}" getent hosts "${HOST_ALIAS}" >/dev/null 2>&1; then
     skipped=$((skipped + 1))
+    continue
+  fi
+
+  if [[ "${CHECK_ONLY}" -eq 1 ]]; then
+    missing=$((missing + 1))
     continue
   fi
 
@@ -101,4 +119,8 @@ if [[ "${patched}" -gt 0 ]]; then
 fi
 if [[ "${skipped}" -gt 0 ]]; then
   ok "${HOST_ALIAS} already resolves in ${skipped} kind node(s)"
+fi
+if [[ "${missing}" -gt 0 ]]; then
+  warn "${HOST_ALIAS} does not resolve in ${missing} kind node(s); images referencing it cannot be pulled"
+  warn "repair: make -C kubernetes/kind ensure-node-host-alias"
 fi
