@@ -792,17 +792,113 @@ Makefiles suggests one root cause, not two.
 - **Not a stale `.env`.** The tests pass an explicit path, and the conditional
   `include` in `docker/compose/Makefile` is guarded by `wildcard`.
 
-### What the next attempt needs
+### Root cause: the recipe shell was never Bash
 
-The captured output, which bats does not print. It reports only the failed
-assertion, so the actual `make` output on the runner is unknown, and every
-local reproduction so far produces the passing output instead. Get that first:
-a temporary `echo "${output}"` in the test, or `--print-output-on-failure`, on
-a branch pushed for the purpose.
+Resolved on 2026-08-14. Everything above was true and none of it was the cause.
 
-Worth carrying section 1's lesson into it: a test in the hermetic subset that
-behaves differently on a runner than on a workstation is reading host state
-somewhere, and the interesting question is which piece.
+The captured output was the thing that settled it. Diagnostics were pushed on a
+branch, `ci.yml` was dispatched against it, and the runner printed this:
+
+```text
+make[1]: Entering directory '/home/runner/work/platform/platform/docker/compose'
+/bin/sh: 1: set: Illegal option -o pipefail
+make[2]: *** [../../mk/common.mk:62: check-platform-env-file] Error 2
+make[1]: *** [Makefile:33: prereqs] Error 2
+```
+
+Alongside it, `/bin/sh -> /usr/bin/dash` and `SHELL = /bin/sh`.
+
+`mk/common.mk` opened with `SHELL ?= /bin/bash`. That line never did anything.
+`?=` assigns only when a variable is undefined, and GNU make always has a
+`SHELL` defined — `$(origin SHELL)` reports `file`, not `undefined`, even in a
+makefile that never mentions it. So every Makefile including `mk/common.mk` ran
+its recipes under `/bin/sh`, and `check-platform-env-file` opens with
+`set -euo pipefail` and goes on to use arrays and `$${!name-}`.
+
+On Arch, `/bin/sh` is a symlink to Bash, so all of that works and the test
+passes. On Debian and Ubuntu — which is what `ubuntu-latest` is — `/bin/sh` is
+dash. dash has no `pipefail`, and an invalid option to a special builtin aborts
+the shell, so the recipe died on its first line. That is why the exit-status
+assertion passed while the message assertion did not: the target genuinely
+failed, just for a completely different reason than the test was describing.
+
+The blast radius was narrow only by luck. `SHELL := /bin/bash` was already
+spelled correctly in the root, kind, lima, devcontainer, sites/docs and
+experiments Makefiles; `mk/common.mk` was the single file using `?=`, and it is
+the include behind `docker/compose/Makefile` and every `apps/*/Makefile`.
+
+The fix is one character class: `SHELL := /bin/bash`. Two guards were added in
+`tests/makefile.bats` so the shape cannot come back — one asserting that a
+makefile including `mk/common.mk` gets a Bash recipe shell that accepts
+`pipefail`, and one asserting that no tracked makefile assigns `SHELL` with
+`?=` at all, since that assignment is always a silent no-op.
+
+This is section 1's lesson again, in its purest form: the hermetic test was
+reading host state, and the piece it was reading was what `/bin/sh` points at.
+A test that only ever runs on the machine that writes the code cannot see it.
+
+### The other two, and the two that replaced them
+
+The first and third failures on `main` (`root status supports json output` and
+`the reference variant owns the machine`) were fixed by #196 and are green.
+
+By the time this branch was cut, a different pair had gone red on `main`:
+
+```text
+not ok 108 CI workflow pins GitHub Actions and runs lint plus hermetic Bats
+not ok 341 version audit workflow pins GitHub Actions by SHA and runs lightweight audits
+```
+
+Dependabot's `actions/checkout` bump to v7.0.1 (#193) rewrote the pin in
+`version-audit.yml`, `release.yml` and one of the two occurrences in `ci.yml`,
+but not the second occurrence — the `macos-latest` job, which PR #196 added
+after the Dependabot branch was cut — and not the expected SHAs restated
+inside `tests/ci-workflow.bats`, `tests/version-audit-workflow.bats` and
+`tests/release-workflow.bats`. All five were brought to v7.0.1 here.
+
+Those tests assert the exact pin rather than merely that one exists, which is
+the right shape — it is what stops an unpinned action being added quietly to
+the workflow that audits supply-chain versions. The cost is that a Dependabot
+bump is only ever half a change until the tests move with it, and Dependabot
+cannot make that half. Expect this to recur on the next bump.
+
+### A gap this exposed: not every workflow test is in the gate
+
+`tests/release-workflow.bats` was red for the same reason and nothing caught
+it, because it is **not listed in `CI_BATS_TESTS` in the root `Makefile`**. It
+is fixed here, but it will drift red again unnoticed, and so will anything else
+added to `tests/` without being added to that list.
+
+Adding it is a one-line change, deliberately left out of the change that found
+it to keep that one reviewable. The broader question is worth asking with it:
+`CI_BATS_TESTS` is a hand-maintained list, so a new test file is outside the
+gate until someone remembers. An assertion that every `tests/*.bats` file is
+either listed or explicitly excluded would close the class rather than this one
+instance. That is section 1's thesis applied to the gate itself.
 
 That `main` is red at all belongs to section 1's thesis rather than this
 section's. The gate exists, it runs, and nobody is looking at the result.
+
+## 14. Recursive Make Noise In The Kind Stage Ladder
+
+Done on 2026-08-14.
+
+`kubernetes/kind/Makefile` now sets `MAKEFLAGS += --no-print-directory`. `apply`
+chains about fifteen recursive `$(MAKE)` calls and `prereqs` nests more, so a
+stage run was mostly `Entering directory` / `Leaving directory` with the real
+output threaded through it.
+
+The evidence that this is safe was already in the tree. Six test files were
+passing `--no-print-directory` at individual call sites purely to work around
+these lines, three of them with a comment saying so; section 1 records four test
+failures the lines caused; and nothing anywhere asserts that they are present.
+Setting it once in `MAKEFLAGS` also covers the sub-makes, which a per-call-site
+flag does not.
+
+The per-call-site workarounds are left in place. They are now redundant rather
+than wrong, and retiring them is a separate change that would touch six test
+files for no behavioural gain.
+
+The root `Makefile` was considered and deliberately left alone: every `$(MAKE)`
+in it already passes `--no-print-directory` explicitly, so there is nothing for
+the flag to fix there.

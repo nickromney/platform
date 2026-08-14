@@ -2,7 +2,17 @@ MAKEFLAGS += --no-builtin-rules
 .SUFFIXES:
 
 .DEFAULT_GOAL ?= help
-SHELL ?= /bin/bash
+
+# Recipes in this file and in every Makefile that includes it are Bash, not
+# POSIX sh: they use `set -o pipefail`, arrays, and `$${!name}`. That has to be
+# stated with `:=`, never `?=`. GNU make always has a SHELL defined, so `?=`
+# never fires and silently leaves recipes running under `/bin/sh`. On Arch,
+# `/bin/sh` is Bash and nothing breaks; on Debian and Ubuntu it is dash, which
+# aborts on `set -o pipefail` before the recipe can report anything. That is
+# what made check-platform-env fail on the CI runner with no error message
+# while passing on the workstation. See section 13 of
+# docs/plans/omarchy-portability-followups.md.
+SHELL := /bin/bash
 
 MAKE_HELP_WIDTH ?= 24
 MAKE_KNOWN_GOALS ?=
