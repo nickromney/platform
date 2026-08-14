@@ -983,6 +983,30 @@ known rather than guessed.
 `tests/release-workflow.bats` -- the file whose silent redness started section
 15 -- passed and is now guarded.
 
+### Closing the gap immediately found more of the section 13 bug
+
+`tests/langfuse-demos.bats` passed locally and failed in CI on:
+
+```text
+/bin/sh: 1: set: Illegal option -o pipefail
+```
+
+That is the section 13 defect again. The fix there pinned `SHELL := /bin/bash`
+in `mk/common.mk`, but `mk/go-app-core.mk` pinned nothing at all, so the **eight
+app Makefiles that include it** were running recipes under `/bin/sh` the whole
+time. Bash on Arch, dash on the runner, so it could only ever be seen in CI --
+and the tests that would have seen it were the ones outside the gate.
+
+The gap was hiding instances of the bug the gate was fixed to catch. That is the
+clearest argument in this document for closing it.
+
+The guard from section 13 did not catch this, because it only banned
+`SHELL ?=`, the assignment that never fires. It said nothing about pinning no
+`SHELL` at all, which fails identically. A second guard now checks each
+top-level Makefile and its direct includes: if anything in that chain uses Bash
+syntax, something in it must pin `SHELL :=`. Verified by removing the pin from
+`mk/go-app-core.mk` and watching it fail.
+
 ### The gate had an assertion requiring the gap
 
 Adding the 11 broke `root test-ci delegates to the explicit hermetic Bats
