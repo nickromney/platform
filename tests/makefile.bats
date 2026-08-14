@@ -367,10 +367,15 @@ EOF
   [[ "${output}" == *"tests/git-hooks.bats"* ]]
   [[ "${output}" == *"tests/makefile.bats"* ]]
   [[ "${output}" == *"tests/version-audit-workflow.bats"* ]]
-  [[ "${output}" != *"tests/app-healthcheck-commands.bats"* ]]
+  # Absence assertions name only files still in the ci-test-gate backlog. They
+  # exist to prove test-ci runs an explicit list rather than a glob -- not to
+  # keep files out of CI. app-healthcheck-commands and release-workflow were
+  # asserted absent here until 2026-08-14, which meant this test required the
+  # very gap that let release-workflow go red unnoticed. Remove a name from
+  # this list when its file joins CI_BATS_TESTS; do not keep the file out to
+  # satisfy the test.
   [[ "${output}" != *"tests/platform-workflow-ui.bats"* ]]
   [[ "${output}" != *"tests/release-script.bats"* ]]
-  [[ "${output}" != *"tests/release-workflow.bats"* ]]
   [[ "${output}" != *"tests/smoke-sentiment-api-image.bats"* ]]
 
   run bash -c 'tr " " "\n" <"$1" | LC_ALL=C sort -c' bash "${log_file}"
