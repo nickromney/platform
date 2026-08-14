@@ -1,6 +1,13 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
+# apply chains about fifteen recursive $(MAKE) calls and prereqs nests more, so
+# without this a normal stage run is mostly "Entering directory" / "Leaving
+# directory" and the operator has to read past it to find the actual output.
+# Setting it here rather than at each call site also covers the sub-makes, which
+# is why six test files were passing --no-print-directory by hand.
+MAKEFLAGS += --no-print-directory
+
 STACK_DIR := ../../terraform/kubernetes
 STACK_RUNTIME_SCOPE := kind
 STACK_RUNTIME_DIR := $(abspath $(STACK_DIR)/.run/$(STACK_RUNTIME_SCOPE))
