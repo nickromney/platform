@@ -260,7 +260,7 @@ resource "null_resource" "kind_restart_containerd_on_registry_config_change" {
         '
       else
         echo "Waiting for nodes to become Ready..."
-        timeout 240 kubectl wait --for=condition=Ready nodes --all --timeout=180s >/dev/null
+        timeout ${local.platform_wait_seconds.node_ready_wrap} kubectl wait --for=condition=Ready nodes --all --timeout=${local.platform_wait_seconds.node_ready}s >/dev/null
       fi
     EOT
     environment = {

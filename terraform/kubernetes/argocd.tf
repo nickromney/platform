@@ -26,7 +26,7 @@ resource "helm_release" "argocd" {
   create_namespace = false
 
   wait    = true
-  timeout = 1800
+  timeout = local.platform_wait_seconds.helm_release
 
   values = [yamlencode(local.argocd_values)]
 

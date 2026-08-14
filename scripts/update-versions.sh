@@ -415,6 +415,10 @@ tool_rows() {
   done < "${TOOLCHAIN_SOURCES_FILE}"
 }
 
+# LC_ALL=C on the perl rewrites below is deliberate. These are byte-level pin
+# substitutions where locale carries no meaning, but perl warns loudly on any
+# host whose configured locale is not installed (common on a fresh Arch box).
+# Those warnings land on stderr mid-report and corrupt machine-readable output.
 update_toolchain_pin() {
   local pin="$1"
   local latest="$2"
@@ -423,12 +427,12 @@ update_toolchain_pin() {
   case "${pin}" in
     ARKADE:*)
       tool_name="${pin#ARKADE:}"
-      TOOL_NAME="${tool_name}" LATEST_VERSION="${latest}" perl -0pi -e \
+      TOOL_NAME="${tool_name}" LATEST_VERSION="${latest}" LC_ALL=C perl -0pi -e \
         's/^(\s*"\Q$ENV{TOOL_NAME}\E=)[^"]+(")/$1$ENV{LATEST_VERSION}$2/m' \
         "${TOOLCHAIN_VERSIONS_FILE}"
       ;;
     *)
-      PIN_NAME="${pin}" LATEST_VERSION="${latest}" perl -0pi -e \
+      PIN_NAME="${pin}" LATEST_VERSION="${latest}" LC_ALL=C perl -0pi -e \
         's/^(\Q$ENV{PIN_NAME}\E="\$\{\Q$ENV{PIN_NAME}\E:-)[^"]+(\}")/$1$ENV{LATEST_VERSION}$2/m' \
         "${TOOLCHAIN_VERSIONS_FILE}"
       ;;
@@ -437,6 +441,11 @@ update_toolchain_pin() {
 
 apply_tools() {
   local tool source pin current latest status eligible_date applied=0 skipped=0
+
+  # Checked up front rather than at first use: update_toolchain_pin rewrites the
+  # pin file in place, one pin per iteration, so discovering a missing perl
+  # midway would leave the toolchain file partially rewritten.
+  require perl || return 1
 
   while IFS=$'\t' read -r tool source pin; do
     [[ -n "${tool}" && "${tool}" != \#* ]] || continue
@@ -550,6 +559,9 @@ devcontainer_rows() {
 
 apply_devcontainer() {
   local image repo tag latest
+
+  require perl || return 1
+
   image="$(parse_devcontainer_base_image)"
   repo="${image%:*}"
   tag="${image##*:}"
@@ -560,7 +572,7 @@ apply_devcontainer() {
     return 0
   fi
 
-  CURRENT_IMAGE="${image}" LATEST_IMAGE="${repo}:${latest}" perl -0pi -e \
+  CURRENT_IMAGE="${image}" LATEST_IMAGE="${repo}:${latest}" LC_ALL=C perl -0pi -e \
     's/^FROM\s+\Q$ENV{CURRENT_IMAGE}\E(\s*)$/FROM $ENV{LATEST_IMAGE}$1/m' \
     "${DEVCONTAINER_DOCKERFILE}"
   printf 'Updated devcontainer base image: %s -> %s:%s\n' "${image}" "${repo}" "${latest}"

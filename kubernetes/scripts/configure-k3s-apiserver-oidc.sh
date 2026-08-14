@@ -138,7 +138,7 @@ ensure_remote_ca() {
   local dest_path="$2"
   local local_sha remote_sha
 
-  local_sha="$(shasum -a 256 "$source_ca" | awk '{print $1}')"
+  local_sha="$(LC_ALL=C shasum -a 256 "$source_ca" | awk '{print $1}')"
   remote_sha="$(lima_exec "$K3S_OIDC_NODE_NAME" sudo sh -c "sha256sum '$dest_path' 2>/dev/null | cut -d' ' -f1" || true)"
 
   if [[ "$local_sha" == "$remote_sha" ]]; then

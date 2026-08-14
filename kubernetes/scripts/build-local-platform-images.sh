@@ -118,7 +118,7 @@ prepare_grafana_plugin_archive() {
 
   mkdir -p "${PLUGIN_ARCHIVE_CACHE_DIR}"
 
-  if [ -f "${archive_path}" ] && printf '%s  %s\n' "${VICTORIA_LOGS_PLUGIN_SHA256}" "${archive_path}" | shasum -a 256 -c - >/dev/null 2>&1; then
+  if [ -f "${archive_path}" ] && printf '%s  %s\n' "${VICTORIA_LOGS_PLUGIN_SHA256}" "${archive_path}" | LC_ALL=C shasum -a 256 -c - >/dev/null 2>&1; then
     echo "OK   cached plugin ${archive_path}"
     printf -v "${__resultvar}" '%s' "${archive_path}"
     return 0
@@ -128,7 +128,7 @@ prepare_grafana_plugin_archive() {
   image_catalog_register_temp_path "${tmp_path}"
   echo "FETCH ${VICTORIA_LOGS_PLUGIN_URL} -> ${archive_path}"
   curl -fsSL "${VICTORIA_LOGS_PLUGIN_URL}" -o "${tmp_path}"
-  printf '%s  %s\n' "${VICTORIA_LOGS_PLUGIN_SHA256}" "${tmp_path}" | shasum -a 256 -c - >/dev/null
+  printf '%s  %s\n' "${VICTORIA_LOGS_PLUGIN_SHA256}" "${tmp_path}" | LC_ALL=C shasum -a 256 -c - >/dev/null
   mv "${tmp_path}" "${archive_path}"
   echo "CACHE ${archive_path}"
   printf -v "${__resultvar}" '%s' "${archive_path}"
@@ -155,7 +155,7 @@ prepare_argo_rollouts_gatewayapi_plugin_binary() {
 
   mkdir -p "${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_CACHE_DIR}"
 
-  if [ -f "${binary_path}" ] && printf '%s  %s\n' "${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_SHA256}" "${binary_path}" | shasum -a 256 -c - >/dev/null 2>&1; then
+  if [ -f "${binary_path}" ] && printf '%s  %s\n' "${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_SHA256}" "${binary_path}" | LC_ALL=C shasum -a 256 -c - >/dev/null 2>&1; then
     echo "OK   cached plugin ${binary_path}"
     printf -v "${__resultvar}" '%s' "${binary_path}"
     return 0
@@ -165,7 +165,7 @@ prepare_argo_rollouts_gatewayapi_plugin_binary() {
   image_catalog_register_temp_path "${tmp_path}"
   echo "FETCH ${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_URL} -> ${binary_path}"
   curl -fsSL "${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_URL}" -o "${tmp_path}"
-  printf '%s  %s\n' "${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_SHA256}" "${tmp_path}" | shasum -a 256 -c - >/dev/null
+  printf '%s  %s\n' "${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_SHA256}" "${tmp_path}" | LC_ALL=C shasum -a 256 -c - >/dev/null
   chmod 0755 "${tmp_path}"
   mv "${tmp_path}" "${binary_path}"
   echo "CACHE ${binary_path}"

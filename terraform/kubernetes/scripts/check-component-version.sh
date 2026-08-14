@@ -13,6 +13,8 @@ source "${REPO_ROOT}/scripts/lib/parallel.sh"
 
 CHECK_VERSION_FORMAT="${CHECK_VERSION_FORMAT:-text}"
 CHECK_VERSION_CI_MODE="${CHECK_VERSION_CI_MODE:-0}"
+CHECK_VERSION_STRICT="${CHECK_VERSION_STRICT:-0}"
+CHECK_VERSION_ALLOW_LOOKUP_FAILURES="${CHECK_VERSION_ALLOW_LOOKUP_FAILURES:-0}"
 CHECK_VERSION_DEPLOYED_REASON="${CHECK_VERSION_DEPLOYED_REASON:-cluster unreachable}"
 CHECK_VERSION_CHART_MIN_RELEASE_AGE="${CHECK_VERSION_CHART_MIN_RELEASE_AGE:-604800}"
 CHECK_VERSION_HELM_REPOSITORY_CACHE="${CHECK_VERSION_HELM_REPOSITORY_CACHE:-}"
@@ -71,6 +73,11 @@ Environment:
   CHECK_VERSION_INCLUDE_PRERELEASE=1  Include other prerelease channels (beta/dev/rc/preview/next)
                                       All prerelease channels default to off
   CHECK_VERSION_CI_MODE=1             Same as --ci; skips live cluster inspection and Docker manifest probes
+  CHECK_VERSION_STRICT=1              Same as --strict; exit non-zero if any dependency version could
+                                      not be verified, instead of printing it as an ordinary row
+  CHECK_VERSION_ALLOW_LOOKUP_FAILURES=1
+                                      Same as --allow-lookup-failures; under --strict, tolerate
+                                      transient upstream lookup failures but never a missing lockfile
   CHECK_VERSION_RUNTIME_ROOT=...      Store temp/cache state under a repo-owned .run/check-version root
   CHECK_VERSION_CHART_MIN_RELEASE_AGE=SECONDS
                                       Cooldown for Helm chart latest-version resolution: report the
@@ -94,6 +101,14 @@ if [ "${CHECK_VERSION_LIB_ONLY:-0}" != "1" ]; then
     case "$1" in
       --ci)
         CHECK_VERSION_CI_MODE=1
+        shift
+        ;;
+      --strict)
+        CHECK_VERSION_STRICT=1
+        shift
+        ;;
+      --allow-lookup-failures)
+        CHECK_VERSION_ALLOW_LOOKUP_FAILURES=1
         shift
         ;;
       --)
@@ -598,6 +613,74 @@ bun_lock_resolved_version() {
   line="${line#*"${marker}"}"
   line="${line%%\"*}"
   printf '%s\n' "${line}" | xargs || true
+}
+
+# Yarn Berry (v2+) lockfiles, as used by apps/backstage. Entry keys sit at
+# column 0 and may carry several comma-separated specs for the same package;
+# the resolved version is the indented "version:" line that follows.
+yarn_lock_resolved_version() {
+  local lockfile="$1"
+  local dep="$2"
+
+  if [ ! -f "${lockfile}" ]; then
+    printf '\n'
+    return 0
+  fi
+
+  awk -v dep="${dep}" '
+    /^[^[:space:]#]/ {
+      in_entry = 0
+      key = $0
+      sub(/:[[:space:]]*$/, "", key)
+      gsub(/"/, "", key)
+      n = split(key, specs, /,[[:space:]]*/)
+      for (i = 1; i <= n; i++) {
+        # A spec is "<name>@<protocol>:<range>". Anchoring on "<dep>@" compares
+        # the name only, and keeps "foo-bar@npm:" from matching dep "foo".
+        if (substr(specs[i], 1, length(dep) + 1) == dep "@") {
+          in_entry = 1
+          break
+        }
+      }
+      next
+    }
+    in_entry && $1 == "version:" {
+      gsub(/"/, "", $2)
+      print $2
+      exit
+    }
+  ' "${lockfile}" 2>/dev/null || true
+}
+
+# Resolve a direct dependency version from whichever lockfile the app uses.
+#
+# Walks up towards REPO_ROOT because workspace members (apps/backstage has
+# packages/* and plugins/*) carry a package.json but no lockfile of their own:
+# the single resolved lockfile lives at the workspace root. Stopping at the
+# package directory is what left the whole Backstage tree unverifiable.
+js_lock_resolved_version() {
+  local app_dir="$1"
+  local dep="$2"
+  local dir="${app_dir}" current=""
+
+  while :; do
+    current="$(bun_lock_resolved_version "${dir}/bun.lock" "${dep}")"
+    if [ -n "${current}" ]; then
+      break
+    fi
+    current="$(yarn_lock_resolved_version "${dir}/yarn.lock" "${dep}")"
+    if [ -n "${current}" ]; then
+      break
+    fi
+    [ "${dir}" != "${REPO_ROOT}" ] || break
+    dir="$(dirname "${dir}")"
+    case "${dir}" in
+      "${REPO_ROOT}"*) ;;
+      *) break ;;
+    esac
+  done
+
+  printf '%s\n' "${current}"
 }
 
 trim_surrounding_whitespace() {
@@ -1180,6 +1263,44 @@ pypi_latest_eligible_version() {
     ' <<<"${payload}" 2>/dev/null || true
   )"
   printf '%s\n' "${versions}" | sed '/^$/d' | filter_prerelease_versions | filter_python_versions_by_specifiers "${specifiers}" | sort -V | tail -n 1
+}
+
+# A dependency whose version could not be established is not a passing row, it
+# is an unanswered question. Left as ordinary output it reads like every other
+# line in a long report, which is how ~60 Backstage packages sat outside the
+# supply-chain policy without anyone noticing.
+#
+# Rows are TSV: app, dependency, current, latest_eligible, latest_overall, status.
+unverifiable_dependency_rows() {
+  local rows="$1"
+  local allow_lookup_failures="${2:-0}"
+
+  [ -n "${rows}" ] || return 0
+
+  printf '%s\n' "${rows}" | awk -F'\t' -v allow="${allow_lookup_failures}" '
+    NF >= 6 {
+      # Structural: no lockfile entry resolved, so nothing can be checked.
+      # This is deterministic and never tolerated.
+      if ($6 == "lockfile missing or unverified") { print; next }
+      # Transient: upstream lookup failed. Tolerated only when explicitly
+      # allowed, so an offline run does not masquerade as a policy failure.
+      if ($6 == "latest lookup failed" && allow != "1") { print; next }
+    }
+  '
+}
+
+assert_dependencies_verifiable() {
+  local rows="$1"
+  local allow_lookup_failures="${2:-0}"
+  local offending=""
+
+  offending="$(unverifiable_dependency_rows "${rows}" "${allow_lookup_failures}")"
+  [ -n "${offending}" ] || return 0
+
+  echo "FAIL unverifiable dependency versions; the supply-chain policy does not cover these:" >&2
+  printf '%s\n' "${offending}" | awk -F'\t' '{ printf "     %s %s: %s\n", $1, $2, $6 }' >&2
+  echo "     Set CHECK_VERSION_ALLOW_LOOKUP_FAILURES=1 to tolerate transient upstream lookups." >&2
+  return 1
 }
 
 dependency_update_status() {
@@ -3080,7 +3201,7 @@ emit_js_dependency_rows_for_package_json() {
         "${spec_status}"
       continue
     fi
-    current="$(bun_lock_resolved_version "${app_dir}/bun.lock" "${dep}")"
+    current="$(js_lock_resolved_version "${app_dir}" "${dep}")"
     latest_overall="$(npm_latest_overall_version "${dep}")"
     latest_eligible="$(npm_latest_eligible_version "${dep}" "${cooldown_seconds}")"
     status="$(dependency_update_status "${current}" "${latest_eligible}" "${latest_overall}")"
@@ -3467,7 +3588,21 @@ emit_json_report() {
           ) then
             "not_deployed_current"
           elif $row.deployed == "Unavailable" then
-            "deployed_unavailable"
+            # Deployed state is unknown (no cluster, unreachable API, or --ci).
+            # Degrade to a version-only comparison instead of masking the row:
+            # a codebase pin behind upstream is actionable regardless of what is
+            # running, and reporting every chart as deployed_unavailable meant
+            # no chart was ever eligible for a bump.
+            (
+              if (
+                ($row.codebase != "" and $row.latest != "" and $row.codebase != $row.latest) or
+                tag_update_available($row)
+              ) then
+                "update_available"
+              else
+                "deployed_unavailable"
+              end
+            )
           elif (
             ($row.deployed != "" and $row.codebase != "" and $row.deployed != $row.codebase) or
             deployed_tag_drift($row)
@@ -4138,6 +4273,14 @@ main() {
   if [ -n "${CODE_ARGOCD_IMAGE_REF}" ] && [ "${CODE_ARGOCD_IMAGE_REPO}" != "quay.io/argoproj/argocd" ]; then
     ok "Argo CD image override active: ${CODE_ARGOCD_IMAGE_REF} (chart appVersion ${CODETAG_ARGOCD_CHART}, latest upstream appVersion ${LATESTTAG_ARGOCD_CHART})"
     echo ""
+  fi
+
+  # Opt-in gate. The default exit code stays 0 because update-versions.sh
+  # consumes this report and treats a non-zero exit as a collection failure;
+  # strict mode is for unattended runs that should break the build instead of
+  # printing an unanswered question into a long report.
+  if [ "${CHECK_VERSION_STRICT}" = "1" ]; then
+    assert_dependencies_verifiable "${dependency_rows}" "${CHECK_VERSION_ALLOW_LOOKUP_FAILURES}" || return 1
   fi
 
   ok "Done"

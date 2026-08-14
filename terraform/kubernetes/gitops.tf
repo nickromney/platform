@@ -540,7 +540,7 @@ retry_webhook_fail() {
 
 wait_for_gitea_ssh() {
   local gitea_ns="gitea"
-  local deadline=$((SECONDS + 300))
+  local deadline=$((SECONDS + ${local.platform_wait_seconds.rollout_default}))
   local pod_name=""
   local ssh_target_port=""
 
@@ -549,7 +549,7 @@ wait_for_gitea_ssh() {
     return 1
   fi
 
-  kubectl -n "$gitea_ns" rollout status deployment/gitea --timeout=300s
+  kubectl -n "$gitea_ns" rollout status deployment/gitea --timeout=${local.platform_wait_seconds.rollout_default}s
 
   while (( SECONDS < deadline )); do
     pod_name="$(kubectl -n "$gitea_ns" get pods -l app.kubernetes.io/name=gitea -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
@@ -628,9 +628,9 @@ if kubectl -n ${var.argocd_namespace} get deployment argocd-repo-server >/dev/nu
   wait_for_gitea_ssh
   patch_known_hosts
   retry_webhook_fail kubectl rollout restart deployment argocd-repo-server -n ${var.argocd_namespace}
-  if ! retry_webhook_fail kubectl rollout status deployment argocd-repo-server -n ${var.argocd_namespace} --timeout=300s; then
+  if ! retry_webhook_fail kubectl rollout status deployment argocd-repo-server -n ${var.argocd_namespace} --timeout=${local.platform_wait_seconds.rollout_default}s; then
     if force_delete_stuck_repo_server_pods; then
-      retry_webhook_fail kubectl rollout status deployment argocd-repo-server -n ${var.argocd_namespace} --timeout=300s
+      retry_webhook_fail kubectl rollout status deployment argocd-repo-server -n ${var.argocd_namespace} --timeout=${local.platform_wait_seconds.rollout_default}s
     else
       exit 1
     fi
@@ -676,14 +676,14 @@ if ! kubectl -n "$ARGOCD_NS" get deployment argocd-repo-server >/dev/null 2>&1; 
   exit 0
 fi
 
-kubectl -n "$ARGOCD_NS" rollout status deployment argocd-repo-server --timeout=180s >/dev/null 2>&1 || true
+kubectl -n "$ARGOCD_NS" rollout status deployment argocd-repo-server --timeout=${local.platform_wait_seconds.rollout_short}s >/dev/null 2>&1 || true
 if kubectl -n "$ARGOCD_NS" get statefulset argocd-application-controller >/dev/null 2>&1; then
-  kubectl -n "$ARGOCD_NS" rollout status statefulset argocd-application-controller --timeout=180s >/dev/null 2>&1 || true
+  kubectl -n "$ARGOCD_NS" rollout status statefulset argocd-application-controller --timeout=${local.platform_wait_seconds.rollout_short}s >/dev/null 2>&1 || true
 fi
 
 wait_for_gitea_ssh() {
   local gitea_ns="gitea"
-  local deadline=$((SECONDS + 240))
+  local deadline=$((SECONDS + ${local.platform_wait_seconds.rollout_gitea}))
   local pod_name=""
   local ssh_target_port=""
 
@@ -691,7 +691,7 @@ wait_for_gitea_ssh() {
     return 0
   fi
 
-  kubectl -n "$gitea_ns" rollout status deployment/gitea --timeout=240s >/dev/null 2>&1 || true
+  kubectl -n "$gitea_ns" rollout status deployment/gitea --timeout=${local.platform_wait_seconds.rollout_gitea}s >/dev/null 2>&1 || true
 
   while (( SECONDS < deadline )); do
     pod_name="$(kubectl -n "$gitea_ns" get pods -l app.kubernetes.io/name=gitea -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
@@ -844,7 +844,7 @@ done <<< "$app_list"
 # deciding whether any app is still stale.
 sleep 15
 
-end=$((SECONDS + 300))
+end=$((SECONDS + ${local.platform_wait_seconds.rollout_default}))
 stable_passes=0
 soft_only_stable_passes=0
 last_pending_summary=""

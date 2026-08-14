@@ -1317,3 +1317,14 @@ variable "external_platform_image_refs" {
     error_message = "external_platform_image_refs supports only: argo-rollouts-gatewayapi-plugin, auth-chat, backstage, chatgpt-sim, grafana, hardened-registry, idp-core, langfuse-demos, platform-mcp."
   }
 }
+
+variable "platform_timeout_scale" {
+  description = "Multiplier applied to the readiness waits in this stack. Slower hosts set 2 or 3 rather than editing individual .tf files; the underlying work usually succeeds on such hosts and only the wait expires."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.platform_timeout_scale >= 1 && var.platform_timeout_scale <= 10
+    error_message = "platform_timeout_scale must be between 1 and 10."
+  }
+}

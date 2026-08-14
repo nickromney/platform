@@ -112,6 +112,44 @@ resolve `docker-credential-platform-file`. Revert by restoring the printed
 backup of `~/.docker/config.json`, or by removing `credHelpers["dhi.io"]`, then
 delete the credentials file and symlink if they are no longer needed.
 
+#### On Linux
+
+Docker Engine ships no credential helper. With none configured, `docker login`
+writes the credential base64-encoded into `~/.docker/config.json`, which is
+encoding rather than encryption and leaves the password readable by anything
+that can read the file. Install a helper before logging in:
+
+- `docker-credential-secretservice` stores credentials in the Secret Service
+  keyring, so it suits a desktop session that already unlocks a keyring.
+- `docker-credential-pass` stores them in GPG-backed `pass`, which suits
+  headless hosts because it does not need a graphical session.
+
+Set the chosen helper as `credsStore` in `~/.docker/config.json`:
+
+```json
+{
+  "credsStore": "secretservice"
+}
+```
+
+The `dhi-creds-offline` flow described above also works on Linux and is the
+right choice for unattended runs, because a file-backed helper at mode `0600`
+does not depend on an unlocked keyring.
+
+#### Authenticating to dhi.io
+
+`dhi.io` authenticates with an ordinary Docker Hub account. There is no separate
+registration for the mirror and no paid tier for the core images this repo pulls.
+When `docker login dhi.io` fails, the cause is almost always one of two things:
+
+- no `dhi.io` entry in `~/.docker/config.json`, so every pull goes out anonymous
+  and the registry answers `401`
+- a password supplied where the account requires a personal access token
+
+An empty Docker config is not a neutral state on Docker Engine. Docker Desktop
+injects credentials that Engine does not, so a config that pulls fine on macOS
+can turn every pull anonymous on Linux.
+
 ## Preferred command syntax
 
 Run from `platform/kubernetes/kind`:

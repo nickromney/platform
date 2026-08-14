@@ -36,6 +36,24 @@ write_fake_docker() {
   :
 }
 
+# The "missing trivy" cases below must not depend on the host happening to lack
+# trivy. setup() prepends the sandbox bin dir to the real PATH, so a trivy
+# installed anywhere else (mise, for instance) still resolves and those tests
+# fail on a developer machine while passing in CI. Drop every PATH entry that
+# provides a trivy so the sandbox is the only possible source.
+hide_host_trivy() {
+  local filtered="" dir
+  local IFS=":"
+
+  for dir in ${ORIGINAL_PATH}; do
+    [[ -n "${dir}" ]] || continue
+    [[ -x "${dir}/trivy" ]] && continue
+    filtered="${filtered:+${filtered}:}${dir}"
+  done
+
+  export PATH="${TEST_TMPDIR}/bin:${filtered}"
+}
+
 @test "trivy-run uses the local binary when it is available" {
   write_fake_trivy "0.70.0"
 
@@ -46,6 +64,8 @@ write_fake_docker() {
 }
 
 @test "trivy-run fails cleanly when local trivy is missing" {
+  hide_host_trivy
+
   run "${REPO_ROOT}/scripts/trivy-run.sh" --execute -- fs apps/sentiment
 
   [ "${status}" -eq 1 ]
@@ -53,6 +73,8 @@ write_fake_docker() {
 }
 
 @test "trivy-scan-apps prereqs reports unavailable mode when local trivy is missing" {
+  hide_host_trivy
+
   run "${REPO_ROOT}/scripts/trivy-scan-apps.sh" --mode prereqs --execute
 
   [ "${status}" -eq 0 ]

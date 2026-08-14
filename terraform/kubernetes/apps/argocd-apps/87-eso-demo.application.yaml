@@ -20,6 +20,19 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    # SecretStore and ExternalSecret are both validated by
+    # external-secrets-webhook, which sits in wave 86. Wave ordering starts the
+    # next wave once the Application reports healthy, which does not mean the
+    # webhook Service is accepting connections yet, so the first sync can fail
+    # with "connect: connection refused" while the deployment is still starting.
+    # Retry with the same profile as cert-manager-config, the other config app
+    # that lands behind a webhook.
+    retry:
+      limit: 20
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true

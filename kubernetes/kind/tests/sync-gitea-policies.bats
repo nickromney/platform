@@ -371,7 +371,7 @@ EOF
     "${stack_dir}/apps/platform-gateway-routes-sso/httproute-grafana.yaml" \
     "${stack_dir}/apps/platform-gateway-routes-sso/httproute-sentiment-dev.yaml" \
     "${stack_dir}/apps/platform-gateway-routes-sso/httproute-subnetcalc-dev.yaml" \
-    "${stack_dir}/apps/platform-gateway-routes-sso/referencegrant-hubble.yaml" \
+    "${stack_dir}/apps/platform-gateway-routes-sso/referencegrant-hubble.yaml"
   cp "${stack_dir}/apps/platform-gateway-routes/httproute-agentgateway-ai-gateway.yaml" \
     "${stack_dir}/apps/platform-gateway-routes-sso/httproute-agentgateway-ai-gateway.yaml"
   cp "${stack_dir}/apps/platform-gateway-routes/referencegrant-agentgateway-ai-gateway.yaml" \

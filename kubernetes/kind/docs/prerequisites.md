@@ -82,6 +82,24 @@ sure those credentials are available too:
 docker login
 ```
 
+`dhi.io` authenticates with an ordinary Docker Hub account. There is no separate
+registration for the mirror and no paid tier for the images this repo pulls. A
+failing `docker login dhi.io` is almost always one of two things: no `dhi.io`
+entry in `~/.docker/config.json`, so every pull goes out anonymous and the
+registry answers `401`, or a password supplied where the account requires a
+personal access token.
+
+An empty Docker config is not a neutral state. Docker Desktop injects
+credentials that Docker Engine does not, so a config that pulls fine on macOS
+can turn every pull anonymous on Linux.
+
+On Linux, Docker Engine ships no credential helper, and `docker login` without
+one writes the credential base64-encoded into `~/.docker/config.json`. That is
+encoding rather than encryption. Install `docker-credential-secretservice` for a
+desktop keyring, or `docker-credential-pass` for a headless host, before logging
+in. See [Docker Hardened Images credentials](../README.md#docker-hardened-images-credentials)
+for the helper setup and the file-backed option used for unattended runs.
+
 ## What The Core Tools Do
 
 - `make` runs the workflow entrypoints in [`Makefile`](../Makefile).

@@ -20,6 +20,48 @@ kind_argocd_app_synced_healthy() {
   [ "${status}" = "Synced Healthy" ]
 }
 
+@test "check-version collects only project dependencies from pyproject arrays" {
+  run bash -lc "
+    tmp_root='${BATS_TEST_TMPDIR}/repo'
+    mkdir -p \"\${tmp_root}/apps/with-comments\" \"\${tmp_root}/apps/empty-inline\"
+
+    cat >\"\${tmp_root}/apps/with-comments/pyproject.toml\" <<'EOF'
+[project]
+name = \"with-comments\"
+version = \"0.1.0\"
+dependencies = [
+    \"fastapi[standard]>=0.118.0\",  # inline comment
+    \"httpx>=0.28.1\",
+]
+
+[project.optional-dependencies]
+dev = [
+    \"pytest>=8.0.0\",
+]
+EOF
+
+    cat >\"\${tmp_root}/apps/empty-inline/pyproject.toml\" <<'EOF'
+[project]
+name = \"empty-inline\"
+version = \"0.1.0\"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    \"playwright>=1.55.0\",
+]
+EOF
+
+    export CHECK_VERSION_LIB_ONLY=1
+    source '${SCRIPT}'
+    REPO_ROOT=\"\${tmp_root}\"
+    collect_python_dependency_names | LC_ALL=C sort -u
+  "
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf 'fastapi\nhttpx')" ]
+}
+
 @test "check-version reports vendored Argo chart apps from live resource labels" {
   if ! command -v kubectl >/dev/null 2>&1; then
     skip "kubectl is required"
@@ -292,48 +334,6 @@ EOF
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "$(printf '604800\n8.0.9')" ]
-}
-
-@test "check-version collects only project dependencies from pyproject arrays" {
-  run bash -lc "
-    tmp_root='${BATS_TEST_TMPDIR}/repo'
-    mkdir -p \"\${tmp_root}/apps/with-comments\" \"\${tmp_root}/apps/empty-inline\"
-
-    cat >\"\${tmp_root}/apps/with-comments/pyproject.toml\" <<'EOF'
-[project]
-name = \"with-comments\"
-version = \"0.1.0\"
-dependencies = [
-    \"fastapi[standard]>=0.118.0\",  # inline comment
-    \"httpx>=0.28.1\",
-]
-
-[project.optional-dependencies]
-dev = [
-    \"pytest>=8.0.0\",
-]
-EOF
-
-    cat >\"\${tmp_root}/apps/empty-inline/pyproject.toml\" <<'EOF'
-[project]
-name = \"empty-inline\"
-version = \"0.1.0\"
-dependencies = []
-
-[dependency-groups]
-dev = [
-    \"playwright>=1.55.0\",
-]
-EOF
-
-    export CHECK_VERSION_LIB_ONLY=1
-    source '${SCRIPT}'
-    REPO_ROOT=\"\${tmp_root}\"
-    collect_python_dependency_names | LC_ALL=C sort -u
-  "
-
-  [ "${status}" -eq 0 ]
-  [ "${output}" = "$(printf 'fastapi\nhttpx')" ]
 }
 
 @test "check-version classifies internal image refs and docker hub repositories" {

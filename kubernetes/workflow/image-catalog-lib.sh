@@ -17,8 +17,15 @@ source_fingerprint_tag() {
 
   digest="$(
     cd "${REPO_ROOT}" || exit 1
+    # LC_ALL=C for the whole subshell, not just the sort. Every step here is
+    # byte-level and must not vary with the host locale, and shasum is a Perl
+    # script: on a host whose LANG names a locale that is not installed, it
+    # prints a 14-line warning to stderr per invocation. This function calls it
+    # once per source file, which produced hundreds of warning lines in the
+    # middle of a kind apply.
+    export LC_ALL=C
     find "$@" -type f -print |
-      LC_ALL=C sort |
+      sort |
       while IFS= read -r source_file; do
         printf '%s\n' "${source_file}"
         shasum -a 256 "${source_file}"

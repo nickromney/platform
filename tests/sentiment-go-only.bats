@@ -6,7 +6,12 @@ setup() {
 }
 
 @test "sentiment app tree contains only the canonical Go app surface" {
-  run bash -lc "cd '${REPO_ROOT}' && ls -A apps/sentiment | sort"
+  # LC_ALL=C because the expected list below is in C collation: dotfiles first,
+  # then uppercase before lowercase. Under a locale like en_GB.UTF-8, sort
+  # ignores the leading dot and folds case, producing a different order. This
+  # passed for years only because the host locale was misconfigured and glibc
+  # fell back to C.
+  run bash -lc "cd '${REPO_ROOT}' && ls -A apps/sentiment | LC_ALL=C sort"
 
   [ "${status}" -eq 0 ]
   expected=$'.gitea\nMODEL_CARD.md\nMakefile\nREADME.md\napp\ncatalog-info.yaml\ncompose.tls.yml\ncompose.yml\ndata\ndocs\nedge\nevaluation.jsonl\nmkdocs.yml\npki\ntests\ntls-proxy\nupdate-sentiment-image-tags.sh'

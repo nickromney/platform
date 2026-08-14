@@ -36,7 +36,7 @@ resource "helm_release" "cilium" {
   wait_for_jobs   = true
   atomic          = true
   cleanup_on_fail = true
-  timeout         = 1800
+  timeout         = local.platform_wait_seconds.helm_release
 
   values = [yamlencode(local.cilium_values)]
 
@@ -67,7 +67,7 @@ resource "null_resource" "hubble_ui_backend_relay_port_patch" {
       # the shipped UI follows the relay Service we expose locally.
       kubectl patch deployment hubble-ui -n kube-system --type=strategic \
         -p '{"spec":{"template":{"spec":{"containers":[{"name":"backend","env":[{"name":"FLOWS_API_ADDR","value":"hubble-relay:${try(local.cilium_values.hubble.relay.servicePort, 4245)}"}]}]}}}}'
-      kubectl -n kube-system rollout status deployment/hubble-ui --timeout=300s
+      kubectl -n kube-system rollout status deployment/hubble-ui --timeout=${local.platform_wait_seconds.rollout_default}s
     EOT
     interpreter = ["/bin/bash", "-c"]
     environment = {
@@ -95,7 +95,7 @@ resource "null_resource" "cilium_restart_on_config_change" {
       # the rendered ConfigMap but do not take effect until the agent DaemonSet restarts.
       kubectl -n kube-system get daemonset cilium >/dev/null 2>&1 || exit 0
       kubectl -n kube-system rollout restart daemonset/cilium
-      kubectl -n kube-system rollout status daemonset/cilium --timeout=300s
+      kubectl -n kube-system rollout status daemonset/cilium --timeout=${local.platform_wait_seconds.rollout_default}s
     EOT
     interpreter = ["/bin/bash", "-c"]
     environment = {

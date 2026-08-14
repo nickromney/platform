@@ -20,7 +20,7 @@ make -C kubernetes/kind help
 If you want the default local platform path, start with `kubernetes/kind`:
 
 ```shell
-cp .env.example .env
+make init-env
 make -C kubernetes/kind prereqs
 make -C kubernetes/kind 100 plan
 make -C kubernetes/kind 100 apply AUTO_APPROVE=1
@@ -36,6 +36,11 @@ make -C kubernetes/kind reset AUTO_APPROVE=1
 make -C kubernetes/kind 100 apply AUTO_APPROVE=1
 make -C kubernetes/kind 900 apply AUTO_APPROVE=1
 ```
+
+`make init-env` writes `.env` from `.env.example` and generates the credentials
+the example file cannot ship with values, including `OAUTH2_PROXY_COOKIE_SECRET`,
+which stage 100 hard-fails without. It never overwrites values you have already
+set, so it is safe to re-run.
 
 Important operator notes:
 

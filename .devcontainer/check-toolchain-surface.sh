@@ -11,6 +11,7 @@ DEVCONTAINER_REMOTE_USER="${DEVCONTAINER_REMOTE_USER:-vscode}"
 INSTALL_TOOLCHAIN_SCRIPT="${INSTALL_TOOLCHAIN_SCRIPT:-${REPO_ROOT}/.devcontainer/install-toolchain.sh}"
 NORMALIZE_NODE_TOOLCHAIN_SCRIPT="${NORMALIZE_NODE_TOOLCHAIN_SCRIPT:-${REPO_ROOT}/.devcontainer/normalize-node-toolchain.sh}"
 TOOLCHAIN_VERSIONS_FILE="${TOOLCHAIN_VERSIONS_FILE:-${REPO_ROOT}/.devcontainer/toolchain-versions.sh}"
+MISE_CONFIG_FILE="${MISE_CONFIG_FILE:-${REPO_ROOT}/mise.toml}"
 
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
@@ -123,6 +124,78 @@ check_file_lacks_slicer_install() {
   fi
 }
 
+# The committed mise.toml is hand-written, so it silently goes stale the moment
+# update-versions.sh --apply moves a pin in toolchain-versions.sh. Every tool the
+# two files share must agree; mise.toml may still carry host-only extras that
+# have no devcontainer pin, which are reported but not treated as drift.
+mise_pin_variable_for() {
+  case "$1" in
+    mkcert) printf 'MKCERT_VERSION\n' ;;
+    opentofu) printf 'OPENTOFU_VERSION\n' ;;
+    kyverno) printf 'KYVERNO_VERSION\n' ;;
+    lefthook) printf 'LEFTHOOK_VERSION\n' ;;
+    lima) printf 'LIMA_VERSION\n' ;;
+    starship) printf 'STARSHIP_VERSION\n' ;;
+    step) printf 'STEP_VERSION\n' ;;
+    arkade) printf 'ARKADE_VERSION\n' ;;
+    *) return 1 ;;
+  esac
+}
+
+check_mise_pin_drift() {
+  if [[ ! -f "${MISE_CONFIG_FILE}" ]]; then
+    warn "no mise.toml at ${MISE_CONFIG_FILE}; skipping host pin drift check"
+    return 0
+  fi
+
+  local tool raw_version expected_var expected actual checked=0
+
+  while IFS=$'\t' read -r tool raw_version; do
+    [[ -n "${tool}" ]] || continue
+
+    if ! expected_var="$(mise_pin_variable_for "${tool}")"; then
+      warn "mise.toml pins ${tool}=${raw_version}, which has no devcontainer equivalent to compare"
+      continue
+    fi
+
+    expected="${!expected_var:-}"
+    if [[ -z "${expected}" ]]; then
+      fail_note "mise.toml pins ${tool}, but ${expected_var} is unset in ${TOOLCHAIN_VERSIONS_FILE}"
+      continue
+    fi
+
+    # Compare bare versions: mise.toml omits the leading v that several
+    # toolchain-versions.sh pins carry (KYVERNO_VERSION=v1.18.2 vs kyverno = "1.18.2").
+    expected="${expected#v}"
+    actual="${raw_version#v}"
+    checked=$((checked + 1))
+
+    if [[ "${actual}" == "${expected}" ]]; then
+      ok "mise.toml pins ${tool} ${raw_version} in step with ${expected_var}"
+    else
+      fail_note "mise.toml pins ${tool} ${raw_version}, but ${expected_var} is ${!expected_var}; run make update-versions or edit mise.toml to match"
+    fi
+  done < <(
+    awk '
+      /^[[:space:]]*\[/ { in_tools = ($0 ~ /^[[:space:]]*\[tools\][[:space:]]*$/); next }
+      !in_tools { next }
+      /^[[:space:]]*#/ { next }
+      /=/ {
+        split($0, parts, "=")
+        name = parts[1]
+        value = parts[2]
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", name)
+        gsub(/^[[:space:]]*"|"[[:space:]]*$|^[[:space:]]+|[[:space:]]+$/, "", value)
+        if (name != "" && value != "") { printf "%s\t%s\n", name, value }
+      }
+    ' "${MISE_CONFIG_FILE}"
+  )
+
+  if [[ "${checked}" -eq 0 ]]; then
+    warn "mise.toml shared no pins with ${TOOLCHAIN_VERSIONS_FILE}; drift cannot be detected"
+  fi
+}
+
 check_dockerfile_base_packages() {
   local missing=0
   local package
@@ -223,6 +296,7 @@ fi
 
 check_file_lacks_slicer_install
 check_dockerfile_base_packages
+check_mise_pin_drift
 
 if [[ -z "${RESOLVED_CONFIG_JSON}" ]]; then
   fail_note "could not resolve the devcontainer feature configuration with ${DEVCONTAINER_CLI} read-configuration"
