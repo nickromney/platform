@@ -454,6 +454,13 @@ EOF
 
   run env PLATFORM_ENV_FILE="${missing_env}" make -C "${REPO_ROOT}/docker/compose" prereqs
 
+  echo "TEMP-DIAG status=${status}" >&3
+  echo "TEMP-DIAG output-begin" >&3
+  echo "${output}" >&3
+  echo "TEMP-DIAG output-end" >&3
+  echo "TEMP-DIAG /bin/sh -> $(readlink -f /bin/sh)" >&3
+  echo "TEMP-DIAG make SHELL=$(make -C "${REPO_ROOT}/docker/compose" -p -n help 2>/dev/null | grep -m1 '^SHELL =')" >&3
+
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"Missing platform env file:"*"/missing.env"* ]]
   [[ "${output}" != *"Unknown make goal '${missing_env}'"* ]]

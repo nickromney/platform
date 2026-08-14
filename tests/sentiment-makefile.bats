@@ -45,6 +45,11 @@ EOF
 
   run env PLATFORM_ENV_FILE="${missing_env}" make -C "${REPO_ROOT}/apps/sentiment" prereqs
 
+  echo "TEMP-DIAG status=${status}" >&3
+  echo "TEMP-DIAG output-begin" >&3
+  echo "${output}" >&3
+  echo "TEMP-DIAG output-end" >&3
+
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"Missing platform env file:"*"/missing.env"* ]]
   [[ "${output}" != *"Unknown make goal '${missing_env}'"* ]]
