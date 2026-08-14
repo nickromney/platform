@@ -962,5 +962,61 @@ kind that read host state -- exactly the class section 1 documents. Each needs
 checking before it joins the hermetic subset.
 
 So this is a ratchet, not a fix: the gap is now visible, reviewable, and cannot
-grow. Burning the backlog down is separate work. Verified by adding a new test
-file and watching the guard fail, then removing it.
+grow. Verified by adding a new test file and watching the guard fail, then
+removing it.
+
+### Burning the backlog down, 2026-08-14: 37 to 26
+
+Each of the 30 safe-to-run files was executed in isolation. **11 passed and are
+now in the gate. 19 failed.** The remaining seven were left untriaged because
+they reference `docker build`/`run`/`compose`, and running them unsupervised
+risks real side effects.
+
+That is the finding worth recording: the backlog was never merely a listing
+oversight. Two thirds of it is **red**, from one failure in most files to 15 in
+`tests/vanilla-js-typecheck.bats`. Adding them to `CI_BATS_TESTS` unfixed would
+simply move the redness into the gate, which is the condition this whole effort
+exists to end. Each remaining file needs its failures fixed before it joins, and
+the counts are recorded beside the backlog entries so the size of that job is
+known rather than guessed.
+
+`tests/release-workflow.bats` -- the file whose silent redness started section
+15 -- passed and is now guarded.
+
+### Closing the gap immediately found more of the section 13 bug
+
+`tests/langfuse-demos.bats` passed locally and failed in CI on:
+
+```text
+/bin/sh: 1: set: Illegal option -o pipefail
+```
+
+That is the section 13 defect again. The fix there pinned `SHELL := /bin/bash`
+in `mk/common.mk`, but `mk/go-app-core.mk` pinned nothing at all, so the **eight
+app Makefiles that include it** were running recipes under `/bin/sh` the whole
+time. Bash on Arch, dash on the runner, so it could only ever be seen in CI --
+and the tests that would have seen it were the ones outside the gate.
+
+The gap was hiding instances of the bug the gate was fixed to catch. That is the
+clearest argument in this document for closing it.
+
+The guard from section 13 did not catch this, because it only banned
+`SHELL ?=`, the assignment that never fires. It said nothing about pinning no
+`SHELL` at all, which fails identically. A second guard now checks each
+top-level Makefile and its direct includes: if anything in that chain uses Bash
+syntax, something in it must pin `SHELL :=`. Verified by removing the pin from
+`mk/go-app-core.mk` and watching it fail.
+
+### The gate had an assertion requiring the gap
+
+Adding the 11 broke `root test-ci delegates to the explicit hermetic Bats
+subset`, which asserted that `tests/app-healthcheck-commands.bats` and
+`tests/release-workflow.bats` were **absent** from `CI_BATS_TESTS`.
+
+So a test required the exclusion of the very file whose exclusion let it go red
+unnoticed. This is the same shape as section 1's discovery that
+`tests/ci-workflow.bats` asserted `pull_request` and `push` were absent from
+`ci.yml`: an assertion that encodes the defect, with no recorded reason, and
+which therefore defends it. The absence checks now carry a comment saying they
+exist to prove the subset is an explicit list rather than a glob, and that a
+name should be removed when its file joins the gate.

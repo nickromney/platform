@@ -1,3 +1,12 @@
+# Recipes here and in every app Makefile that includes this file use Bash
+# syntax (set -o pipefail, [[ ]]). Without pinning SHELL, make runs them under
+# /bin/sh, which is Bash on Arch and dash on ubuntu-latest -- so they pass
+# locally and die on the runner with "Illegal option -o pipefail". Same defect
+# mk/common.mk had; see section 13 of docs/plans/omarchy-portability-followups.
+#
+# := not ?=. GNU make always has SHELL defined, so ?= can never fire.
+SHELL := /bin/bash
+
 .PHONY: test build build-linux clean
 
 GO_APP_CMD ?= ./cmd/$(GO_APP_BINARY)

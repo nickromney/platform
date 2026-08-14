@@ -1588,3 +1588,21 @@ EOF
   [[ "${output}" == *"filter plan apply,\$(MAKECMDGOALS)"* ]]
   [[ "${output}" == *"\$(error"* ]]
 }
+
+@test "the dry-run refusal covers every target known to mutate under --just-print" {
+  # Deliberately an explicit list check, not auto-detection. A first attempt
+  # derived the set by grepping recipe bodies for mutating commands; it silently
+  # passed when targets were removed from the guard, because the terragrunt call
+  # goes through $(call tg_stack_apply,...) and the word never appears. A guard
+  # that cannot fail is worse than none, so the list is asserted directly and
+  # adding a target is a review step, recorded in section 12.
+  run bash -lc "sed -n 's/^KIND_DRY_RUN_UNSAFE_GOALS := //p' '${REPO_ROOT}/kubernetes/kind/Makefile'"
+
+  [ "${status}" -eq 0 ]
+  for goal in apply plan prereqs reset start-kind sync-image-cache; do
+    [[ " ${output} " == *" ${goal} "* ]] || {
+      echo "goal ${goal} missing from KIND_DRY_RUN_UNSAFE_GOALS" >&2
+      return 1
+    }
+  done
+}

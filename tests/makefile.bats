@@ -367,10 +367,15 @@ EOF
   [[ "${output}" == *"tests/git-hooks.bats"* ]]
   [[ "${output}" == *"tests/makefile.bats"* ]]
   [[ "${output}" == *"tests/version-audit-workflow.bats"* ]]
-  [[ "${output}" != *"tests/app-healthcheck-commands.bats"* ]]
+  # Absence assertions name only files still in the ci-test-gate backlog. They
+  # exist to prove test-ci runs an explicit list rather than a glob -- not to
+  # keep files out of CI. app-healthcheck-commands and release-workflow were
+  # asserted absent here until 2026-08-14, which meant this test required the
+  # very gap that let release-workflow go red unnoticed. Remove a name from
+  # this list when its file joins CI_BATS_TESTS; do not keep the file out to
+  # satisfy the test.
   [[ "${output}" != *"tests/platform-workflow-ui.bats"* ]]
   [[ "${output}" != *"tests/release-script.bats"* ]]
-  [[ "${output}" != *"tests/release-workflow.bats"* ]]
   [[ "${output}" != *"tests/smoke-sentiment-api-image.bats"* ]]
 
   run bash -c 'tr " " "\n" <"$1" | LC_ALL=C sort -c' bash "${log_file}"
@@ -484,6 +489,54 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"recipe-shell="*"bash"* ]]
   [[ "${output}" == *"accepts=pipefail"* ]]
+}
+
+@test "every makefile using Bash-only syntax resolves SHELL to Bash" {
+  # The SHELL ?= guard below catches an assignment that never fires. It does not
+  # catch pinning no SHELL at all, which fails identically: make falls back to
+  # /bin/sh, which is Bash on Arch and dash on ubuntu-latest, so the recipe
+  # passes locally and dies on the runner with "Illegal option -o pipefail".
+  # mk/go-app-core.mk had exactly this, affecting all eight app Makefiles that
+  # include it, and it surfaced only when langfuse-demos entered the CI gate.
+  #
+  # Checked per top-level Makefile, because SHELL is global to a make run and an
+  # included .mk inherits whatever the including Makefile set. Bash syntax is
+  # looked for in the Makefile and its direct includes.
+  local script="${BATS_TEST_TMPDIR}/check-shell.sh"
+  cat >"${script}" <<'SH'
+set -euo pipefail
+cd "$1"
+offenders=""
+while IFS= read -r mk; do
+  dir="$(dirname "${mk}")"
+  chain="${mk}"
+  while IFS= read -r inc; do
+    cand="${dir}/${inc}"
+    [ -f "${cand}" ] && chain="${chain} ${cand}"
+  done < <(sed -nE 's/^include[[:space:]]+//p' "${mk}")
+
+  needs_bash=0
+  pins_bash=0
+  for f in ${chain}; do
+    grep -qE 'pipefail|\[\[|<\(' "${f}" && needs_bash=1
+    grep -qE '^SHELL[[:space:]]*:=' "${f}" && pins_bash=1
+  done
+
+  if [ "${needs_bash}" = 1 ] && [ "${pins_bash}" = 0 ]; then
+    offenders="${offenders} ${mk}"
+  fi
+done < <(git ls-files '*Makefile')
+
+if [ -n "${offenders}" ]; then
+  echo "Bash syntax but no SHELL := /bin/bash in the include chain:${offenders}"
+  exit 1
+fi
+SH
+  chmod +x "${script}"
+
+  run bash "${script}" "${REPO_ROOT}"
+
+  [ "${status}" -eq 0 ]
 }
 
 @test "no repo Makefile sets SHELL with the conditional assignment that never fires" {

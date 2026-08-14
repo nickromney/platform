@@ -49,10 +49,12 @@ HOST_PORTABLE_BATS_TESTS := \
 CI_BATS_TESTS := \
 	kubernetes/kind/tests/stage-tfvars-no-duplicate-attributes.bats \
 	kubernetes/kind/tests/sync-gitea-policies.bats \
+	tests/app-healthcheck-commands.bats \
 	tests/apps-makefile.bats \
 	tests/assert-variant-active.bats \
 	tests/audit-shell-scripts.bats \
 	tests/check-bash32-compat.bats \
+	tests/check-provider-version.bats \
 	tests/check-version.bats \
 	tests/check-worktree-unchanged.bats \
 	tests/ci-test-gate.bats \
@@ -61,6 +63,7 @@ CI_BATS_TESTS := \
 	tests/dependabot-config.bats \
 	tests/devcontainer-performance.bats \
 	tests/docs-prose-voice.bats \
+	tests/ensure-playwright-browsers.bats \
 	tests/fmt-hcl.bats \
 	tests/fmt-markdown.bats \
 	tests/git-hooks.bats \
@@ -70,6 +73,7 @@ CI_BATS_TESTS := \
 	tests/iac-boundaries.bats \
 	tests/idp-backstage-sdk-mcp.bats \
 	tests/image-catalog-lib.bats \
+	tests/image-signing-lib.bats \
 	tests/install-tool-hints.bats \
 	tests/kubernetes-diagnostic-dispatch.bats \
 	tests/kubernetes-helper-mode-lib.bats \
@@ -79,6 +83,7 @@ CI_BATS_TESTS := \
 	tests/kubernetes-kubeconfig-reconcile-adapter.bats \
 	tests/kubernetes-launchpad-render.bats \
 	tests/kubernetes-local-image-helper-plan.bats \
+	tests/kubernetes-memory-report.bats \
 	tests/kubernetes-platform-image-builder-adapter.bats \
 	tests/kubernetes-post-apply-verification-plan.bats \
 	tests/kubernetes-post-apply-verification-runner.bats \
@@ -86,6 +91,7 @@ CI_BATS_TESTS := \
 	tests/kubernetes-stage-monotonicity-adapter.bats \
 	tests/kubernetes-sync-image-cache-adapter.bats \
 	tests/kubernetes-workload-image-builder-adapter.bats \
+	tests/langfuse-demos.bats \
 	tests/lint-markdown.bats \
 	tests/lint-yaml.bats \
 	tests/local-idp-contracts.bats \
@@ -96,11 +102,14 @@ CI_BATS_TESTS := \
 	tests/observability-log-quality.bats \
 	tests/opentofu-test-runner.bats \
 	tests/operator-diagnostics.bats \
+	tests/parallel.bats \
 	tests/platform-inventory.bats \
+	tests/platform-security-policies.bats \
 	tests/platform-status-action-catalog.bats \
 	tests/platform-status-read-model.bats \
 	tests/platform-status.bats \
 	tests/platform-workflow-matrix.bats \
+	tests/release-workflow.bats \
 	tests/sentiment-go-only.bats \
 	tests/sentiment-makefile.bats \
 	tests/sso-e2e-env.bats \
@@ -108,6 +117,8 @@ CI_BATS_TESTS := \
 	tests/subnetcalc-terraform-naming.bats \
 	tests/trivy-runner.bats \
 	tests/update-versions.bats \
+	tests/validate-cilium-policies.bats \
+	tests/validate-container-hardening.bats \
 	tests/validate-gitea-app-repo-sync.bats \
 	tests/validate-kyverno-policies.bats \
 	tests/variant-contracts.bats \

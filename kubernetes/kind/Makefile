@@ -152,10 +152,17 @@ KIND_DISPATCH_TARGET := $(if $(filter apply,$(ACTION_FROM_GOALS)),apply,plan)
 #
 # The refusal has to happen at parse time. A guard written as a recipe line
 # would itself be skipped under -n, which is the very trap being guarded.
+# Every target whose recipe block contains $(MAKE) *and* a mutating command.
+# The exemption is per recipe line, so the whole block runs -- listing only
+# plan/apply left `make -n reset` free to rm -rf the Terraform state and
+# terragrunt cache. kubernetes/kind/tests/makefile.bats derives this set from
+# the Makefile and fails if a target starts qualifying without being listed.
+KIND_DRY_RUN_UNSAFE_GOALS := apply plan prereqs reset start-kind sync-image-cache
+
 KIND_DRY_RUN_REQUESTED := $(findstring n,$(firstword -$(MAKEFLAGS)))
 ifneq ($(KIND_DRY_RUN_REQUESTED),)
-ifneq ($(filter plan apply,$(MAKECMDGOALS)),)
-$(error make -n/--just-print is unsafe for '$(filter plan apply,$(MAKECMDGOALS))': \
+ifneq ($(filter $(KIND_DRY_RUN_UNSAFE_GOALS),$(MAKECMDGOALS)),)
+$(error make -n/--just-print is unsafe for '$(filter $(KIND_DRY_RUN_UNSAFE_GOALS),$(MAKECMDGOALS))': \
 GNU make exempts $$(MAKE) recipe lines from --just-print, so this would run the \
 real operation instead of previewing it. Use `make <stage> plan` for a genuine \
 preview, which reports changes without applying them)
