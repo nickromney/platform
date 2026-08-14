@@ -9,8 +9,8 @@ MODE=""
 SNAPSHOT_FILE=""
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
-Usage: @SCRIPT_NAME@ --snapshot <file> | --verify <file>
+  cat <<EOF
+Usage: ${0##*/} [--snapshot <file>] [--verify <file>] [--dry-run] [--execute]
 
 Assert that a command left the working tree exactly as it found it.
 
@@ -28,9 +28,9 @@ A dirty tree at snapshot time is fine and expected mid-session. The assertion
 is that the run changed nothing, not that the tree started clean.
 
 Options:
-  --snapshot FILE  Record the current `git status` to FILE
-  --verify FILE    Compare the current `git status` against FILE
-  -h, --help       Show this message
+  --snapshot FILE  Record the current \`git status\` to FILE
+  --verify FILE    Compare the current \`git status\` against FILE
+$(shell_cli_standard_options)
 EOF
 }
 
@@ -38,6 +38,11 @@ fail() { echo "check-worktree-unchanged: $*" >&2; exit 1; }
 
 shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --snapshot)
       [[ $# -ge 2 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--snapshot"; exit 1; }
@@ -51,16 +56,15 @@ while [[ $# -gt 0 ]]; do
       SNAPSHOT_FILE="$2"
       shift 2
       ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
     *)
       shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
       exit 1
       ;;
   esac
 done
+
+shell_cli_maybe_execute_or_preview_summary usage \
+  "would ${MODE:-snapshot or verify} the working tree against ${SNAPSHOT_FILE:-a snapshot file}"
 
 [[ -n "${MODE}" ]] || { usage; exit 1; }
 

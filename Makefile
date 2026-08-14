@@ -223,11 +223,11 @@ test-host-portable:
 
 test-ci:
 	@mkdir -p "$(CI_UV_CACHE_DIR)"
-	@"$(CHECK_WORKTREE_UNCHANGED)" --snapshot "$(CI_WORKTREE_SNAPSHOT)"
+	@"$(CHECK_WORKTREE_UNCHANGED)" --execute --snapshot "$(CI_WORKTREE_SNAPSHOT)"
 	@set -euo pipefail; \
 	rc=0; \
 	UV_CACHE_DIR="$(CI_UV_CACHE_DIR)" "$(BATS_BIN)" $(CI_BATS_TESTS) || rc=$$?; \
-	if ! "$(CHECK_WORKTREE_UNCHANGED)" --verify "$(CI_WORKTREE_SNAPSHOT)"; then rc=1; fi; \
+	if ! "$(CHECK_WORKTREE_UNCHANGED)" --execute --verify "$(CI_WORKTREE_SNAPSHOT)"; then rc=1; fi; \
 	exit $$rc
 
 status:
