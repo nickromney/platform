@@ -1569,3 +1569,22 @@ EOF
   [ "${status}" -eq 0 ]
   [ -z "${output}" ]
 }
+
+@test "kind refuses --just-print for plan and apply at parse time" {
+  # Deliberately a static assertion, not a behavioural one. Running
+  # `make -n apply` to observe the refusal would perform a real stage apply if
+  # the guard ever regressed, because that is precisely the defect being
+  # guarded. The guard must also be parse-time: a recipe line would itself be
+  # skipped under -n.
+  run grep -n "KIND_DRY_RUN_REQUESTED" "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"findstring n,\$(firstword -\$(MAKEFLAGS))"* ]]
+
+  run bash -lc "grep -A6 'ifneq (\$(KIND_DRY_RUN_REQUESTED),)' '${REPO_ROOT}/kubernetes/kind/Makefile'"
+
+  [ "${status}" -eq 0 ]
+  # Both dangerous goals covered, and the refusal is a make-level $(error).
+  [[ "${output}" == *"filter plan apply,\$(MAKECMDGOALS)"* ]]
+  [[ "${output}" == *"\$(error"* ]]
+}

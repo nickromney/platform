@@ -55,6 +55,7 @@ CI_BATS_TESTS := \
 	tests/check-bash32-compat.bats \
 	tests/check-version.bats \
 	tests/check-worktree-unchanged.bats \
+	tests/ci-test-gate.bats \
 	tests/ci-workflow.bats \
 	tests/ddd-consistency.bats \
 	tests/dependabot-config.bats \
