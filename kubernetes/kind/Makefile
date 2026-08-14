@@ -144,6 +144,24 @@ STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
 
 KIND_DISPATCH_TARGET := $(if $(filter apply,$(ACTION_FROM_GOALS)),apply,plan)
 
+# `make -n plan` and `make -n apply` are not previews: they perform the real
+# operation. GNU make exempts recipe lines containing $(MAKE) from --just-print,
+# and both recipes are single backslash-continued blocks that contain it, so the
+# whole block -- terragrunt included -- executes. This has already applied a
+# stage-900 cluster by accident.
+#
+# The refusal has to happen at parse time. A guard written as a recipe line
+# would itself be skipped under -n, which is the very trap being guarded.
+KIND_DRY_RUN_REQUESTED := $(findstring n,$(firstword -$(MAKEFLAGS)))
+ifneq ($(KIND_DRY_RUN_REQUESTED),)
+ifneq ($(filter plan apply,$(MAKECMDGOALS)),)
+$(error make -n/--just-print is unsafe for '$(filter plan apply,$(MAKECMDGOALS))': \
+GNU make exempts $$(MAKE) recipe lines from --just-print, so this would run the \
+real operation instead of previewing it. Use `make <stage> plan` for a genuine \
+preview, which reports changes without applying them)
+endif
+endif
+
 include ../../mk/common.mk
 include ../../mk/k8s-terragrunt.mk
 include ../../mk/stage-workflow.mk

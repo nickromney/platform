@@ -743,6 +743,46 @@ Not fixed here, because the options differ in what they change:
 The second is the smallest change that removes the sharp edge. The first is the
 correct one. This needs a decision, not an implementation.
 
+### Resolved 2026-08-14: refuse, and stop the exemption reaching terragrunt
+
+Both options taken. The refusal is the load-bearing one, for a reason that only
+became clear while implementing it.
+
+**The refusal has to happen at parse time.** A guard written as a recipe line
+would itself be skipped under `-n` -- the very trap being guarded. So it is a
+`$(error)` evaluated while the makefile is read:
+
+```make
+KIND_DRY_RUN_REQUESTED := $(findstring n,$(firstword -$(MAKEFLAGS)))
+ifneq ($(KIND_DRY_RUN_REQUESTED),)
+ifneq ($(filter plan apply,$(MAKECMDGOALS)),)
+$(error make -n/--just-print is unsafe for ...)
+endif
+endif
+```
+
+Verified: `make -C kubernetes/kind --just-print 900 apply` and the same for
+`plan` now abort before any recipe runs. `--just-print` on other targets still
+works, and normal `plan`/`apply` are untouched.
+
+**Why the restructure alone would not have been enough.** The obvious fix is to
+move the terragrunt call behind its own sub-target so that, under `-n`, make
+recurses but the leaf recipe is printed rather than run. That does protect
+terragrunt. It does not make `-n` a preview, because the same exemption applies
+to every other `$(MAKE)` line in the block: `prepare-state`,
+`render-operator-overrides`, `prereqs`, `ensure-image-cache` and
+`preload-images` all still execute for real. `-n` on this target can never mean
+"no side effects" while the recipe is built from recursive make.
+
+That is the case for refusing outright rather than making `-n` partially safe,
+and it is why the refusal came first.
+
+The guard is covered by a test in `kubernetes/kind/tests/makefile.bats`, and
+that test is deliberately static. Asserting the behaviour would mean running
+`make -n apply` to observe the refusal, which performs a real stage apply if the
+guard ever regresses. A test whose failure mode is "applies the operator's
+cluster" is not worth the extra fidelity.
+
 ## 13. Two CI Failures That Predate This Branch
 
 Found on 2026-08-14 while checking whether PR #196 was ready to merge. Not
@@ -902,3 +942,25 @@ files for no behavioural gain.
 The root `Makefile` was considered and deliberately left alone: every `$(MAKE)`
 in it already passes `--no-print-directory` explicitly, so there is nothing for
 the flag to fix there.
+
+## 15. The CI Gate Is Hand-Maintained
+
+Found on 2026-08-14 after `tests/release-workflow.bats` was discovered red with
+nothing watching it. It had never been added to `CI_BATS_TESTS`.
+
+The instance is minor. The class is not: **37 of the 99 `tests/*.bats` files are
+outside the gate.** A new test file runs only if someone remembers to list it,
+and nothing says otherwise, so the cost of forgetting is silent.
+
+`tests/ci-test-gate.bats` now asserts the list is complete, and a second case
+asserts it names no file that has since been deleted.
+
+The 37 pre-existing files are recorded in the test as a named backlog rather
+than being added wholesale. Adding them blind would import an unknown number of
+failures and an unknown amount of runtime into the gate, and several are the
+kind that read host state -- exactly the class section 1 documents. Each needs
+checking before it joins the hermetic subset.
+
+So this is a ratchet, not a fix: the gap is now visible, reviewable, and cannot
+grow. Burning the backlog down is separate work. Verified by adding a new test
+file and watching the guard fail, then removing it.
