@@ -99,6 +99,34 @@ append_unique_path() {
   eval "${array_name}+=(\"\${path}\")"
 }
 
+# Host caches are located by asking each tool where its cache lives, and not
+# every tool honours a reassigned HOME. `uv cache dir` returns the invoking
+# user's real cache even under HOME=<sandbox>, so this script -- which deletes
+# what it collects -- resolved a path outside the sandbox it was given. That is
+# how tests/reset-local-state.bats came to delete the operator's actual
+# ~/.cache/uv instead of its own fixture.
+#
+# Containment is enforced here rather than at each call site, so a tool that
+# starts ignoring HOME cannot widen the blast radius again. A path outside HOME
+# is skipped with a warning, never removed.
+append_host_cache_path() {
+  local array_name="${1}"
+  local path="${2}"
+  local resolved=""
+  local home_resolved=""
+
+  resolved="$(cd "$(dirname "${path}")" 2>/dev/null && pwd -P)" || return 0
+  resolved="${resolved}/$(basename "${path}")"
+  home_resolved="$(cd "${HOME}" 2>/dev/null && pwd -P)" || return 0
+
+  if [[ "${resolved}" != "${home_resolved}/"* ]]; then
+    printf 'WARN ignoring host cache outside HOME: %s\n' "${path}" >&2
+    return 0
+  fi
+
+  append_unique_path "${array_name}" "${path}"
+}
+
 collect_repo_paths() {
   local path=""
   while IFS= read -r -d '' path; do
@@ -145,25 +173,37 @@ collect_host_paths() {
       npm_cache_dir="$(npm config get cache 2>/dev/null || true)"
     fi
     if [[ -n "${npm_cache_dir}" && -e "${npm_cache_dir}" ]]; then
-      append_unique_path host_paths "${npm_cache_dir}"
+      append_host_cache_path host_paths "${npm_cache_dir}"
     fi
 
     if [[ -n "${BUN_CACHE_DIR_OVERRIDE}" && -e "${BUN_CACHE_DIR_OVERRIDE}" ]]; then
-      append_unique_path host_paths "${BUN_CACHE_DIR_OVERRIDE}"
+      append_host_cache_path host_paths "${BUN_CACHE_DIR_OVERRIDE}"
     fi
 
+    # Derived from HOME rather than from `uv cache dir`, which ignores HOME.
+    # Same two-candidate shape as playwright and pip below; uv was the one
+    # cache resolved only by asking the tool, and so the only one that could
+    # name a directory outside the HOME it was handed.
     uv_cache_dir="${UV_CACHE_DIR_OVERRIDE}"
-    if [[ -z "${uv_cache_dir}" ]] && command -v uv >/dev/null 2>&1; then
-      uv_cache_dir="$(uv cache dir 2>/dev/null || true)"
-    fi
-    if [[ -n "${uv_cache_dir}" && -e "${uv_cache_dir}" ]]; then
-      append_unique_path host_paths "${uv_cache_dir}"
+    if [[ -n "${uv_cache_dir}" ]]; then
+      if [[ -e "${uv_cache_dir}" ]]; then
+        append_host_cache_path host_paths "${uv_cache_dir}"
+      fi
+    else
+      for candidate in \
+        "${HOME}/Library/Caches/uv" \
+        "${HOME}/.cache/uv"
+      do
+        if [[ -e "${candidate}" ]]; then
+          append_host_cache_path host_paths "${candidate}"
+        fi
+      done
     fi
 
     playwright_cache_dir="${PLAYWRIGHT_CACHE_DIR_OVERRIDE}"
     if [[ -n "${playwright_cache_dir}" ]]; then
       if [[ -e "${playwright_cache_dir}" ]]; then
-        append_unique_path host_paths "${playwright_cache_dir}"
+        append_host_cache_path host_paths "${playwright_cache_dir}"
       fi
     else
       for candidate in \
@@ -171,7 +211,7 @@ collect_host_paths() {
         "${HOME}/.cache/ms-playwright"
       do
         if [[ -e "${candidate}" ]]; then
-          append_unique_path host_paths "${candidate}"
+          append_host_cache_path host_paths "${candidate}"
         fi
       done
     fi
@@ -182,7 +222,7 @@ collect_host_paths() {
     fi
     if [[ -n "${pip_cache_dir}" ]]; then
       if [[ -e "${pip_cache_dir}" ]]; then
-        append_unique_path host_paths "${pip_cache_dir}"
+        append_host_cache_path host_paths "${pip_cache_dir}"
       fi
     else
       for candidate in \
@@ -190,7 +230,7 @@ collect_host_paths() {
         "${HOME}/.cache/pip"
       do
         if [[ -e "${candidate}" ]]; then
-          append_unique_path host_paths "${candidate}"
+          append_host_cache_path host_paths "${candidate}"
         fi
       done
     fi

@@ -12,6 +12,11 @@ make_fake_workspace() {
   (
     cd "${TEST_WORKSPACE}"
     git init -q
+    # See the note in release-script.bats: the fixture inherits global config,
+    # so a host with commit signing on routes the seed commit to that signer.
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    git config commit.gpgsign false
     mkdir -p .run/demo apps/example/node_modules/pkg infra/.terraform providers/dist
     printf 'cache\n' > .run/demo/file.txt
     printf 'deps\n' > apps/example/node_modules/pkg/index.js
@@ -95,6 +100,32 @@ make_fake_home() {
   [ ! -e "${TEST_HOME}/Library/Caches/pip" ]
   [ ! -e "${TEST_HOME}/.kube/kind-kind-local.yaml" ]
   [ -f "${TEST_WORKSPACE}/dist/keep.txt" ]
+}
+
+@test "reset-local-state refuses a host cache resolved outside HOME" {
+  make_fake_workspace
+  make_fake_home
+
+  # Not hypothetical. `uv cache dir` ignores a reassigned HOME and returns the
+  # invoking user's real cache, so this suite deleted the operator's actual
+  # ~/.cache/uv rather than its fixture. The override stands in for any tool
+  # that reports a path outside the HOME it was handed.
+  outside="${BATS_TEST_TMPDIR}/outside-cache"
+  mkdir -p "${outside}"
+  printf 'keep\n' >"${outside}/file.txt"
+
+  run env \
+    HOME="${TEST_HOME}" \
+    RESET_LOCAL_STATE_WORKSPACE_ROOT="${TEST_WORKSPACE}" \
+    RESET_LOCAL_STATE_GIT_ROOT="${TEST_WORKSPACE}" \
+    RESET_LOCAL_STATE_UV_CACHE_DIR="${outside}" \
+    "${SCRIPT}" \
+    --execute \
+    --include-host-caches
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"ignoring host cache outside HOME"* ]]
+  [ -f "${outside}/file.txt" ]
 }
 
 @test "reset-local-state dry-run includes docker cleanup estimate when requested" {

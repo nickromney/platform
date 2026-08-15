@@ -16,15 +16,16 @@ setup() {
 }
 
 # Files still outside the gate. Started at 37 on 2026-08-14; 11 were triaged
-# green and added, leaving these 26.
+# green and added, then 5 more on 2026-08-15, leaving these 21.
 #
-# They are not merely unlisted -- most are RED. Triage on 2026-08-14 ran each in
-# isolation: 19 of the 30 safe-to-run files failed, with the failure count noted
-# beside each below. Adding them to CI_BATS_TESTS without fixing them first
-# would simply make the gate red, which is the condition this whole effort
-# exists to end.
+# They are not merely unlisted -- most are RED. Each safe-to-run file was run in
+# isolation on 2026-08-15 and the failing/total count recorded beside it below.
+# The 2026-08-14 pass claimed to record these counts and did not, so the size of
+# the remaining job was being guessed rather than known. Adding a file to
+# CI_BATS_TESTS without fixing it first would simply move its redness into the
+# gate, which is the condition this whole effort exists to end.
 #
-# The remaining seven are untriaged because they reference docker build/run or
+# The six docker entries are untriaged: they reference docker build/run or
 # compose, and running them unsupervised risks real side effects.
 #
 # Adding a new test file? Put it in CI_BATS_TESTS. Do not add it here.
@@ -43,17 +44,39 @@ tests/kubernetes-stage-helper-surface.bats
 tests/local-idp-container-images.bats
 tests/platform-workflow-ui.bats
 tests/platform-workflow.bats
-tests/python-wrapper-policy.bats
-tests/release-script.bats
-tests/reset-local-state.bats
-tests/review-environments.bats
 tests/smoke-sentiment-api-image.bats
 tests/sso-e2e-app-toggles.bats
 tests/subnetcalc-go-only.bats
-tests/subnetcalc-naming.bats
 tests/validate-app-runtime-surfaces.bats
 tests/validate-docker-optimization-contracts.bats
 tests/vanilla-js-typecheck.bats"
+
+# Measured 2026-08-15, each file run in isolation. fail/total:
+#
+#   1/3    apim-simulator-makefile
+#   4/28   app-layout-consistency
+#   1/5    application-surface-projection
+#   1/22   docs-content-current
+#   3/7    docs-site
+#   2/4    grafana-dashboard-quality      asserts live Prometheus series
+#   1/41   idp-core-components
+#   1/5    kubernetes-mcp-manifests
+#   1/2    kubernetes-stage-helper-surface
+#   1/3    local-idp-container-images
+#   2/11   platform-workflow-ui           HANGS -- killed at 300s
+#   1/23   platform-workflow
+#   1/2    sso-e2e-app-toggles
+#   1/3    subnetcalc-go-only
+#   15/61  vanilla-js-typecheck
+#
+#   untriaged (docker): backstage-compose, backstage-portal,
+#   devcontainer-makefile, smoke-sentiment-api-image,
+#   validate-app-runtime-surfaces, validate-docker-optimization-contracts
+#
+# Two of these need more than a fix to the assertion. grafana-dashboard-quality
+# queries a live Grafana/Prometheus, so it can never be hermetic in its current
+# shape. platform-workflow-ui does not fail so much as never finish, which is
+# worse in a gate than a red test.
 
 is_backlogged() {
   printf '%s\n' "${CI_GATE_BACKLOG}" | grep -qxF "$1"

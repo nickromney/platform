@@ -11,6 +11,13 @@ setup() {
   git -C "${TEST_REPO}" init -q
   git -C "${TEST_REPO}" config user.email "test@example.com"
   git -C "${TEST_REPO}" config user.name "Test User"
+  # The fixture repo inherits global config, so a host with commit signing on
+  # sends every fixture commit to that signer. This suite passed on CI, where
+  # nothing is configured, and failed on a workstation signing through a
+  # hardware or agent-backed key. Same idiom as git-hooks.bats and
+  # check-worktree-unchanged.bats, which already learned this.
+  git -C "${TEST_REPO}" config commit.gpgsign false
+  git -C "${TEST_REPO}" config tag.gpgsign false
   printf '%s\n' "0.3.0" >"${TEST_REPO}/VERSION"
   git -C "${TEST_REPO}" add VERSION scripts/release.sh
   git -C "${TEST_REPO}" commit -q -m "initial"

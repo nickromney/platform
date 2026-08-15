@@ -109,11 +109,16 @@ CI_BATS_TESTS := \
 	tests/platform-status-read-model.bats \
 	tests/platform-status.bats \
 	tests/platform-workflow-matrix.bats \
+	tests/python-wrapper-policy.bats \
+	tests/release-script.bats \
 	tests/release-workflow.bats \
+	tests/reset-local-state.bats \
+	tests/review-environments.bats \
 	tests/sentiment-go-only.bats \
 	tests/sentiment-makefile.bats \
 	tests/sso-e2e-env.bats \
 	tests/subnetcalc-makefile.bats \
+	tests/subnetcalc-naming.bats \
 	tests/subnetcalc-terraform-naming.bats \
 	tests/trivy-runner.bats \
 	tests/update-versions.bats \
