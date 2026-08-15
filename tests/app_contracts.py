@@ -29,6 +29,10 @@ class GoModuleRequirement:
 def canonical_go_app_names() -> tuple[str, ...]:
     return (
         "apim-simulator",
+        # auth-chat has carried apps/auth-chat/app/go.mod since it was added, so
+        # discovered_go_app_names() has always found it while this list did not.
+        # The equality assertion between the two is what should have said so.
+        "auth-chat",
         "chatgpt-sim",
         "idp-core",
         "langfuse-demos",
@@ -1341,10 +1345,13 @@ def keycloak_optimized_image_contract_violations(repo_root: Path) -> tuple[str, 
             if actual_values.get(key) != expected:
                 violations.append(f"image-catalog.json keycloak {key} should be {expected}")
 
+    # "lima" was listed twice, so Python kept only the second value and this
+    # asserted a 192.168.64.1 registry host that appears nowhere in the repo.
+    # host.lima.internal:5002 is what the lima Makefile, bootstrap script and
+    # tfvars all use. ruff reports the shadowing as F601; nothing runs ruff.
     target_registry_hosts = {
         "kind": "host.docker.internal:5002",
         "lima": "host.lima.internal:5002",
-        "lima": "192.168.64.1:5002",
     }
     for target, registry_host in target_registry_hosts.items():
         tfvars_path = repo_root / "kubernetes" / target / "targets" / f"{target}.tfvars"
@@ -3964,8 +3971,15 @@ def argo_rollouts_gatewayapi_plugin_catalog_build_input_contract_violations(repo
 def image_catalog_target_ref_contract_violations(repo_root: Path) -> tuple[str, ...]:
     validator = repo_root / "kubernetes" / "workflow" / "validate-image-catalog-target-refs.sh"
     catalog = repo_root / "kubernetes" / "workflow" / "image-catalog.json"
+    # "lima" was listed twice with the same value, so this has only ever
+    # validated lima. The sibling function below uses {"kind": ..., "lima": ...},
+    # which is almost certainly what was meant here.
+    #
+    # Adding kind is deliberately NOT done here: kind.tfvars has no
+    # external_workload_image_refs map, so the validator fails on it. That is a
+    # real coverage gap, but closing it means changing target tfvars rather than
+    # a test, and it needs an owner rather than being folded into a green-up.
     expectations = {
-        "lima": repo_root / "kubernetes" / "lima" / "targets" / "lima.tfvars",
         "lima": repo_root / "kubernetes" / "lima" / "targets" / "lima.tfvars",
     }
     violations: list[str] = []
@@ -5637,6 +5651,10 @@ def application_surface_projection_contract_violations(repo_root: Path) -> tuple
         "langfuse": "app.kubernetes.io/name=langfuse",
         "langfuse-trace-chat": "app.kubernetes.io/name=langfuse-trace-chat",
         "langfuse-tool-agent": "app.kubernetes.io/name=langfuse-tool-agent",
+        # Omitted when the app was added, so the default `app=<name>` was
+        # expected while the catalog correctly used the same shape as its three
+        # siblings above. The catalog was right; this table had the gap.
+        "langfuse-mcp-agent": "app.kubernetes.io/name=langfuse-mcp-agent",
         "langfuse-eval-runner": "app.kubernetes.io/name=langfuse-eval-runner",
     }
     docs = backstage_production_catalog_documents(repo_root)

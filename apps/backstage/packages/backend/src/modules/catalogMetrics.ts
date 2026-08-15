@@ -29,6 +29,7 @@ const DEFAULT_CATALOG_FILES = [
   'catalog/apps/platform-mcp/catalog-info.yaml',
   'catalog/apps/langfuse/catalog-info.yaml',
   'catalog/apps/langfuse-demos/catalog-info.yaml',
+  'catalog/apps/auth-chat/catalog-info.yaml',
   'catalog/apps/chatgpt-sim/catalog-info.yaml',
   'catalog/apps/subnetcalc/catalog-info.yaml',
   'catalog/apps/apim-simulator/catalog-info.yaml',

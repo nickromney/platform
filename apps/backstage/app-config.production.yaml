@@ -59,6 +59,9 @@ catalog:
       target: ./catalog/apps/langfuse-demos/catalog-info.yaml
 
     - type: file
+      target: ./catalog/apps/auth-chat/catalog-info.yaml
+
+    - type: file
       target: ./catalog/apps/chatgpt-sim/catalog-info.yaml
 
     - type: file

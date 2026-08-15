@@ -1020,3 +1020,263 @@ unnoticed. This is the same shape as section 1's discovery that
 which therefore defends it. The absence checks now carry a comment saying they
 exist to prove the subset is an explicit list rather than a glob, and that a
 name should be removed when its file joins the gate.
+
+### Burning it down further, 2026-08-15: 26 to 21
+
+Five more files joined the gate. The counts the previous pass claimed to have
+recorded were not actually written down, so every safe-to-run file was re-run in
+isolation and its real fail/total is now in `tests/ci-test-gate.bats`. 16 of the
+20 are red, the worst being `vanilla-js-typecheck` at 15/61.
+
+Two of the four green additions were merely unlisted. The other two were red for
+reasons worth stating.
+
+**A policy test that could never pass.** `tests/python-wrapper-policy.bats`
+greps the tree for `python3` and fails on any hit outside an allowlist. The grep
+line itself contains the string, and the file was not in its own allowlist, so
+it failed on every tree since #68 — a test with no passing input, invisible
+because it sat outside the gate. Its allowlist had also rotted **in both
+directions**: six entries permitted nothing at all, while ten tracked files used
+`python3` with four named. It now excludes itself by pathspec, and a second test
+asserts no allowlist entry has gone dead.
+
+That second assertion is the general lesson. An allowlist is normally guarded
+only against being too small; nothing notices when it grows permissions for
+files that no longer need them, and a stale entry is an unreviewed permission.
+
+**A scanner blind to dotfiles.** `tests/subnetcalc-naming.bats` used `rg`, which
+skips hidden files by default, so it could not see dot-directories at all. It
+also needed six globs to talk itself out of `node_modules` and `dist`, none of
+which are tracked. Switching to `git grep` over tracked files removed the globs,
+removed the dependency on `rg` being installed, and immediately surfaced two
+genuine stale references the old scan had never been capable of seeing: a
+`.yamllint` ignore for `apps/subnet-calculator/apim-simulator/`, a path that has
+not existed since the rename and was matching nothing, and
+`apps/subnetcalc/.gitea/workflows/build-images.yaml` still titled
+`Build subnet-calculator images` with `WORKDIR: /tmp/subnet-calculator`.
+
+`kubernetes/kind/tests/app-repo-sync.bats` already banned `subnet-calculator.git`
+in that exact workflow file and passed the whole time. The assertion was narrower
+than the class it was meant to enforce.
+
+### A backlog test was deleting the operator's real cache
+
+The most serious finding, and it argues for triaging these files rather than
+adding them blind.
+
+`tests/reset-local-state.bats` builds a fixture HOME and runs
+`reset-local-state.sh --execute --include-host-caches` against it. The script
+locates the uv cache by running `uv cache dir` — and **`uv` ignores a reassigned
+`HOME`**, returning the invoking user's real cache instead. So the test deleted
+`~/.cache/uv` on this host rather than its fixture. Observed directly:
+
+```text
+$ ls /home/nick/.cache/uv
+ls: cannot access '/home/nick/.cache/uv': No such file or directory
+```
+
+Only a cache, and uv repopulates it, but the sandbox was not a sandbox. uv was
+the single host cache resolved *only* by asking the tool; `playwright` and `pip`
+already fell back to `${HOME}`-derived candidates and were never exposed. uv now
+uses that same shape.
+
+The per-call fix is not the real one. `append_host_cache_path` now enforces
+containment centrally: a host cache resolving outside `HOME` is skipped with a
+warning and never removed, so the next tool that ignores `HOME` cannot widen the
+blast radius again. Verified by pointing the override outside `HOME` and
+asserting the file survives.
+
+Worth carrying forward: **a test that sets `HOME` has not sandboxed anything.**
+It has only sandboxed the tools that read `HOME`, and which those are is not
+knowable from the test.
+
+### The 1Password signing trap, twice
+
+Both `release-script.bats` and `reset-local-state.bats` build fixture git repos
+and commit into them. A fixture repo inherits global config, so a host with
+`commit.gpgsign = true` sends every fixture commit to that signer:
+
+```text
+error: 1Password: failed to fill whole buffer
+fatal: failed to write commit object
+```
+
+CI has no signing configured, so this passes there and fails only on a developer
+workstation — section 1's one-direction host dependence again, pointing the
+opposite way from the usual case. `git-hooks.bats` and
+`check-worktree-unchanged.bats` already pin `commit.gpgsign false`; the idiom
+existed and two files had simply not adopted it. Both now do.
+
+### The absence assertion, third instance
+
+`tests/makefile.bats` asserted `tests/release-script.bats` was **absent** from
+`CI_BATS_TESTS`. The comment added on 2026-08-14 says to remove a name when its
+file joins the gate, so it was removed. Recording it because it is now a
+reliable pattern rather than a coincidence: each time a file joins the gate,
+check what asserted its absence.
+
+### What is left, and what it needs
+
+21 files. Two of them are not assertion fixes:
+
+- `grafana-dashboard-quality` (2/4) asserts that live Prometheus queries return
+  series. It cannot be hermetic in its present shape and needs either a recorded
+  fixture or a decision that it is a cluster test rather than a gate test.
+- `platform-workflow-ui` (2/11) does not fail so much as never finish; it was
+  killed at 300s. A hanging test in a gate is worse than a red one.
+
+Six are untriaged because they drive `docker build`/`run`/compose. Given what
+`reset-local-state` turned out to be doing to the host, those should be run
+deliberately and watched, not swept in.
+
+### 21 to 16, and one refactor accounts for three of them
+
+Five more added. The pattern in this batch is different from the last one: these
+were not tests that had rotted slowly, they were tests left behind by a single
+change.
+
+**PR #126 broke three of them and nothing said so.** That refactor moved the
+Kubernetes and build plumbing around, and three suites still asserted the shapes
+it replaced:
+
+- `kubernetes-stage-helper-surface` asserted the diagnostic runner is invoked
+  with `--show-urls`. #126 created `run-diagnostic-check.sh`, which has only ever
+  taken `--action show-urls`, and created this test in the same commit. It was
+  **born red** and has never passed on any tree.
+- `sso-e2e-app-toggles` asserted the kind Makefile contains
+  `STAGE_TFVARS_FILES="$$tfvar_files_joined"`. #126 moved that layering into
+  `build-sso-e2e-env.sh`; the local variable has not existed since.
+- `local-idp-container-images` asserted an inline
+  `GOOS=linux GOARCH=$${GOARCH:-$(IDP_GOARCH)}` in the idp-core app Makefile.
+  #126 moved the build line into `mk/go-app-core.mk`, where it now reads
+  `GO_APP_GOARCH`. The behaviour is intact; only the assertion was stranded.
+
+A refactor that lands with three of its tests asserting the old code is what
+"outside the gate" costs, stated as a number. None of these were subtle, and any
+one CI run would have caught all three.
+
+**A policy assertion that could not see the thing it guards.**
+`kubernetes-mcp-manifests` checks which workloads may reach the MCP namespace. It
+compared two sets: source *names*, collected only from endpoints carrying
+`k8s:app.kubernetes.io/name`, and source *namespaces*. PR #189 added a rule
+letting `dev`/`langfuse-demos` reach `platform-mcp` on 8080 — selected by
+`part-of`, not `name` — so the name set never saw it, and only the namespace set
+noticed. A source could have been added under any other label key and been
+invisible to both.
+
+The rule itself is legitimate and merged; the test was simply not updated,
+because it does not run. It now compares the full ingress surface as exact
+`(ports, selector)` pairs, so a new source is either listed or the test fails.
+For a policy guard, "the sets I happened to collect match" is not the same
+assertion as "this is the entire surface".
+
+**`subnetcalc-go-only`** was the locale-collation trap from section 1 again,
+plus real drift: `edge/` and `update-subnetcalc-image-tags.sh` are canonical —
+`sentiment` carries the same pair — and arrived in #111 and #113 without this
+list following.
+
+### The new guards immediately caught their own author
+
+Appending the previous section to this document turned both policy tests red:
+it names `python3` and `subnet-calculator` in order to describe them. That is
+the guards working, but it also showed the allowlists were the wrong shape.
+Prose and recorded artifacts are not host-side code and are not renameable
+source, so `docs/` (python) and `docs/adr/`, `docs/plans/` (naming) are now
+scan-level prefix exemptions rather than per-file allowlist entries. Prefixes
+are deliberately not dead-checked: a document may stop mentioning something
+without that being a finding, whereas a code path that stops needing an
+exception is a live permission nobody reviewed.
+
+### 16 to 9: auth-chat was never registered anywhere
+
+Seven more added, and the batch has a single dominant theme: an application
+that exists, deploys, and serves traffic, but which none of the repo's registries
+knew about.
+
+`auth-chat` has carried `apps/auth-chat/app/go.mod` since it was added. It was
+missing from **five** separate places:
+
+- `canonical_go_app_names()`, while `discovered_go_app_names()` found it on the
+  filesystem. `app-layout-consistency` asserts those two are equal, which is
+  exactly the check designed to catch this, and it had been failing unwatched.
+- the Backstage production catalog (`apps/backstage/catalog/apps/auth-chat/`),
+  though `apps/auth-chat/catalog-info.yaml` existed and was correct
+- both Backstage `app-config` location lists, dev and production
+- `catalogMetrics.ts`, so it was outside catalog observability
+- the ubiquitous language service-surface paragraph in `docs/ddd/`
+
+Its wrapper Makefile also declared `prereqs` in `MAKE_KNOWN_GOALS` with no rule
+anywhere defining it, and `build:` depended on that non-existent target. It only
+appeared to work because an unmatched prerequisite with no recipe is inert.
+`auth-chat` now follows `langfuse-demos`, the other app with no `compose.yml`:
+`app-prereqs` in the wrapper delegating to a real `prereqs` in the app Makefile.
+
+One application, five registries, and every contract meant to notice was in the
+backlog. This is the clearest case yet that the gate's value is not the tests it
+contains but the ones it does not.
+
+### Two more tests that could never have passed
+
+- `app-layout-consistency` asserts a fixture wrapper's help output does **not**
+  contain `ps`. The fixture is created under `apps/`, and `make -C` prints
+  `Entering directory .../apps/zz-test-common-wrapper` — and `apps` contains
+  `ps`. Section 1's Entering-directory bug, this time hidden inside a path
+  component rather than at the start of a line. `--no-print-directory` fixes it.
+- `docs-site` checked the **filesystem** for `.next`, `node_modules` and stray
+  images. All are gitignored, so it failed on any machine that had built the
+  site and passed on a clean CI checkout — host-dependence pointing at the
+  developer rather than at CI, the mirror image of the usual case. The claim is
+  about what the import committed, so it now asks `git ls-files`. Its `find` for
+  images was walking `node_modules` and reporting assets shipped by vendored
+  packages.
+
+### Two tests that were executing real work
+
+`docs-site` also ran `rm -rf node_modules` followed by `make -C sites/docs
+build` — a real `bun install` over the network and a Next.js build, which
+destroyed the developer's installed dependencies on the way past.
+`apim-simulator-makefile` ran `make app-js-check`, which executes `biome`: a
+tool this repo pins nowhere, does not install in CI, and which is absent from
+this host.
+
+Both are now static assertions over the Makefiles, following the precedent set
+by the `make -n` guard test in section 12: where running the thing is either
+destructive or impossible, assert the wiring instead. Both still fail if the
+contract they describe changes.
+
+### A duplicate dict key, and no Python linting at all
+
+`tests/app_contracts.py` had `"lima"` twice in one dict literal, so Python kept
+the second value and the Keycloak image contract asserted a registry host —
+`192.168.64.1:5002` — that appears **nowhere else in the repository**. The
+correct `host.lima.internal:5002` entry was shadowed and dead. A second dict had
+the same key twice with the same value, meaning that contract has only ever
+validated lima where the sibling function below it validates both targets.
+
+`ruff` reports both as F601, and `ruff` is installed. Nothing in `make lint`
+runs it: the repo lints YAML, Markdown, shell, HCL, Cilium and Kyverno, but not
+its own 5,800-line Python contract library. Worth closing, and deliberately not
+closed here — a first `ruff` run also reports unused imports, so it is its own
+change rather than a rider on a green-up.
+
+Extending the second contract to `kind` is also left undone on purpose:
+`kind.tfvars` has no `external_workload_image_refs` map, so the validator fails
+on it. That is a real coverage gap needing an owner, not a test edit.
+
+### And one caused by the section 12 fix
+
+`platform-workflow` ran `make -n readiness` as a proxy for "the target is
+wired". The dry-run refusal added in #198/#199 now rejects that — correctly,
+because `readiness` recurses into `prereqs`, and `-n` there would run the real
+operation. So a fix landed in the gate broke a test outside it, and nothing
+reported the breakage for a day. It now reads the goal out of the make database
+instead of asking make to pretend.
+
+### What is left
+
+Nine files. Six are the untriaged docker set, and after `reset-local-state`
+turned out to be deleting the operator's uv cache, they should be run
+deliberately and watched rather than swept in. The other three are
+`vanilla-js-typecheck` (15/61), `grafana-dashboard-quality`, which queries a
+live Prometheus and cannot be hermetic as written, and `platform-workflow-ui`,
+which hangs rather than fails.

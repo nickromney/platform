@@ -17,15 +17,9 @@ setup() {
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
 }
 
-# ADRs record what was true when the decision was taken. `apps/subnet-calculator`
-# is what the tree actually contained at initial commit 23b2689, so rewriting it
-# would make the record wrong rather than current.
-ALLOWED="docs/adr/0001-local-stack-operations-workspace.md"
-
 # Names the separate `subnet-calculator` repository, which is its real name --
 # the retired experiments were moved there. Not a stale reference to this app.
-ALLOWED="${ALLOWED}
-apps/subnetcalc/README.md"
+ALLOWED="apps/subnetcalc/README.md"
 
 # Carries `! grep -Fq \"subnet-calculator.git\"`, a negative assertion enforcing
 # this same policy on the generated workflow. It names the old form in order to
@@ -33,10 +27,28 @@ apps/subnetcalc/README.md"
 ALLOWED="${ALLOWED}
 kubernetes/kind/tests/app-repo-sync.bats"
 
+# Historical records, which have to name the old form to describe it: ADR 0001
+# states what the tree contained at initial commit 23b2689, and the follow-ups
+# plan documents this very rename. Rewriting either would make the record wrong
+# rather than current. Prefixes are not dead-checked -- a document may stop
+# mentioning the old name without that being a finding.
+ALLOWED_PREFIXES="docs/adr/
+docs/plans/"
+
 # Excludes itself: naming the pattern to search for it is not a use of it.
 scan_matches() {
   git -C "${REPO_ROOT}" grep -l "subnet-calculator" -- \
     . ':(exclude)tests/subnetcalc-naming.bats'
+}
+
+is_allowed() {
+  printf '%s\n' "${ALLOWED}" | grep -qxF "$1" && return 0
+  local prefix
+  while IFS= read -r prefix; do
+    [ -n "${prefix}" ] || continue
+    [[ "$1" == "${prefix}"* ]] && return 0
+  done <<<"${ALLOWED_PREFIXES}"
+  return 1
 }
 
 @test "tracked source uses subnetcalc rather than subnet-calculator" {
@@ -44,8 +56,7 @@ scan_matches() {
 
   while IFS= read -r file; do
     [ -n "${file}" ] || continue
-    printf '%s\n' "${ALLOWED}" | grep -qxF "${file}" ||
-      unexpected="${unexpected}${file}"$'\n'
+    is_allowed "${file}" || unexpected="${unexpected}${file}"$'\n'
   done < <(scan_matches)
 
   if [ -n "${unexpected}" ]; then

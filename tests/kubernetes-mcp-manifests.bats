@@ -136,7 +136,7 @@ PY
   [[ "${output}" == *"validated MCP GitOps manifests"* ]]
 }
 
-@test "MCP Cilium policies only bridge APIM and SSO to MCP workloads" {
+@test "MCP Cilium policies bridge only APIM, SSO, observability and langfuse-demos to MCP workloads" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
@@ -171,22 +171,57 @@ assert inspector_selector["k8s:io.kubernetes.pod.namespace"] == "mcp"
 assert inspector_selector["k8s:app.kubernetes.io/name"] == "mcp-inspector"
 
 ingress = platform_policy["spec"]["ingress"] + inspector_policy["spec"]["ingress"]
-source_names = {
-    source["matchLabels"].get("k8s:app.kubernetes.io/name")
+
+# The whole ingress surface as (ports, selector) pairs, compared exactly.
+#
+# This replaced two loose set comparisons that between them could not see a
+# source. One collected only endpoints carrying k8s:app.kubernetes.io/name, so
+# the langfuse-demos rule added by #189 -- which selects on part-of instead --
+# was invisible to it, and the other compared namespaces alone. Any new label
+# key could slip through the same way. Comparing full selectors means a source
+# is either listed here or the test fails.
+actual = sorted(
+    (
+        tuple(port["port"] for to_port in rule.get("toPorts", []) for port in to_port["ports"]),
+        tuple(sorted(source["matchLabels"].items())),
+    )
     for rule in ingress
     for source in rule.get("fromEndpoints", [])
-    if source["matchLabels"].get("k8s:app.kubernetes.io/name")
-}
-assert source_names == {"subnetcalc-apim-simulator", "oauth2-proxy"}
-source_namespaces = {
-    source["matchLabels"].get("k8s:io.kubernetes.pod.namespace")
-    for rule in ingress
-    for source in rule.get("fromEndpoints", [])
-}
-assert source_namespaces == {"apim", "sso", "observability"}
-assert any(rule["toPorts"][0]["ports"][0]["port"] == "8080" for rule in ingress)
-assert any(rule["toPorts"][0]["ports"][0]["port"] == "6274" for rule in ingress)
-assert any(rule["toPorts"][0]["ports"][0]["port"] == "9090" for rule in ingress)
+)
+
+expected = sorted(
+    [
+        (
+            ("8080",),
+            (
+                ("k8s:app.kubernetes.io/name", "subnetcalc-apim-simulator"),
+                ("k8s:io.kubernetes.pod.namespace", "apim"),
+            ),
+        ),
+        # dev/langfuse-demos reaching platform-mcp on 8080, added by #189.
+        (
+            ("8080",),
+            (
+                ("k8s:app.kubernetes.io/part-of", "langfuse-demos"),
+                ("k8s:io.kubernetes.pod.namespace", "dev"),
+            ),
+        ),
+        (
+            ("9090",),
+            (("k8s:io.kubernetes.pod.namespace", "observability"),),
+        ),
+        (
+            ("6274", "6277"),
+            (
+                ("k8s:app.kubernetes.io/instance", "oauth2-proxy-mcp-console"),
+                ("k8s:app.kubernetes.io/name", "oauth2-proxy"),
+                ("k8s:io.kubernetes.pod.namespace", "sso"),
+            ),
+        ),
+    ]
+)
+
+assert actual == expected, actual
 
 apim_policy = one_policy("terraform/kubernetes/cluster-policies/cilium/shared/apim-baseline.yaml", "apim-baseline")
 apim_ingress_namespaces = {

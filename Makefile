@@ -49,7 +49,10 @@ HOST_PORTABLE_BATS_TESTS := \
 CI_BATS_TESTS := \
 	kubernetes/kind/tests/stage-tfvars-no-duplicate-attributes.bats \
 	kubernetes/kind/tests/sync-gitea-policies.bats \
+	tests/apim-simulator-makefile.bats \
 	tests/app-healthcheck-commands.bats \
+	tests/app-layout-consistency.bats \
+	tests/application-surface-projection.bats \
 	tests/apps-makefile.bats \
 	tests/assert-variant-active.bats \
 	tests/audit-shell-scripts.bats \
@@ -62,7 +65,9 @@ CI_BATS_TESTS := \
 	tests/ddd-consistency.bats \
 	tests/dependabot-config.bats \
 	tests/devcontainer-performance.bats \
+	tests/docs-content-current.bats \
 	tests/docs-prose-voice.bats \
+	tests/docs-site.bats \
 	tests/ensure-playwright-browsers.bats \
 	tests/fmt-hcl.bats \
 	tests/fmt-markdown.bats \
@@ -72,6 +77,7 @@ CI_BATS_TESTS := \
 	tests/http-fetch.bats \
 	tests/iac-boundaries.bats \
 	tests/idp-backstage-sdk-mcp.bats \
+	tests/idp-core-components.bats \
 	tests/image-catalog-lib.bats \
 	tests/image-signing-lib.bats \
 	tests/install-tool-hints.bats \
@@ -83,17 +89,20 @@ CI_BATS_TESTS := \
 	tests/kubernetes-kubeconfig-reconcile-adapter.bats \
 	tests/kubernetes-launchpad-render.bats \
 	tests/kubernetes-local-image-helper-plan.bats \
+	tests/kubernetes-mcp-manifests.bats \
 	tests/kubernetes-memory-report.bats \
 	tests/kubernetes-platform-image-builder-adapter.bats \
 	tests/kubernetes-post-apply-verification-plan.bats \
 	tests/kubernetes-post-apply-verification-runner.bats \
 	tests/kubernetes-sso-runner.bats \
+	tests/kubernetes-stage-helper-surface.bats \
 	tests/kubernetes-stage-monotonicity-adapter.bats \
 	tests/kubernetes-sync-image-cache-adapter.bats \
 	tests/kubernetes-workload-image-builder-adapter.bats \
 	tests/langfuse-demos.bats \
 	tests/lint-markdown.bats \
 	tests/lint-yaml.bats \
+	tests/local-idp-container-images.bats \
 	tests/local-idp-contracts.bats \
 	tests/local-registry-lib.bats \
 	tests/locale-independence.bats \
@@ -109,6 +118,7 @@ CI_BATS_TESTS := \
 	tests/platform-status-read-model.bats \
 	tests/platform-status.bats \
 	tests/platform-workflow-matrix.bats \
+	tests/platform-workflow.bats \
 	tests/python-wrapper-policy.bats \
 	tests/release-script.bats \
 	tests/release-workflow.bats \
@@ -116,7 +126,9 @@ CI_BATS_TESTS := \
 	tests/review-environments.bats \
 	tests/sentiment-go-only.bats \
 	tests/sentiment-makefile.bats \
+	tests/sso-e2e-app-toggles.bats \
 	tests/sso-e2e-env.bats \
+	tests/subnetcalc-go-only.bats \
 	tests/subnetcalc-makefile.bats \
 	tests/subnetcalc-naming.bats \
 	tests/subnetcalc-terraform-naming.bats \

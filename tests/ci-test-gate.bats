@@ -16,7 +16,7 @@ setup() {
 }
 
 # Files still outside the gate. Started at 37 on 2026-08-14; 11 were triaged
-# green and added, then 5 more on 2026-08-15, leaving these 21.
+# green and added, then 17 more on 2026-08-15, leaving these 9.
 #
 # They are not merely unlisted -- most are RED. Each safe-to-run file was run in
 # isolation on 2026-08-15 and the failing/total count recorded beside it below.
@@ -29,44 +29,20 @@ setup() {
 # compose, and running them unsupervised risks real side effects.
 #
 # Adding a new test file? Put it in CI_BATS_TESTS. Do not add it here.
-CI_GATE_BACKLOG="tests/apim-simulator-makefile.bats
-tests/app-layout-consistency.bats
-tests/application-surface-projection.bats
-tests/backstage-compose.bats
+CI_GATE_BACKLOG="tests/backstage-compose.bats
 tests/backstage-portal.bats
 tests/devcontainer-makefile.bats
-tests/docs-content-current.bats
-tests/docs-site.bats
 tests/grafana-dashboard-quality.bats
-tests/idp-core-components.bats
-tests/kubernetes-mcp-manifests.bats
-tests/kubernetes-stage-helper-surface.bats
-tests/local-idp-container-images.bats
 tests/platform-workflow-ui.bats
-tests/platform-workflow.bats
 tests/smoke-sentiment-api-image.bats
-tests/sso-e2e-app-toggles.bats
-tests/subnetcalc-go-only.bats
 tests/validate-app-runtime-surfaces.bats
 tests/validate-docker-optimization-contracts.bats
 tests/vanilla-js-typecheck.bats"
 
 # Measured 2026-08-15, each file run in isolation. fail/total:
 #
-#   1/3    apim-simulator-makefile
-#   4/28   app-layout-consistency
-#   1/5    application-surface-projection
-#   1/22   docs-content-current
-#   3/7    docs-site
 #   2/4    grafana-dashboard-quality      asserts live Prometheus series
-#   1/41   idp-core-components
-#   1/5    kubernetes-mcp-manifests
-#   1/2    kubernetes-stage-helper-surface
-#   1/3    local-idp-container-images
 #   2/11   platform-workflow-ui           HANGS -- killed at 300s
-#   1/23   platform-workflow
-#   1/2    sso-e2e-app-toggles
-#   1/3    subnetcalc-go-only
 #   15/61  vanilla-js-typecheck
 #
 #   untriaged (docker): backstage-compose, backstage-portal,

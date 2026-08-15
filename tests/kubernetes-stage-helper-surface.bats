@@ -23,7 +23,10 @@ setup() {
 
     [ "${status}" -eq 0 ]
     [[ "${output}" == *'if [ -z "" ] && [ -z "show-urls" ]; then'* ]]
-    [[ "${output}" == *"--show-urls"* ]]
+    # `--action show-urls`, not `--show-urls`. #126 created both
+    # run-diagnostic-check.sh and this test, and the script has only ever taken
+    # the action form, so this assertion never matched on any tree.
+    [[ "${output}" == *"--action show-urls"* ]]
     [[ "${output}" == *"--dry-run"* ]]
   done
 }

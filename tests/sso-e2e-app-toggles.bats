@@ -19,7 +19,13 @@ assert "SSO_E2E_ENABLE_SENTIMENT" in run_sh
 assert "SSO_E2E_ENABLE_SUBNETCALC" in run_sh
 assert 'enable_app_repo_sentiment' in run_sh
 assert 'enable_app_repo_subnetcalc' in run_sh
-assert 'STAGE_TFVARS_FILES="$$tfvar_files_joined"' in kind_makefile
+
+# #126 moved the tfvars layering out of the recipe and into
+# build-sso-e2e-env.sh, which the Makefile evals before passing the result on.
+# The local `tfvar_files_joined` this used to assert on has not existed since,
+# so the contract checked here is the pass-through, not the variable name.
+assert "BUILD_SSO_E2E_ENV" in kind_makefile
+assert 'STAGE_TFVARS_FILES="$${STAGE_TFVARS_FILES}"' in kind_makefile
 PY
 }
 

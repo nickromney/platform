@@ -142,10 +142,10 @@ The platform now has a first-class service catalog at
 application ownership, environments, app/environment RBAC, secret bindings,
 deployment evidence, and scorecards. Current app/environment surfaces include
 `backstage-local`, `idp-core-local`, `platform-mcp-local`,
-`mcp-inspector-local`, `chatgpt-sim-dev`, `langfuse-local`,
+`mcp-inspector-local`, `auth-chat-dev`, `chatgpt-sim-dev`, `langfuse-local`,
 `langfuse-trace-chat-dev`, `langfuse-tool-agent-dev`,
-`langfuse-eval-runner-dev`, `apim-simulator-local`, `subnetcalc-dev`,
-`subnetcalc-uat`, `sentiment-dev`, and `sentiment-uat`.
+`langfuse-mcp-agent-dev`, `langfuse-eval-runner-dev`, `apim-simulator-local`,
+`subnetcalc-dev`, `subnetcalc-uat`, `sentiment-dev`, and `sentiment-uat`.
 
 | Term | Meaning in the solution | Aliases or ambiguity |
 | --- | --- | --- |

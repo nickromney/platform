@@ -51,8 +51,16 @@ tests/validate-app-runtime-surfaces.bats
 tests/validate-docker-optimization-contracts.bats
 tests/vanilla-js-typecheck.bats"
 
-# Recorded run artifacts. History, not code, and not editable to comply.
-ALLOWED_PREFIXES="tests/artifacts/"
+# Prose and recorded artifacts rather than host-side code. Prefixes are not
+# dead-checked below, because a document is allowed to stop mentioning python3
+# without that being a finding -- unlike a code path, which is a live permission.
+#
+# docs/ is here because the follow-ups plan has to name `python3` in order to
+# describe this policy and the drift it found. The original allowlist carried a
+# docs/ prefix for the same reason; it was removed on 2026-08-15 only because
+# nothing under docs/ mentioned python3 at that moment.
+ALLOWED_PREFIXES="docs/
+tests/artifacts/"
 
 # Tracked files referencing python3, excluding this one -- see note 1 above.
 scan_matches() {

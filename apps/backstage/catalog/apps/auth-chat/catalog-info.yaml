@@ -1,0 +1,18 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: auth-chat
+  title: Auth Chat
+  description: SSO-protected chat app proving Keycloak-authenticated /auth and /chat routes against a local OpenAI-compatible model endpoint.
+  annotations:
+    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/auth-chat/
+    backstage.io/kubernetes-label-selector: app=auth-chat
+  links:
+    - url: https://auth-chat.dev.127.0.0.1.sslip.io
+      title: Dev
+      icon: chat
+spec:
+  type: website
+  lifecycle: demo
+  owner: group:default/platform
+  system: local-idp

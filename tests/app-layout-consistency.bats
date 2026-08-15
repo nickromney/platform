@@ -61,6 +61,7 @@ contract_lines = [
 
 assert canonical_go_app_names() == (
     "apim-simulator",
+    "auth-chat",
     "chatgpt-sim",
     "idp-core",
     "langfuse-demos",
@@ -366,7 +367,7 @@ print(f"validated {len(canonical_go_app_names())} minimal Go app dependency cont
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 7 minimal Go app dependency contract(s)"* ]]
+  [[ "${output}" == *"validated 8 minimal Go app dependency contract(s)"* ]]
 }
 
 @test "Platform MCP config uses shared apphttp env parsing" {
@@ -696,7 +697,12 @@ include ../../mk/app-common.mk
 EOF
   touch "${temp_app}/app/go.mod"
 
-  run make -C "${temp_app}" help
+  # --no-print-directory because the absence assertions below are substring
+  # matches, and make's "Entering directory .../apps/zz-test-common-wrapper"
+  # line contains "ps" inside the word "apps". This test could therefore never
+  # pass: the fixture lives under apps/ by construction. Section 1's
+  # Entering-directory bug again, this time hiding inside a path component.
+  run make --no-print-directory -C "${temp_app}" help
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"prereqs"* ]]
