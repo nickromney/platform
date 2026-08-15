@@ -14,7 +14,7 @@ stack_dir="${REPO_ROOT}/terraform/kubernetes"
 var_files=()
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--dry-run] [--execute] --variant-json PATH --action ACTION --stage STAGE [--stack-dir PATH] [--var-file PATH ...]
 
 Runs a Kubernetes diagnostic through the shared variant contract dispatch layer.

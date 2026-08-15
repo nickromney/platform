@@ -42,3 +42,40 @@ EOF
   [[ "${output}" == *"bad.sh:4:local -A seen=()"* ]]
   [[ "${output}" == *"bad.sh:5:mapfile -t values"* ]]
 }
+
+@test "check-bash32-compat scans makefiles, not just shell scripts" {
+  # mk/common.mk and mk/go-app-core.mk pin SHELL := /bin/bash, so recipes in
+  # every Makefile that includes them are Bash under test -- 5.x on Arch, 3.2 on
+  # macOS. Scanning only *.sh meant a Bash 4-only recipe would pass every Linux
+  # check and break on the Mac, which is the exact class this check exists for.
+  candidate="${BATS_TEST_TMPDIR}/Makefile"
+
+  cat >"${candidate}" <<'EOF'
+SHELL := /bin/bash
+
+.PHONY: demo
+demo:
+	@set -euo pipefail; \
+	mapfile -t names < <(printf '%s\n' one two); \
+	printf '%s\n' "${names[@]}"
+EOF
+
+  run /bin/bash "${SCRIPT}" --execute "${candidate}"
+
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"mapfile"* ]]
+}
+
+@test "check-bash32-compat includes tracked makefiles in the default scan set" {
+  # Asserts the default set actually grew, so narrowing build_tracked_shell_script_list
+  # back to '*.sh' fails here rather than silently restoring the blind spot.
+  sh_count="$(git -C "${REPO_ROOT}" ls-files -- '*.sh' | wc -l | tr -d ' ')"
+  mk_count="$(git -C "${REPO_ROOT}" ls-files -- 'Makefile' '*/Makefile' '*.mk' | wc -l | tr -d ' ')"
+
+  [ "${mk_count}" -gt 0 ]
+
+  run /bin/bash "${SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"$((sh_count + mk_count)) script(s) scanned"* ]]
+}

@@ -405,3 +405,49 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *'run-opentofu-tests.sh" --execute --module-dir "../../terraform/kubernetes" --timeout-seconds "600"'* ]]
 }
+
+@test "lima refuses --just-print for the goals that mutate under it" {
+  # Static, not behavioural, for the same reason as the kind equivalent in
+  # kubernetes/kind/tests/makefile.bats: observing the refusal means running
+  # `make -n reset`, which deletes the operator's Lima VMs and Terraform state
+  # if the guard has regressed. A test whose failure mode is the incident is
+  # not worth the fidelity.
+  run grep -n "LIMA_DRY_RUN_REQUESTED" "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"findstring n,\$(firstword -\$(MAKEFLAGS))"* ]]
+
+  run bash -lc "grep -A6 'ifneq (\$(LIMA_DRY_RUN_REQUESTED),)' '${REPO_ROOT}/kubernetes/lima/Makefile'"
+
+  [ "${status}" -eq 0 ]
+  # Wired to the goal list, and refusing at make level rather than in a recipe.
+  [[ "${output}" == *"filter \$(LIMA_DRY_RUN_UNSAFE_GOALS),\$(MAKECMDGOALS)"* ]]
+  [[ "${output}" == *"\$(error"* ]]
+}
+
+@test "the lima dry-run refusal covers every target known to mutate under --just-print" {
+  # Explicit list, not auto-detection. #199 recorded why: deriving the set by
+  # grepping recipe bodies passed even when targets were removed, because the
+  # terragrunt call goes through $(call tg_stack_apply,...) and the word never
+  # appears in the recipe. Adding a target here is a review step.
+  run bash -lc "sed -n 's/^LIMA_DRY_RUN_UNSAFE_GOALS := //p' '${REPO_ROOT}/kubernetes/lima/Makefile'"
+
+  [ "${status}" -eq 0 ]
+  for goal in apply plan prereqs reset stop-lima; do
+    [[ " ${output} " == *" ${goal} "* ]] || {
+      echo "goal ${goal} missing from LIMA_DRY_RUN_UNSAFE_GOALS" >&2
+      return 1
+    }
+  done
+
+  # The other half of the criterion: targets whose recipes hold no $(MAKE) are
+  # genuinely previewable, and refusing them breaks working callers.
+  # tests/kubernetes-sync-image-cache-adapter.bats runs `make -n sync-image-cache`
+  # and reads the output, so listing it here is a regression, not extra safety.
+  for goal in start sync-image-cache; do
+    [[ " ${output} " != *" ${goal} "* ]] || {
+      echo "goal ${goal} must not be in LIMA_DRY_RUN_UNSAFE_GOALS: its recipe has no \$(MAKE) exemption, so -n is a real preview" >&2
+      return 1
+    }
+  done
+}

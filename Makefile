@@ -45,7 +45,8 @@ HOST_PORTABLE_BATS_TESTS := \
 	kubernetes/kind/tests/install-host-alias-timer.bats \
 	tests/check-bash32-compat.bats \
 	tests/check-worktree-unchanged.bats \
-	tests/locale-independence.bats
+	tests/locale-independence.bats \
+	tests/update-versions.bats
 
 CI_BATS_TESTS := \
 	kubernetes/kind/tests/stage-tfvars-no-duplicate-attributes.bats \

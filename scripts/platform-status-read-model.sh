@@ -10,7 +10,7 @@ OUTPUT_FORMAT="json"
 STATUS_SCRIPT="${PLATFORM_STATUS_READ_MODEL_STATUS_SCRIPT:-${REPO_ROOT}/scripts/platform-status.sh}"
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--output json|text] [--dry-run] [--execute]
 
 Builds a read-only ownership, readiness, blocker, and recommended-action

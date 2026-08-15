@@ -14,7 +14,7 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 TARGETS=()
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--target <path>]...
 
 Renders the Platform Launchpad dashboard JSON from a small tile inventory and

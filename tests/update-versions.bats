@@ -411,10 +411,18 @@ set -euo pipefail
 url="${*: -1}"
 cat >/dev/null
 now="$(date -u '+%s')"
+# BSD date first, GNU second -- the same order scripts/update-versions.sh uses
+# in date_from_epoch. `date -d` is GNU-only, and a bare one here made this the
+# only file in the sweep that still assumed GNU date: the fixture died under
+# set -e on macOS and took the cooldown-resolver test with it.
+epoch_to_iso() {
+  date -u -r "$1" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null ||
+    date -u -d "@$1" '+%Y-%m-%dT%H:%M:%SZ'
+}
 # Newest release is 2 days old (still cooling); the one before it is 30 days
 # old and therefore the newest cooldown-eligible version.
-too_new="$(date -u -d "@$((now - 2 * 86400))" '+%Y-%m-%dT%H:%M:%SZ')"
-eligible="$(date -u -d "@$((now - 30 * 86400))" '+%Y-%m-%dT%H:%M:%SZ')"
+too_new="$(epoch_to_iso "$((now - 2 * 86400))")"
+eligible="$(epoch_to_iso "$((now - 30 * 86400))")"
 case "${url}" in
   */repos/mikefarah/yq/releases\?per_page=*)
     printf '[{"tag_name":"v4.9.0","published_at":"%s","prerelease":false,"draft":false},' "${too_new}"

@@ -15,7 +15,7 @@ warn() { echo "WARN $*"; }
 ok() { echo "OK   $*"; }
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--var-file PATH] [--host-port PORT] [--contract] [--extended]
 
 Checks the selected OIDC provider + oauth2-proxy SSO plumbing with an emphasis on Gitea.

@@ -9,7 +9,7 @@ VARIABLES_FILE="${REPO_ROOT}/terraform/kubernetes/variables.tf"
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ --stack-dir PATH [--label NAME] [--stages-dir PATH] [--dry-run] [--execute]
 
 Checks that enable_* stage toggles in a Kubernetes variant stage ladder only

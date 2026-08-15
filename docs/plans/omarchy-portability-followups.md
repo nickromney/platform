@@ -1751,3 +1751,246 @@ green-up.
 
 A silently wrong render is worse than a failed one. Whichever way it goes, it
 wants a guard rather than a comment.
+
+## 19. Back On macOS: What The Sweep Missed
+
+The portability pass was written and verified on Arch. This is the first time
+the repo's own gates ran on the Mac since, which is the only way to find what a
+Linux-only check cannot see.
+
+| Fact | Value |
+| --- | --- |
+| Host | Darwin 25.6, arm64 |
+| `make` | GNU Make **3.81** (Apple stock, not 4.x) |
+| `/bin/bash` | **3.2.57** |
+| `awk` | BWK awk 20200816, not gawk |
+| `sort` | Apple sort 2.3 |
+
+Result: across the 131 files and ~6,200 insertions of #195 through #200,
+**one** genuine macOS regression, and it was in a test fixture rather than
+production code. The `uname -s` branching, the Darwin paths in
+`reset-local-state.sh`, the memory preflight, the dhi credential helper default,
+and the no-op systemd timer all behave correctly here.
+
+Four things that were verified rather than assumed, because each could
+plausibly have broken and none did:
+
+- The parse-time `make -n` refusal works on Make 3.81 for `-n`, `--just-print`,
+  `--dry-run` and `-rn`, and does **not** false-positive despite
+  `--no-print-directory` containing an `n`. Make emits a leading space in
+  `MAKEFLAGS` when no short flags are set, so `$(firstword -$(MAKEFLAGS))` is
+  `-` rather than `---no-print-directory`.
+- `SHELL := /bin/bash` resolves to 3.2 here. No tracked makefile uses a Bash 4
+  construct, so pinning it broke nothing -- see section 19.4 for why that was
+  luck rather than coverage.
+- The Yarn Berry `awk` parser added in #196 runs under BWK awk. The handoff
+  records it as checked under `awk --posix` and `awk --traditional`, which are
+  **gawk** flags; that is a different interpreter, not stock macOS awk. The
+  conclusion held, the evidence did not.
+- `sort -V` and `sort -z` both work on Apple sort, which the version resolver
+  and `lint-python.sh` depend on.
+
+### 19.1 The one regression: a GNU-only `date` in a fixture
+
+`tests/update-versions.bats` built its fake-`curl` timestamps with
+`date -u -d "@<epoch>"`. BSD `date` has no `-d`; the fixture runs
+`set -euo pipefail`, so the fake curl died and took the test
+`tools resolver picks the newest cooldown-eligible release` with it.
+
+What makes this precise rather than a general miss: **every other date call in
+the repo already had the portable form.** `epoch_from_iso` and `date_from_epoch`
+in `scripts/update-versions.sh`, the three call sites in
+`check-component-version.sh`, and the three in
+`kubernetes/kind/tests/check-version.bats` all try BSD first and fall back to
+GNU. Two lines in one fixture were the only sites that missed the pattern -- and
+they guard the cooldown resolver that #195 exists to repair.
+
+Fixed with the same `epoch_to_iso` shape as `date_from_epoch`.
+
+### 19.2 Why CI could not have caught it
+
+`tests/update-versions.bats` is in `CI_BATS_TESTS`, which runs only on
+`ubuntu-latest`. The `host-portable-bats-macos` job runs
+`HOST_PORTABLE_BATS_TESTS`, which was seven files -- all of them added in the
+same session that created the job.
+
+So the macOS job covered the new work and nothing else, while ~90 hermetic
+files that would run fine on macOS stayed Linux-only. Running the full
+`make test-ci` here proved that: 620 of 621 passed. The job was not a macOS
+gate, it was a regression test for one session's output.
+
+`tests/update-versions.bats` is now in the host-portable set. The broader
+question -- whether the macOS job should simply run `make test-ci` -- is left
+open deliberately, since some of that set reads host state.
+
+### 19.3 Two guards that were already red
+
+Both were invisible for the same reason, and it is the reason section 15 exists.
+
+**`kubernetes/kind/tests/makefile.bats` asserted a guard that no longer
+existed.** #198 wrote the refusal as a literal `filter plan apply,$(MAKECMDGOALS)`
+and asserted that string. #199 widened the guard to six goals behind
+`$(KIND_DRY_RUN_UNSAFE_GOALS)` and left the assertion untouched. It has been red
+on `main` since, and the file is outside `CI_BATS_TESTS`. The assertion now
+checks that the guard is wired to the list and refuses at make level, and leaves
+*which* goals to the list test beside it.
+
+**`lefthook` was pinned but hinted as `latest`.** `LEFTHOOK_VERSION` has been in
+`toolchain-versions.sh` all along, but `pinned_version_for_tool` never mapped
+it, so `install-tool-hints.sh` emitted `mise use lefthook@latest`. That is the
+exact cooldown bypass the pinned-hint work in #195 set out to close, surviving
+inside the change that closed it.
+
+### 19.4 `make -n` was guarded for kind only
+
+`kubernetes/lima/Makefile` had the identical shape and no guard. Its `reset` is
+one backslash-continued recipe block holding `$(MAKE) stop-host-gateway-proxy`,
+`limactl delete --yes --force`, and three `rm -rf` calls. Confirmed on Make 3.81
+that such a block executes in full under `-n`, so `make -C kubernetes/lima -n
+reset` would have deleted the operator's Lima VMs and Terraform state.
+
+The guard is now mirrored, covering `apply plan prereqs reset stop-lima`.
+
+**The membership was derived, not copied, and that mattered.** A first pass
+added `sync-image-cache` "for parity with kind" and immediately broke
+`tests/kubernetes-sync-image-cache-adapter.bats`, which runs
+`make -n sync-image-cache` and reads the output. Kind's recipe opens with a
+`$(MAKE)` line; lima's has no `$(MAKE)` at all, so nothing is exempt and `-n` is
+a genuine preview there. `start` is absent for the same reason: it is a bare
+`@$(MAKE) lima-vms-up` line, so the child make inherits `-n` and previews
+correctly.
+
+The criterion is a *logical* recipe line holding both `$(MAKE)` and a mutating
+command. Section 12 already recorded that auto-deriving that set silently
+passes; this adds the converse -- copying another target's set silently
+over-refuses, and over-refusal breaks working callers rather than failing
+loudly. The lima list test now asserts both directions.
+
+### 19.5 The Bash 3.2 check could not see makefiles
+
+`check-bash32-compat.sh` scanned tracked `*.sh` only. Since #197 and #199 pinned
+`SHELL := /bin/bash` in `mk/common.mk` and `mk/go-app-core.mk`, every recipe in
+the files that include them is Bash under test -- 5.x on Arch, 3.2 on macOS. A
+Bash 4 construct in a recipe would have passed every Linux check and broken
+here, which is precisely the class this check exists to catch.
+
+The scan now covers tracked `Makefile` and `*.mk` as well: 207 scripts plus 46
+makefiles, 253 files, clean. Nothing violated it today, so this closes a blind
+spot rather than fixing a live defect.
+
+### 19.6 The onboarding path did not know the tools the gate requires
+
+`install-tool-hints.sh` is what `kubernetes/kind/docs/prerequisites.md` tells a
+fresh host to run, and #195 rewrote it for exactly that role. It had no hint for
+`ruff`, `deno`, `biome`, `uv`, `rg`, `lefthook`, `markdownlint-cli2` or
+`cosign`.
+
+Most of those became **required** in the same range. `make lint-python` needs
+ruff; the apps `js-check` needs biome and deno; the root Makefile shells out to
+`rg`; #200 installed all three in CI, pinned. So `lint-python.sh` would fail
+with `ruff not found` and then print a hint telling the operator to go read the
+vendor's documentation.
+
+Names were verified against the tools themselves rather than recalled:
+
+| Source | Checked with |
+| --- | --- |
+| mise | `mise registry` |
+| Homebrew | `brew info --formula` |
+| arkade | `arkade get -o list` |
+
+That is how the `rg` case surfaced: arkade's catalogue entry is `rg`, while
+every other manager calls the package `ripgrep`. `normalize_tool` maps the
+binary name the Makefile invokes, and `arkade_tool_name` maps back.
+
+pacman entries were added only for the five packages in the official repos.
+`biome`, `lefthook` and `markdownlint-cli2` fall through to the next manager
+rather than assert an AUR package that may not exist -- the Arch names in #195
+were verified against the official repos, and guessing here would quietly break
+that.
+
+### 19.7 `@SCRIPT_NAME@` in forty-nine scripts
+
+The repo's usage idiom is `cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"`. The
+`1s` substitutes on line one only. That is invisible until a script puts a
+placeholder below line one, which #195 did when it added the
+`INSTALL_TOOL_HINTS_MANAGERS` example -- so `--help` printed the raw
+`@SCRIPT_NAME@` to the operator.
+
+All 49 scripts now use the global `s|...|g` form. Guarded twice: rendered help
+must contain no placeholder, and a static repo-wide assertion that no tracked
+script uses the line-one-only form, because the defect cannot be seen until
+someone adds the second placeholder.
+
+### 19.8 Host state, not code
+
+Carried here so the next macOS session does not rediscover them:
+
+- `.env` predated `OAUTH2_PROXY_COOKIE_SECRET`. `make init-env` appends it and
+  preserves existing values; this is what that target is for.
+- `KIND_ENABLE_BACKSTAGE` defaults to `off` since #195. A bare `900 apply` on
+  the Mac no longer includes Backstage unless it is passed explicitly.
+- `PLATFORM_TIMEOUT_SCALE` is the knob for slower hosts, and the Mac is the
+  slower host in this pair.
+
+### 19.9 Verification
+
+| Gate | Before | After |
+| --- | --- | --- |
+| `make lint` | clean | clean |
+| `make test-ci` | 620/621, exit 2 | **628/628, exit 0** |
+| `make test-host-portable` | 7 files | **56 tests, 8 files, exit 0** |
+
+Every fix above carries a guard, and each guard was verified by reproducing the
+condition it catches: shrinking the lima goal list, adding a `mapfile` recipe to
+a makefile fixture, reintroducing the line-one `sed` form, and narrowing the
+bash32 scan back to `*.sh`.
+
+### 19.10 Picking this up on Arch
+
+Written for the next session on the Omarchy box, which may have its own work to
+fold back in. Nothing here was pushed, and nothing touched cluster state -- the
+Arch stage 900 cluster is untouched by all of it.
+
+**The likely conflict surface is section 19.7.** The `@SCRIPT_NAME@` fix rewrote
+one `sed` line in **49 scripts** across `scripts/`, `kubernetes/scripts/`,
+`kubernetes/*/scripts/` and `terraform/kubernetes/scripts/`. It is mechanical
+and behaviour-preserving, but it touches the usage block of nearly every script
+in the repo, so any Arch-side edit to a `usage()` will collide. If that happens,
+take the Arch content and re-apply the one-character change: the invariant is
+`sed "s|@SCRIPT_NAME@|${0##*/}|g"`, and
+`tests/install-tool-hints.bats` asserts repo-wide that no `1s|` form survives.
+Resolving in that direction is always correct.
+
+**Re-verify on Arch, because macOS could not:**
+
+| Item | Why it needs Arch |
+| --- | --- |
+| pacman hints in 19.6 | pacman is not on PATH here, so those map entries were reasoned about, not executed. Run `INSTALL_TOOL_HINTS_MANAGERS="pacman" scripts/install-tool-hints.sh --execute --plain cosign deno ripgrep ruff uv` and confirm each package resolves. |
+| The lima guard on Make 4.x | Verified on Make 3.81 only. The `MAKEFLAGS` leading-space behaviour that makes `$(firstword -$(MAKEFLAGS))` work is the load-bearing detail; kind's guard has run on 4.x since #198, so this is confirmation rather than doubt. |
+| bash32 scanning makefiles | The scan now runs GNU grep over 46 makefiles instead of BSD grep. The ERE patterns are POSIX, but the file set is new, so a false positive would appear on Arch first. |
+| Manager ordering | With both mise and pacman present, the chain resolves differently than it does here. Worth one `make -C kubernetes/kind prereqs` to see the hints an Arch operator actually gets. |
+
+**Behaviour change to expect in muscle memory.** `make -C kubernetes/lima -n`
+now refuses for `apply plan prereqs reset stop-lima`. If a session reaches for
+`-n` on lima to preview a stage, the answer is `make <stage> plan`, same as
+kind. `make -n sync-image-cache` and `make -n start` still work, deliberately;
+see 19.4.
+
+**Open, and left open on purpose:**
+
+- Whether `host-portable-bats-macos` should run `make test-ci` outright rather
+  than a curated list. 19.2 argues the curated list is the wrong shape, but
+  some of that set reads host state, so it is a decision rather than a patch.
+- Section 18's mawk finding is untouched. It is still the case that
+  `render_prometheus_application_manifest` produces silently wrong output under
+  mawk, and that wants deciding on the Linux side where mawk actually appears.
+- The `.claude/settings.local.json` permission entries added in #195 and #196
+  are still tracked in git. Not addressed here, but a local settings file
+  accumulating in the repo is worth a decision.
+
+**If the Arch side has already fixed any of this independently**, prefer the
+Arch version of the *fix* and keep the guard from here. Every item in section 19
+carries a test that fails when the condition returns, and those are what stop
+the same finding arriving a third time -- the guards are the durable half, not
+the one-line changes they protect.

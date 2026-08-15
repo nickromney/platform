@@ -21,7 +21,7 @@ WAIT_TIMEOUT_SECONDS="${WAIT_TIMEOUT_SECONDS:-900}"
 APP_REFRESH_INTERVAL_SECONDS="${APP_REFRESH_INTERVAL_SECONDS:-30}"
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--dry-run] [--execute]
 
 Wait for the cert-manager webhook, trigger Argo CD to retry cert-manager-config

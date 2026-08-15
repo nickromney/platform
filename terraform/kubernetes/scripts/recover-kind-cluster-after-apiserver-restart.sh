@@ -15,7 +15,7 @@ KIND_OIDC_RECOVERY_FORCE_RUN="${KIND_OIDC_RECOVERY_FORCE_RUN:-0}"
 
 # shellcheck disable=SC2329
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--dry-run] [--execute]
 
 Performs the explicit post-restart recovery step after the kind kube-apiserver

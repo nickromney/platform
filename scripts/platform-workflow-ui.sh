@@ -17,7 +17,7 @@ PLATFORM_WORKFLOW_UI_GO_BIN="${PLATFORM_WORKFLOW_UI_GO_BIN:-go}"
 export GOCACHE="${GOCACHE:-${REPO_ROOT}/.run/go-cache}"
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--host HOST] [--port PORT] [--http http1|h2] [--tls-cert-file PATH] [--tls-key-file PATH] [--dry-run] [--execute]
 
 Serves the browser workflow chooser backed by scripts/platform-workflow.sh.

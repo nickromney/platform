@@ -31,7 +31,7 @@ LOCAL_REGISTRY_PUSH_HOST_CACHE=""
 LOCAL_REGISTRY_PUSH_HOST_CACHE_SET=0
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ <options|preview|apply|save-profile> [options] [--dry-run] [--execute]
 
 Builds a stable platform workflow command from operator intent. The workflow

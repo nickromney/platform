@@ -40,7 +40,7 @@ json_mode() {
 }
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--dry-run] [--execute]
 
 Runs a controlled Lima OIDC recovery drill: converge the k3s apiserver OIDC

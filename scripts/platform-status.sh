@@ -54,7 +54,7 @@ PLATFORM_STATUS_PORTS_WRAP_WIDTH="${PLATFORM_STATUS_PORTS_WRAP_WIDTH:-20}"
 PLATFORM_STATUS_CELL_WRAP_SENTINEL="__PLATFORM_CELL_WRAP__"
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--output human|text|json] [--dry-run] [--execute]
 
 Summarises local variant runtime status across:

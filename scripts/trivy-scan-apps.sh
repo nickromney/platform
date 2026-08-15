@@ -776,7 +776,7 @@ print_final_status() {
 }
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--mode prereqs|fs|images|gitea|all] [--dry-run] [--execute]
 
 Environment:

@@ -7,7 +7,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [options]
 
 Purpose:
@@ -179,6 +179,7 @@ allowlist_match() {
 
   [[ -f "${allowlist_file}" ]] || return 1
 
+  # shellcheck disable=SC2034 # line_reason consumes the allowlist's trailing column
   while IFS=$'\t' read -r line_stack line_stage line_phase line_pattern line_reason; do
     [[ -n "${line_stack}" ]] || continue
     [[ "${line_stack}" == \#* ]] && continue
@@ -187,6 +188,7 @@ allowlist_match() {
     [[ "${line_stage}" == "*" || "${line_stage}" == "${stage}" ]] || continue
     [[ "${line_phase}" == "*" || "${line_phase}" == "${phase}" ]] || continue
     [[ -n "${line_pattern}" ]] || continue
+    # shellcheck disable=SC2254 # the allowlist column is a glob by design
     case "${address}" in
       ${line_pattern})
         return 0

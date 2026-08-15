@@ -14,7 +14,7 @@ READ_MODEL_SCRIPT="${PLATFORM_INVENTORY_READ_MODEL_SCRIPT:-${REPO_ROOT}/scripts/
 WORKFLOW_SCRIPT="${PLATFORM_INVENTORY_WORKFLOW_SCRIPT:-${REPO_ROOT}/scripts/platform-workflow.sh}"
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--variant kind|lima] [--stage STAGE] [--output json|text] [--dry-run] [--execute]
 
 Builds a read-only deployment inventory view for the guided workflow UI/TUI.

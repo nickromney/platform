@@ -12,7 +12,7 @@ stage=""
 var_files=()
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--dry-run] [--execute] --variant-json PATH --stage STAGE [--var-file PATH ...]
 
 Prints ordered post-apply verification Make targets for a Kubernetes variant.
