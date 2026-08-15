@@ -16,7 +16,7 @@ setup() {
 }
 
 # Files still outside the gate. Started at 37 on 2026-08-14; 11 were triaged
-# green and added, then 17 more on 2026-08-15, leaving these 9.
+# green and added, then 18 more on 2026-08-15, leaving these 8.
 #
 # They are not merely unlisted -- most are RED. Each safe-to-run file was run in
 # isolation on 2026-08-15 and the failing/total count recorded beside it below.
@@ -36,14 +36,12 @@ tests/grafana-dashboard-quality.bats
 tests/platform-workflow-ui.bats
 tests/smoke-sentiment-api-image.bats
 tests/validate-app-runtime-surfaces.bats
-tests/validate-docker-optimization-contracts.bats
-tests/vanilla-js-typecheck.bats"
+tests/validate-docker-optimization-contracts.bats"
 
 # Measured 2026-08-15, each file run in isolation. fail/total:
 #
 #   2/4    grafana-dashboard-quality      asserts live Prometheus series
 #   2/11   platform-workflow-ui           HANGS -- killed at 300s
-#   15/61  vanilla-js-typecheck
 #
 #   untriaged (docker): backstage-compose, backstage-portal,
 #   devcontainer-makefile, smoke-sentiment-api-image,

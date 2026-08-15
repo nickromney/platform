@@ -36,7 +36,19 @@ export type IdpRuntime = {
   }
 }
 
-export type IdpStatus = Record<string, unknown>
+export type IdpAction = {
+  id: string
+  label: string
+  enabled: boolean
+  command: string
+  dangerous: boolean
+}
+
+export type IdpStatus = {
+  overall_state: string
+  active_variant_path: string | null
+  actions: IdpAction[]
+}
 
 export type IdpWorkflowResponse = {
   dry_run: boolean

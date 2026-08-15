@@ -26,6 +26,12 @@ PY
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated browser app js-check command contract"* ]]
 
+  # The contract assertions above are hermetic and always run. Actually invoking
+  # js-check needs biome, which this repo pins nowhere and CI does not install,
+  # so it passes only on a machine that happens to have it. Same guard idiom as
+  # tests/app-healthcheck-commands.bats uses for python3.
+  command -v biome >/dev/null 2>&1 || skip "biome is not installed; js-check wiring is asserted statically above"
+
   run make -C "${REPO_ROOT}/apps" js-check
 
   [ "${status}" -eq 0 ]
@@ -137,6 +143,8 @@ PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated shared browser API type Makefile contract"* ]]
+
+  command -v biome >/dev/null 2>&1 || skip "biome is not installed; the Makefile contract is asserted above"
 
   run bash -lc "cd '${REPO_ROOT}' && biome check apps/shared/web/api-types.d.ts"
 

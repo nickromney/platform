@@ -1897,6 +1897,19 @@ def browser_app_explicit_any_contract_violations(repo_root: Path) -> tuple[str, 
 
 def browser_public_unknown_contract_violations(repo_root: Path) -> tuple[str, ...]:
     pattern = re.compile(r"\bunknown\b|Record<string,\s*unknown>|Promise<unknown>|unknown\[\]")
+    # `/** @type {unknown} */ (expr)` is exempt. It is not a public type, it is
+    # the double-cast TypeScript itself prescribes when two types do not overlap:
+    #
+    #   TS2352: Conversion of type 'JSONObject' to type 'RuntimeConfig' may be a
+    #   mistake ... If this was intentional, convert the expression to 'unknown'
+    #   first.
+    #
+    # auth-chat needs it to narrow readRuntimeConfig's JSONObject, and deno check
+    # fails without it -- verified by removing the cast. Banning the idiom
+    # outright would have meant choosing between this contract and a type error,
+    # which is not a choice the contract intends to offer. What it does intend to
+    # ban is `unknown` leaking into a declared public shape, which is unaffected.
+    cast_idiom = re.compile(r"/\*\*\s*@type\s*\{unknown\}\s*\*/")
     paths = sorted((repo_root / "apps").glob("*/app/internal/app/web/app.js"))
     paths.extend(sorted((repo_root / "apps").glob("*/app/internal/app/web/api-types.d.ts")))
     paths.extend(
@@ -1913,6 +1926,8 @@ def browser_public_unknown_contract_violations(repo_root: Path) -> tuple[str, ..
         if not path.exists():
             continue
         for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if cast_idiom.search(line):
+                continue
             if pattern.search(line):
                 violations.append(f"{path.relative_to(repo_root)}:{line_no}")
 
@@ -2003,6 +2018,10 @@ def browser_app_status_region_contract_violations(repo_root: Path) -> tuple[str,
     return tuple(violations)
 
 
+# Version-free on purpose -- see the note in the asset order contract below.
+_5H3LL_UI_CDN_PREFIX = "https://cdn.jsdelivr.net/npm/@social-5h3ll/5h3ll-ui@"
+
+
 def browser_app_asset_order_contract_violations(repo_root: Path) -> tuple[str, ...]:
     violations: list[str] = []
 
@@ -2011,12 +2030,35 @@ def browser_app_asset_order_contract_violations(repo_root: Path) -> tuple[str, .
         parser = _AssetOrderParser()
         parser.feed(index.read_text(encoding="utf-8"))
 
-        expected_stylesheets = ["/style.css", "/app-shell.css"]
-        if parser.stylesheets != expected_stylesheets:
-            violations.append(f"{app_name} stylesheet order should be {expected_stylesheets}, got {parser.stylesheets}")
+        # Since #125 an app owns no style.css: it loads the 5h3ll-ui CDN sheet
+        # and then the shared /app-shell.css, so app-shell wins the cascade.
+        #
+        # Matched by package rather than by exact version on purpose. The pin
+        # itself is owned by scripts/check-repo-version.sh, which checks it is
+        # consistent across apps and within the release-age gate. Restating the
+        # version here would make a second place to update on every bump.
+        if len(parser.stylesheets) != 2:
+            violations.append(
+                f"{app_name} should load exactly the 5h3ll-ui CDN sheet then /app-shell.css, got {parser.stylesheets}"
+            )
+        else:
+            cdn_css, shell_css = parser.stylesheets
+            if not (cdn_css.startswith(_5H3LL_UI_CDN_PREFIX) and cdn_css.endswith("/dist/5h3ll_ui.cdn.min.css")):
+                violations.append(f"{app_name} first stylesheet should be the 5h3ll-ui CDN sheet, got {cdn_css}")
+            if shell_css != "/app-shell.css":
+                violations.append(f"{app_name} second stylesheet should be /app-shell.css, got {shell_css}")
 
-        if parser.non_body_scripts:
-            violations.append(f"{app_name} should load browser scripts at the end of body")
+        # The 5h3ll-ui bundle is a deferred vendor script in head; everything
+        # the app owns still loads at the end of body.
+        unexpected_head_scripts = [
+            src
+            for src in parser.non_body_scripts
+            if not (src.startswith(_5H3LL_UI_CDN_PREFIX) and src.endswith("/dist/js/all.min.js"))
+        ]
+        if unexpected_head_scripts:
+            violations.append(
+                f"{app_name} should load browser scripts at the end of body, got {unexpected_head_scripts} outside body"
+            )
 
         expected_tail = ["/idpauth.js", "/app-shell.js", "/app.js"]
         if app_name != "apim-simulator":
@@ -2047,6 +2089,10 @@ def browser_app_unknown_placeholder_contract_violations(repo_root: Path) -> tupl
     for app_name in canonical_browser_app_names():
         web_root = repo_root / "apps" / app_name / "app" / "internal" / "app" / "web"
         for path in (web_root / "index.html", web_root / "style.css"):
+            # #125 removed every app's style.css in favour of the shared
+            # app-shell.css plus the 5h3ll-ui CDN sheet. Skip what is not there.
+            if not path.exists():
+                continue
             text = path.read_text(encoding="utf-8")
             if re.search(r"\bunknown\b|Unknown", text):
                 violations.append(path.relative_to(repo_root).as_posix())
@@ -2083,27 +2129,35 @@ def browser_app_static_asset_go_contract_violations(repo_root: Path) -> tuple[st
 
 
 def browser_app_color_token_contract_violations(repo_root: Path) -> tuple[str, ...]:
+    # Each token now resolves a 5h3ll-ui variable first and keeps the previous
+    # hex as the fallback, so the palette is unchanged when the CDN sheet is
+    # absent. The hexes below are the same values this contract has always
+    # asserted; only the layering in front of them is new.
+    #
+    # --border was renamed to --app-shell-border because --border now belongs to
+    # the library, and --line follows it. That rename is the reason the old
+    # "--border: #cfdae6;" fragment stopped matching.
     required_tokens = (
         "color-scheme: light dark;",
-        "--page: #f6f8fb;",
-        "--surface: #ffffff;",
-        "--field: #ffffff;",
-        "--muted: #5d6b7c;",
-        "--border: #cfdae6;",
-        "--field-border: #b9c5d3;",
-        "--text: #17202a;",
-        "--accent: #2459b2;",
-        "--error: #9b1c1c;",
-        "--line: var(--border);",
-        "--page: #101418;",
-        "--surface: #151b21;",
-        "--field: #0f1419;",
-        "--muted: #b7c4d3;",
-        "--border: #2d3945;",
-        "--field-border: #3a4855;",
-        "--text: #e8eef4;",
-        "--accent: #2d6cdf;",
-        "--error: #ffb4ab;",
+        "--page: var(--background, #f6f8fb);",
+        "--surface: var(--card, #ffffff);",
+        "--field: var(--input, var(--background, #ffffff));",
+        "--muted: var(--muted-foreground, #5d6b7c);",
+        "--app-shell-border: var(--border, #cfdae6);",
+        "--field-border: var(--input, var(--app-shell-border, #b9c5d3));",
+        "--text: var(--foreground, #17202a);",
+        "--accent: var(--primary, #2459b2);",
+        "--error: var(--destructive, #9b1c1c);",
+        "--line: var(--app-shell-border);",
+        "--page: var(--background, #101418);",
+        "--surface: var(--card, #151b21);",
+        "--field: var(--input, var(--background, #0f1419));",
+        "--muted: var(--muted-foreground, #b7c4d3);",
+        "--app-shell-border: var(--border, #2d3945);",
+        "--field-border: var(--input, var(--app-shell-border, #3a4855));",
+        "--text: var(--foreground, #e8eef4);",
+        "--accent: var(--primary, #2d6cdf);",
+        "--error: var(--destructive, #ffb4ab);",
     )
     app_forbidden_tokens = (
         "--page: #",
@@ -2130,6 +2184,10 @@ def browser_app_color_token_contract_violations(repo_root: Path) -> tuple[str, .
 
     for app_name in canonical_browser_app_names():
         css = repo_root / "apps" / app_name / "app" / "internal" / "app" / "web" / "style.css"
+        # No app ships a style.css since #125; these checks are about an app not
+        # re-owning shared styling, which is vacuously true when it owns no CSS.
+        if not css.exists():
+            continue
         content = css.read_text(encoding="utf-8")
         for token in app_forbidden_tokens:
             if token not in content:
@@ -2185,7 +2243,9 @@ def browser_app_shell_css_boundary_contract_violations(repo_root: Path) -> tuple
         "color: var(--text)",
         "padding: 8px 10px",
         "background: var(--accent)",
-        "color: #fff",
+        # Same layering as the palette above: the library's --text-on-color
+        # first, with the previous #fff kept as the fallback.
+        "color: var(--text-on-color, #fff)",
         "cursor: pointer",
     )
     local_control_fragments = (
@@ -2230,6 +2290,10 @@ def browser_app_shell_css_boundary_contract_violations(repo_root: Path) -> tuple
 
     for app_name in canonical_browser_app_names():
         css = repo_root / "apps" / app_name / "app" / "internal" / "app" / "web" / "style.css"
+        # No app ships a style.css since #125; these checks are about an app not
+        # re-owning shared styling, which is vacuously true when it owns no CSS.
+        if not css.exists():
+            continue
         content = css.read_text(encoding="utf-8")
         for selector in shared_selectors:
             if re.search(rf"(^|\n)\s*{re.escape(selector)}\b", content):
@@ -2416,7 +2480,7 @@ def shared_appshell_diagnostic_text_resilience_contract_violations(repo_root: Pa
 
 def shared_appshell_form_control_sizing_contract_violations(repo_root: Path) -> tuple[str, ...]:
     css = repo_root / "apps" / "shared" / "appshell" / "app-shell.css"
-    content = css.read_text(encoding="utf-8")
+    content = _normalize_css_selectors(css.read_text(encoding="utf-8"))
     selector = ":where(input, textarea, select)"
     match = re.search(rf"{re.escape(selector)}\s*\{{(?P<body>.*?)\n\}}", content, re.S)
     if match is None:
@@ -2463,6 +2527,10 @@ def shared_appshell_form_label_textarea_contract_violations(repo_root: Path) -> 
     )
     for app_name in canonical_browser_app_names():
         css = repo_root / "apps" / app_name / "app" / "internal" / "app" / "web" / "style.css"
+        # No app ships a style.css since #125; these checks are about an app not
+        # re-owning shared styling, which is vacuously true when it owns no CSS.
+        if not css.exists():
+            continue
         content = css.read_text(encoding="utf-8")
         for match in re.finditer(r"(^|\n)(?P<selectors>[^{}]+)\{(?P<body>.*?)\n\}", content, flags=re.S):
             selectors = [selector.strip() for selector in match.group("selectors").split(",")]
@@ -2523,6 +2591,10 @@ def shared_appshell_code_block_surface_contract_violations(repo_root: Path) -> t
     )
     for app_name in canonical_browser_app_names():
         css = repo_root / "apps" / app_name / "app" / "internal" / "app" / "web" / "style.css"
+        # No app ships a style.css since #125; these checks are about an app not
+        # re-owning shared styling, which is vacuously true when it owns no CSS.
+        if not css.exists():
+            continue
         content = css.read_text(encoding="utf-8")
         for match in re.finditer(r"(^|\n)(?P<selectors>[^{}]+)\{(?P<body>.*?)\n\}", content, flags=re.S):
             selectors = [selector.strip() for selector in match.group("selectors").split(",")]
@@ -2599,6 +2671,40 @@ def shared_appshell_dom_lookup_contract_violations(repo_root: Path) -> tuple[str
     return tuple(violations)
 
 
+def _normalize_css_selectors(content: str) -> str:
+    """Strip :not() guards and collapse whitespace inside :where() selectors.
+
+    Adopting the 5h3ll-ui CDN stylesheet meant the shared rules had to stop
+    overriding the library's own classes, so selectors such as
+    ``:where(input, textarea, select)`` became
+    ``:where(input:not(.input), textarea:not(.textarea), select:not(.select))``,
+    and the formatter wrapped the longer ones across lines. Both changes are
+    presentational: the rule still applies to the same elements. Contracts here
+    locate a block by its selector, so they normalize first and assert on the
+    declarations, which is the part that carries the meaning.
+    """
+    without_guards = re.sub(r":not\([^()]*\)", "", content)
+
+    def _collapse(match: "re.Match[str]") -> str:
+        inner = re.sub(r"\s+", " ", match.group(1)).strip()
+        inner = re.sub(r"\s*,\s*", ", ", inner)
+        return f":where({inner})"
+
+    return re.sub(r":where\(([^{}()]*?)\)", _collapse, without_guards, flags=re.S)
+
+
+def _collapse_call_whitespace(content: str) -> str:
+    """Collapse the whitespace a formatter inserts after an opening paren.
+
+    Contract checks in this module match single-line call fragments such as
+    ``renderStatusInto(apiStatusEl``. Biome wraps calls whose arguments exceed
+    the line width, which turns that into ``renderStatusInto(\\n\\t\\tapiStatusEl``
+    and silently breaks the match. Collapsing ``(\\s+`` to ``(`` makes the checks
+    describe the call rather than its formatting.
+    """
+    return re.sub(r"\(\s+", "(", content)
+
+
 def shared_appshell_status_render_contract_violations(repo_root: Path) -> tuple[str, ...]:
     shared_js = repo_root / "apps" / "shared" / "appshell" / "app-shell.js"
     shared_types = repo_root / "apps" / "shared" / "web" / "api-types.d.ts"
@@ -2606,12 +2712,17 @@ def shared_appshell_status_render_contract_violations(repo_root: Path) -> tuple[
     subnetcalc_app = repo_root / "apps" / "subnetcalc" / "app" / "internal" / "app" / "web" / "app.js"
     chatgpt_app = repo_root / "apps" / "chatgpt-sim" / "app" / "internal" / "app" / "web" / "app.js"
     apim_app = repo_root / "apps" / "apim-simulator" / "app" / "internal" / "app" / "web" / "app.js"
-    shared_content = shared_js.read_text(encoding="utf-8")
-    type_content = shared_types.read_text(encoding="utf-8")
-    sentiment_content = sentiment_app.read_text(encoding="utf-8")
-    subnetcalc_content = subnetcalc_app.read_text(encoding="utf-8")
-    chatgpt_content = chatgpt_app.read_text(encoding="utf-8")
-    apim_content = apim_app.read_text(encoding="utf-8")
+    # Whitespace after "(" is collapsed before matching. The call-site checks
+    # below are single-line substrings like renderStatusInto(apiStatusEl, but
+    # the formatter wraps a three-argument call across lines, so they matched
+    # nothing while the code did exactly what was being asserted. An assertion
+    # coupled to line breaks is testing the formatter, not the contract.
+    shared_content = _collapse_call_whitespace(shared_js.read_text(encoding="utf-8"))
+    type_content = _collapse_call_whitespace(shared_types.read_text(encoding="utf-8"))
+    sentiment_content = _collapse_call_whitespace(sentiment_app.read_text(encoding="utf-8"))
+    subnetcalc_content = _collapse_call_whitespace(subnetcalc_app.read_text(encoding="utf-8"))
+    chatgpt_content = _collapse_call_whitespace(chatgpt_app.read_text(encoding="utf-8"))
+    apim_content = _collapse_call_whitespace(apim_app.read_text(encoding="utf-8"))
     violations: list[str] = []
 
     for fragment in (
@@ -2627,7 +2738,10 @@ def shared_appshell_status_render_contract_violations(repo_root: Path) -> tuple[
         "renderStatusInto(",
         "node: Element",
         "value: AppShellTextValue",
-        "isError?: boolean",
+        # Was isError?: boolean. The third parameter became a tone union that
+        # still accepts a boolean, so callers passing true are unaffected, but
+        # the declared type changed and this fragment stopped matching.
+        "tone?: AppShellStatusTone | boolean",
         "): void;",
     ):
         if fragment not in type_content:
@@ -2744,7 +2858,10 @@ def sentiment_comment_list_render_contract_violations(repo_root: Path) -> tuple[
         "renderElementsInto",
         "function commentElement",
         "document.createElement(\"article\")",
-        "article.className = \"comment\"",
+        # "comment card" since the 5h3ll-ui adoption added the card class. The
+        # claim is that the article carries the comment class, not that comment
+        # is the only class on it.
+        "article.className = \"comment",
     ):
         if fragment not in content:
             violations.append(f"sentiment comment renderer missing {fragment}")
@@ -2829,7 +2946,11 @@ def subnetcalc_result_card_render_contract_violations(repo_root: Path) -> tuple[
         "content,",
         "function resultArticleElement",
         "function performanceElement",
-        "keyValueTableElement(rows)",
+        # resultArticleElement now composes keyValueArticleElement, which calls
+        # keyValueTableElement itself. The direct call moved one level down into
+        # the shared helper, which is more use of shared diagnostics rather than
+        # less -- the point this contract exists to enforce.
+        "keyValueArticleElement(",
         "apiTimingElement(timing)",
     ):
         if fragment not in app_content:
@@ -2875,7 +2996,7 @@ def shared_appshell_summary_list_render_contract_violations(repo_root: Path) -> 
 
 def shared_appshell_global_button_resilience_contract_violations(repo_root: Path) -> tuple[str, ...]:
     css = repo_root / "apps" / "shared" / "appshell" / "app-shell.css"
-    content = css.read_text(encoding="utf-8")
+    content = _normalize_css_selectors(css.read_text(encoding="utf-8"))
     selector = ":where(button, .button)"
     match = re.search(rf"{re.escape(selector)}\s*\{{(?P<body>.*?)\n\}}", content, re.S)
     if match is None:
@@ -2924,6 +3045,10 @@ def shared_appshell_status_table_css_contract_violations(repo_root: Path) -> tup
     )
     for app_name in canonical_browser_app_names():
         css = repo_root / "apps" / app_name / "app" / "internal" / "app" / "web" / "style.css"
+        # No app ships a style.css since #125; these checks are about an app not
+        # re-owning shared styling, which is vacuously true when it owns no CSS.
+        if not css.exists():
+            continue
         content = css.read_text(encoding="utf-8")
         for selector in local_selectors:
             if re.search(rf"(^|\n)\s*{re.escape(selector)}\b", content):

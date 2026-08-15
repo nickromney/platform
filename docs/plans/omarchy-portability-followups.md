@@ -1280,3 +1280,91 @@ deliberately and watched rather than swept in. The other three are
 `vanilla-js-typecheck` (15/61), `grafana-dashboard-quality`, which queries a
 live Prometheus and cannot be hermetic as written, and `platform-workflow-ui`,
 which hangs rather than fails.
+
+### 9 to 8: vanilla-js-typecheck, and what #125 left behind
+
+15 of 61 failing, and almost all of it traces to one architectural change that
+the contracts never followed.
+
+**#125 deleted every app's `style.css`.** The five canonical browser apps now
+load the pinned 5h3ll-ui CDN stylesheet followed by the shared
+`/app-shell.css`, and own no CSS of their own. Six contract helpers still read
+`apps/<app>/app/internal/app/web/style.css` and died with `FileNotFoundError`
+before asserting anything. They now skip a stylesheet that is not there, which
+is the guard `browser_sso_static_allowlist_contract_violations` already used a
+few hundred lines further down the same file. The checks are about an app not
+re-owning shared styling, which is vacuously true when it owns no stylesheet.
+
+**The palette moved behind the library's tokens.** `--page: #f6f8fb;` became
+`--page: var(--background, #f6f8fb);` and so on for every token, so the shared
+sheet defers to 5h3ll-ui and falls back to exactly the previous hexes. `--border`
+was renamed `--app-shell-border` because `--border` now belongs to the library.
+The contract asserted the old literals; it now asserts the layered form, with
+the same hex values it always did.
+
+**Selectors grew `:not()` guards for the same reason.**
+`:where(input, textarea, select)` became
+`:where(input:not(.input), textarea:not(.textarea), select:not(.select))` so
+shared rules stop overriding the library's own classes, and the formatter
+wrapped the longer ones across lines. Both contracts locating a block by exact
+selector string reported the block as *missing* while every declaration inside
+it was correct. They now normalize selectors before matching and assert on the
+declarations, which is where the meaning lives.
+
+### Assertions that were testing the formatter
+
+`renderStatusInto(apiStatusEl` matched nothing, not because the call was gone
+but because Biome wraps a three-argument call across lines. The code did exactly
+what was being asserted. Collapsing whitespace after `(` before matching fixes
+the class, not just the instance -- any single-line call fragment in this module
+was one formatter run away from the same failure.
+
+Two more were an abstraction level out of date rather than wrong:
+`subnetcalc` now composes `keyValueArticleElement`, which calls
+`keyValueTableElement` internally -- *more* use of the shared helpers, which is
+the thing the contract exists to encourage -- and sentiment's comment article
+carries `"comment card"` since the 5h3ll-ui adoption, where the contract wanted
+the class list to be exactly `"comment"`.
+
+### The contract that forbade what TypeScript requires
+
+`browser_public_unknown_contract_violations` bans `unknown` from public browser
+surfaces. It flagged `auth-chat`:
+
+```javascript
+const config = /** @type {RuntimeConfig} */ (
+  /** @type {unknown} */ (readRuntimeConfig("AUTH_CHAT_CONFIG"))
+);
+```
+
+That cast is not a lapse, it is what the compiler demands. Removing it and
+running `deno check` gives:
+
+```text
+TS2352: Conversion of type 'JSONObject' to type 'RuntimeConfig' may be a
+mistake because neither type sufficiently overlaps with the other. If this was
+intentional, convert the expression to 'unknown' first.
+```
+
+So the contract as written offered a choice between satisfying it and compiling.
+The `/** @type {unknown} */` cast idiom is now exempt; `unknown` in a declared
+public shape, which is the actual target, still fails.
+
+The second hit was real. `apps/idp-sdk/src/index.ts` exported
+`type IdpStatus = Record<string, unknown>` while every sibling type in that SDK
+is concrete. `schemas/idp/status.schema.json` and `schemas/idp/action.schema.json`
+already describe the shape, so `IdpStatus` and a new `IdpAction` now state it.
+Nothing outside the SDK consumed the type, and `deno check` passes.
+
+### biome is not installed anywhere
+
+Two tests invoked `biome`, which this repo pins nowhere, does not install in CI,
+and which is absent from this host -- the third and fourth instance in this
+effort after `apim-simulator-makefile`. Their hermetic contract assertions run
+unconditionally; only the tool invocation is now guarded by
+`command -v biome || skip`, the idiom `tests/app-healthcheck-commands.bats`
+already uses for `python3`.
+
+That biome is unpinned while `deno` is present is worth deciding on its own.
+Every browser app's `js-check` depends on it, so `make -C apps js-check` cannot
+currently run on a clean machine or in CI.

@@ -138,6 +138,7 @@ CI_BATS_TESTS := \
 	tests/validate-container-hardening.bats \
 	tests/validate-gitea-app-repo-sync.bats \
 	tests/validate-kyverno-policies.bats \
+	tests/vanilla-js-typecheck.bats \
 	tests/variant-contracts.bats \
 	tests/version-audit-workflow.bats
 
