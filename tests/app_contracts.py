@@ -1,13 +1,12 @@
 from __future__ import annotations
 
+import json
+import re
+import subprocess
 from collections.abc import Iterator
 from dataclasses import dataclass
 from html.parser import HTMLParser
-import json
 from pathlib import Path
-import re
-import subprocess
-import sys
 from typing import Any
 
 
@@ -2685,7 +2684,7 @@ def _normalize_css_selectors(content: str) -> str:
     """
     without_guards = re.sub(r":not\([^()]*\)", "", content)
 
-    def _collapse(match: "re.Match[str]") -> str:
+    def _collapse(match: re.Match[str]) -> str:
         inner = re.sub(r"\s+", " ", match.group(1)).strip()
         inner = re.sub(r"\s*,\s*", ", ", inner)
         return f":where({inner})"
@@ -3366,7 +3365,6 @@ def shared_app_module_makefile_contract_violations(repo_root: Path) -> tuple[str
             violations.append(f"apps/shared/{module_name}/Makefile missing")
             continue
 
-        content = makefile.read_text(encoding="utf-8")
         available_targets = _evaluated_make_targets(makefile.parent)
         if "help" not in available_targets:
             violations.append(f"apps/shared/{module_name}/Makefile should expose help target")
@@ -6298,7 +6296,6 @@ def go_app_makefile_build_linux_contract_violations(repo_root: Path) -> tuple[st
             continue
         app_name = app_root.name
         binary_name = "apim-simulator" if app_name == "apim-simulator" else app_name
-        content = makefile.read_text(encoding="utf-8")
         targets = _evaluated_make_targets(app_root / "app")
         if "build-linux" not in targets:
             violations.append(f"{app_name} Makefile missing build-linux target")

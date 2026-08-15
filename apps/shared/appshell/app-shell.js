@@ -119,10 +119,7 @@
 		if (theme === "light") {
 			return false;
 		}
-		return Boolean(
-			window.matchMedia &&
-				window.matchMedia("(prefers-color-scheme: dark)").matches,
-		);
+		return Boolean(window.matchMedia?.("(prefers-color-scheme: dark)").matches);
 	}
 
 	/** @param {HTMLButtonElement} switcher */
@@ -267,36 +264,51 @@
 	}
 
 	function enhanceVendoredClasses() {
-		addClasses(document.body, "bg-background", "text-foreground", "antialiased");
-		document
-			.querySelectorAll("body > header")
-			.forEach((element) =>
-				addClasses(
-					element,
-					"mx-auto",
-					"flex",
-					"max-w-6xl",
-					"items-start",
-					"justify-between",
-					"gap-4",
-					"px-6",
-					"py-8",
-				),
+		addClasses(
+			document.body,
+			"bg-background",
+			"text-foreground",
+			"antialiased",
+		);
+		document.querySelectorAll("body > header").forEach((element) => {
+			addClasses(
+				element,
+				"mx-auto",
+				"flex",
+				"max-w-6xl",
+				"items-start",
+				"justify-between",
+				"gap-4",
+				"px-6",
+				"py-8",
 			);
-		document
-			.querySelectorAll("body > main")
-			.forEach((element) =>
-				addClasses(element, "mx-auto", "grid", "max-w-6xl", "gap-4", "px-6", "pb-10"),
+		});
+		document.querySelectorAll("body > main").forEach((element) => {
+			addClasses(
+				element,
+				"mx-auto",
+				"grid",
+				"max-w-6xl",
+				"gap-4",
+				"px-6",
+				"pb-10",
 			);
+		});
 		document.querySelectorAll(".app-panel").forEach((element) => {
 			addClasses(element, "card", "p-6");
 		});
 		document
-			.querySelectorAll("form, .runner, .settings-form, #lookup-form, #provider-form, #auth-panel")
-			.forEach((element) => addClasses(element, "grid", "gap-4"));
-		document.querySelectorAll(".form-row, #identity-form").forEach((element) => {
-			addClasses(element, "grid", "gap-3", "md:grid-cols-3", "items-end");
-		});
+			.querySelectorAll(
+				"form, .runner, .settings-form, #lookup-form, #provider-form, #auth-panel",
+			)
+			.forEach((element) => {
+				addClasses(element, "grid", "gap-4");
+			});
+		document
+			.querySelectorAll(".form-row, #identity-form")
+			.forEach((element) => {
+				addClasses(element, "grid", "gap-3", "md:grid-cols-3", "items-end");
+			});
 		document.querySelectorAll(".field").forEach((element) => {
 			addClasses(element, "field");
 		});
@@ -304,15 +316,23 @@
 			.querySelectorAll(
 				".examples, .samples, .comment-actions, .panel-actions, .composer-actions, .header-actions",
 			)
-			.forEach((element) =>
-				addClasses(element, "flex", "flex-wrap", "items-center", "gap-2"),
-			);
+			.forEach((element) => {
+				addClasses(element, "flex", "flex-wrap", "items-center", "gap-2");
+			});
 		document
-			.querySelectorAll("#results-content, #comments, .connector-list, .messages")
-			.forEach((element) => addClasses(element, "grid", "gap-3"));
+			.querySelectorAll(
+				"#results-content, #comments, .connector-list, .messages",
+			)
+			.forEach((element) => {
+				addClasses(element, "grid", "gap-3");
+			});
 		document
-			.querySelectorAll(".metrics, .grid, .columns, .result-head, .workspace, .app-workspace")
-			.forEach((element) => addClasses(element, "grid", "gap-4"));
+			.querySelectorAll(
+				".metrics, .grid, .columns, .result-head, .workspace, .app-workspace",
+			)
+			.forEach((element) => {
+				addClasses(element, "grid", "gap-4");
+			});
 		document.querySelectorAll("input").forEach((element) => {
 			addClasses(element, "input", "w-full");
 		});
@@ -334,7 +354,10 @@
 				addClasses(button, "btn");
 				return;
 			}
-			if (button.hasAttribute("data-example") || button.hasAttribute("data-sample")) {
+			if (
+				button.hasAttribute("data-example") ||
+				button.hasAttribute("data-sample")
+			) {
 				addClasses(button, "btn-secondary");
 				return;
 			}

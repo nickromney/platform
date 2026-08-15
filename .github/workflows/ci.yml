@@ -63,7 +63,8 @@ jobs:
             gzip \
             make \
             ripgrep \
-            tar
+            tar \
+            unzip
           sudo rm -rf /var/lib/apt/lists/*
 
           source .devcontainer/toolchain-versions.sh
@@ -145,7 +146,23 @@ jobs:
           sudo install -m 0755 "${tmp_dir}/kyverno" /usr/local/bin/kyverno
 
           uv tool install yamllint==1.38.0
+          # make lint runs ruff over tests/app_contracts.py. Pinned rather than
+          # tracking latest so the rule set cannot change under a PR, the same
+          # reason ruff.toml states its selection explicitly.
+          uv tool install ruff==0.16.2
           npm install --global markdownlint-cli2@0.22.1
+          # biome and deno are what apps/*/Makefile js-check calls. Neither was
+          # installed anywhere, so the browser JavaScript contracts skipped in CI
+          # and could only ever be exercised on a workstation that happened to
+          # have them. Pinned for the same reason as everything else here.
+          npm install --global @biomejs/biome@2.5.8
+
+          deno_version="2.9.5"
+          curl -fsSL \
+            "https://github.com/denoland/deno/releases/download/v${deno_version}/deno-${uv_arch}-unknown-linux-gnu.zip" \
+            -o "${tmp_dir}/deno.zip"
+          unzip -q -o "${tmp_dir}/deno.zip" -d "${tmp_dir}"
+          sudo install -m 0755 "${tmp_dir}/deno" /usr/local/bin/deno
 
           echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
           export PATH="${HOME}/.local/bin:${PATH}"
@@ -156,7 +173,10 @@ jobs:
           yq --version
           kyverno version
           yamllint --version
+          ruff --version
           markdownlint-cli2 --version
+          biome --version
+          deno --version
 
       - name: Run repo lint
         run: make lint

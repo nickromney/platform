@@ -1368,3 +1368,221 @@ already uses for `python3`.
 That biome is unpinned while `deno` is present is worth deciding on its own.
 Every browser app's `js-check` depends on it, so `make -C apps js-check` cannot
 currently run on a clean machine or in CI.
+
+## 16. Two Linters The Repo Did Not Run
+
+Both gaps were found by the section 15 work rather than by anything watching for
+them, and both had already cost something.
+
+### Python was never linted
+
+`tests/app_contracts.py` is ~6,000 lines that every bats suite imports, and
+`make lint` covered YAML, Markdown, shell, HCL, Cilium and Kyverno -- not it.
+
+The cost was concrete. A dict literal carried `"lima"` twice, so Python kept the
+second value and the Keycloak image contract asserted a registry host,
+`192.168.64.1:5002`, that appears nowhere in the repository, while the correct
+`host.lima.internal:5002` entry sat shadowed and dead. `ruff` reports exactly
+that as `F601`, and `ruff` was already pinned in the n-dotfiles global mise
+config. It was installed and never invoked.
+
+`make lint-python` now runs it through `scripts/lint-python.sh`, following the
+same shape as the other lint scripts: a `--dry-run`/`--execute` interface, a
+missing-binary path with install hints, and tracked-file discovery via
+`git ls-files`.
+
+**The rule set is pinned in `ruff.toml` rather than left to ruff's defaults.**
+n-dotfiles tracks ruff at `latest`, so the default selection would change under
+the repo between releases -- the same drift this effort exists to end. The
+selection is `E4,E7,E9,F,I,UP,B,SIM`: 5 findings on the current tree, all
+meaningful. `FURB` and `RUF` were considered and rejected; they add 15 findings,
+every one cosmetic (`re.S` versus `re.DOTALL`), and none describes a defect.
+
+The five were an unused `sys` import, an unsorted import block, a quoted type
+annotation, and **two dead `content = makefile.read_text(...)` reads** left
+behind when those checks moved from parsing Makefile text to
+`_evaluated_make_targets`. CI installs `ruff==0.16.2` alongside the pinned
+yamllint.
+
+`tests/lint-python.bats` guards the wiring, and one case asserts `F` is in the
+selection rather than asserting the tree is currently clean, so the rule that
+would have caught the duplicate key cannot be dropped silently.
+
+### biome was installed nowhere at all
+
+Four tests across three files invoke `biome`: `apim-simulator-makefile`,
+and two in `vanilla-js-typecheck`. It was pinned in no mise config, installed by
+no CI step, and absent from this host, so `make -C apps js-check` could not run
+on a clean machine or on a runner. `deno`, its companion in the same target, was
+present only as an Arch package -- the same host-dependence in a quieter form.
+
+Both are now pinned in the n-dotfiles global mise config, and CI installs
+`@biomejs/biome@2.5.8` and `deno 2.9.5` explicitly.
+
+**Installing it proved the point immediately.** `make -C apps js-check` was
+failing, with seven findings in `apps/shared/appshell/app-shell.js`: six
+`forEach` callbacks returning a value (`useIterableCallbackReturn`) and one
+missed optional chain. The same function already used braced callback bodies for
+several of its calls, so the six were an internal inconsistency rather than a
+style choice. Fixed, plus an 82-line reformat of a 1,288-line file to match the
+formatter -- contained, because the file was already close.
+
+That is the fourth tool in this effort found to be missing rather than
+misconfigured, after `uv`, `helm` and the host locale. The pattern is worth
+stating plainly: **a check that cannot run reports nothing, and reporting
+nothing is indistinguishable from passing** unless something asserts the tool
+is present. The CI install step now ends with `biome --version` and
+`deno --version` for exactly that reason, so a broken install fails the job
+rather than quietly turning the browser contracts into skips.
+
+### biome dumped core three times
+
+Worth recording because it is unresolved. `biome` 2.5.8 from mise left three
+50MB core files -- two in `apps/shared/appshell/`, one in n-dotfiles from a bare
+`biome --version`. It has not reproduced since: `--version` and `check` now run
+cleanly, and the error path exits 1 without crashing. Treat a `core.*` file
+appearing next to a JavaScript check as this, not as a repo bug.
+
+`core.*` is deliberately **not** added to `.gitignore`. The full test-ci run that
+followed failed with:
+
+```text
+FAIL the command under test changed the working tree
+     removed:    ?? apps/shared/appshell/core.888778
+```
+
+`check-worktree-unchanged.sh` caught them, which is the behaviour worth keeping.
+Ignoring the pattern would make a future crash silent, and the whole point of
+this document is that silence is the expensive failure mode.
+
+### Two flaky timing tests already inside the gate
+
+Found by running the gate on a machine that was also compiling something else.
+`tests/parallel.bats` and `tests/check-provider-version.bats` both prove bounded
+concurrency by wall clock: three items at concurrency two, one second each, so
+unbounded finishes near 1s, bounded near 2s and serial near 3s. Those landmarks
+are one second apart, which means a busy host fails the test for being busy
+rather than for being wrong. This is section 2's "timeouts assume fast hardware"
+living inside the safety net itself.
+
+Both now sleep two seconds per item, moving the landmarks to 2s, 4s and 6s, and
+assert `4 <= elapsed < 6`. Two seconds of headroom on each side instead of half
+a second. Verified by running the same helper at concurrency 3 (2s, correctly
+below the band) and concurrency 1 (6s, correctly at the top of it).
+
+The assertion was also wrong in a quieter way. It read:
+
+```bash
+[[ "${output}" =~ elapsed=1|elapsed=2 ]]
+```
+
+That regex is unanchored, so `elapsed=10` and `elapsed=20` matched it too --
+a serial run slow enough would have passed. Both now compare integers.
+
+### A test that hangs depending on what stdin is
+
+`make test-ci` stopped dead for twelve minutes on
+`tests/audit-shell-scripts.bats`, test 11. The blocked process was:
+
+```text
+rg -l shell_cli_handle_standard_flag -g *.sh
+```
+
+There is no path argument. `rg` then decides what to search from stdin: a TTY
+or `/dev/null` makes it walk the current directory, but an **open pipe makes it
+read stdin**, and it waits there forever. bats gives each test a pipe, so the
+suite could hang on this line at any time.
+
+The first guess -- that it silently searched nothing and passed vacuously --
+was wrong, and worth recording because it is the more attractive story. Checked
+rather than assumed:
+
+```text
+$ rg -l 'shell_cli_handle_standard_flag' -g '*.sh' < /dev/null | wc -l
+76
+```
+
+So CI is unaffected: a workflow step's stdin is `/dev/null`, which makes `rg`
+behave correctly. That is precisely what keeps this invisible. The failure only
+appears when someone pipes into `make test-ci`, and then it presents as a hang
+rather than a failure -- no output, no timeout, nothing to attribute it to.
+
+The fix is one character: pass `.` so `rg` never consults stdin. Verified by
+running the fixed form with a deliberately blocking pipe on stdin, where it now
+returns all 76 matches immediately.
+
+`tests/platform-workflow-ui.bats`, still in the backlog, also hangs rather than
+fails. Worth checking it for this same shape before assuming it is a different
+bug.
+
+## 17. Handoff
+
+State as at 2026-08-15, end of the CI gate burn-down.
+
+### Where the gate stands
+
+`make test-ci` is **620 passing, 0 failing**, up from 396 when this started.
+`make lint` is clean and now includes `lint-python`. The section 15 backlog is
+**37 -> 8**.
+
+### The eight files still outside the gate
+
+Six are untriaged because they drive `docker build`/`run`/compose:
+`backstage-compose`, `backstage-portal`, `devcontainer-makefile`,
+`smoke-sentiment-api-image`, `validate-app-runtime-surfaces`,
+`validate-docker-optimization-contracts`.
+
+**Run these one at a time and watch them.** `reset-local-state.bats` turned out
+to be deleting the operator's real `~/.cache/uv`, and that was a file with no
+docker in it at all. The risk here is higher, not lower.
+
+The other two need more than an assertion fix:
+
+- **`grafana-dashboard-quality`** (2/4) asserts that live Prometheus queries
+  return series. It cannot be hermetic in its present shape. It needs either a
+  recorded fixture or a decision that it is a cluster test rather than a gate
+  test. That is a judgement about what the gate is for, not a bug.
+- **`platform-workflow-ui`** (2/11) *hangs* rather than fails; `bats` produces
+  all 11 results and then never exits, so a 120s timeout kills it at `rc=124`.
+  It starts an HTTP server per test and something is not being reaped at
+  teardown. Checked against the `rg`/stdin hang in section 16 -- **not** the same
+  cause. A hanging test in a gate is worse than a red one, so fix the teardown
+  before listing it.
+
+### Open decisions, not open bugs
+
+- **`image_catalog_target_ref_contract` only validates lima.** Extending it to
+  kind fails because `kubernetes/kind/targets/kind.tfvars` has no
+  `external_workload_image_refs` map. Real coverage gap; closing it means
+  changing target tfvars, which needs an owner.
+- **`biome` has no config and no repo-level pin.** It runs on defaults, so its
+  rule set moves with the version. CI pins `2.5.8` and n-dotfiles tracks
+  `latest`, which will diverge. A `biome.json` would settle it.
+- **`ruff.toml` excludes `FURB` and `RUF`** as 15 purely cosmetic findings.
+  Revisit if you want them.
+
+### Gotchas worth not rediscovering
+
+- **`rg` with no path argument reads stdin when stdin is a pipe.** It hung the
+  suite for twelve minutes. Always pass a path. CI hides this because a workflow
+  step's stdin is `/dev/null`.
+- **Setting `HOME` does not sandbox a test.** It sandboxes only the tools that
+  read `HOME`, and which those are is not knowable from the test. `uv cache dir`
+  ignores it.
+- **A fixture git repo inherits global config**, including `commit.gpgsign`.
+  Pin it off, as `git-hooks.bats` already did.
+- **Wall-clock concurrency assertions need landmarks further apart than the
+  noise.** One second is not enough on a machine doing anything else.
+- **`biome` 2.5.8 left three 50MB `core.*` files** and has not reproduced since.
+  `core.*` is deliberately not gitignored so `check-worktree-unchanged.sh` keeps
+  catching it.
+
+### The pattern this whole effort found
+
+Stated once, because it recurred in every section: **a check that cannot run
+reports nothing, and reporting nothing is indistinguishable from passing.**
+
+It appeared as a test outside the gate, a tool installed nowhere, an allowlist
+nobody could see rotting, an assertion that could never match, a scanner blind
+to dotfiles, and a workflow that was never triggered. In every case the fix was
+cheap and the finding was only expensive because nothing said it was there.

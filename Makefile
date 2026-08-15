@@ -1,10 +1,11 @@
 SHELL := /bin/bash
-MAKE_KNOWN_GOALS := help prereqs init-env test test-ci test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+MAKE_KNOWN_GOALS := help prereqs init-env test test-ci test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-python lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
 APP_ENTRYPOINT_DIRS_CMD := { printf '%s\n' apps; find apps -mindepth 2 -maxdepth 2 -name Makefile -print | xargs -n 1 dirname; } | LC_ALL=C sort
 LINT_YAML_SCRIPT ?= scripts/lint-yaml.sh
 LINT_MARKDOWN_SCRIPT ?= scripts/lint-markdown.sh
+LINT_PYTHON_SCRIPT ?= scripts/lint-python.sh
 LINT_BASH32_SCRIPT ?= scripts/check-bash32-compat.sh
 AUDIT_SHELL_SCRIPTS_SCRIPT ?= scripts/audit-shell-scripts.sh
 VALIDATE_CILIUM_POLICIES_SCRIPT ?= scripts/validate-cilium-policies.sh
@@ -101,6 +102,7 @@ CI_BATS_TESTS := \
 	tests/kubernetes-workload-image-builder-adapter.bats \
 	tests/langfuse-demos.bats \
 	tests/lint-markdown.bats \
+	tests/lint-python.bats \
 	tests/lint-yaml.bats \
 	tests/local-idp-container-images.bats \
 	tests/local-idp-contracts.bats \
@@ -146,7 +148,7 @@ CI_BATS_TESTS := \
 
 include mk/common.mk
 
-.PHONY: default help prereqs init-env test test-ci test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+.PHONY: default help prereqs init-env test test-ci test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-python lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 
 default:
 	@$(MAKE) --no-print-directory help
@@ -296,6 +298,7 @@ hooks:
 lint:
 	@$(MAKE) --no-print-directory lint-yaml
 	@$(MAKE) --no-print-directory lint-markdown
+	@$(MAKE) --no-print-directory lint-python
 	@$(MAKE) --no-print-directory lint-bash32
 	@$(MAKE) --no-print-directory lint-shell
 	@$(MAKE) --no-print-directory lint-cilium
@@ -311,6 +314,9 @@ lint-yaml:
 
 lint-markdown:
 	@"$(LINT_MARKDOWN_SCRIPT)" --execute
+
+lint-python:
+	@"$(LINT_PYTHON_SCRIPT)" --execute
 
 lint-bash32:
 	@/bin/bash "$(LINT_BASH32_SCRIPT)" --execute
