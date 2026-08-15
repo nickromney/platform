@@ -1586,3 +1586,168 @@ It appeared as a test outside the gate, a tool installed nowhere, an allowlist
 nobody could see rotting, an assertion that could never match, a scanner blind
 to dotfiles, and a workflow that was never triggered. In every case the fix was
 cheap and the finding was only expensive because nothing said it was there.
+
+### Correction 2026-08-15: the first CI run on the new gate went red
+
+PR #200's first run failed, and the finding is the best possible advertisement
+for the exercise: `make lint` passed -- ruff, biome and deno all installed
+cleanly -- and two tests in `tests/reset-local-state.bats` failed on
+`ubuntu-latest` having passed on this host.
+
+```text
+# (in test file tests/reset-local-state.bats, line 68)
+#   `[[ "${output}" == *"${TEST_HOME}/Library/Caches/pip"* ]]' failed
+```
+
+`reset-local-state.sh` resolved each host cache by asking the tool **or**, only
+if the tool said nothing, checking the well-known locations. Those were
+alternatives rather than additions. `pip cache dir` returns `~/.cache/pip`, so
+on a host with pip the macOS-style `~/Library/Caches/pip` was never looked at at
+all. **Arch ships no pip and ubuntu-latest does**, so the test passed here and
+failed there.
+
+The tool lookup and the known locations are now additive; `append_unique_path`
+already deduped the overlap. Verified by stubbing a `pip` onto `PATH` to
+reproduce the runner's condition exactly -- the same two assertions failed at
+the same two lines -- and confirming the fix passes both with and without pip.
+
+The suite no longer depends on the answer. A new case stubs `pip`, creates both
+cache locations, and asserts **both** are collected, so the behaviour is pinned
+rather than inherited from whatever the host has installed. It fails on the
+pre-fix script.
+
+This is section 1's thesis reaching its own conclusion: the file had been in the
+backlog, was triaged as green on this workstation, joined the gate on that
+basis, and the very first run on different hardware found a real defect in the
+script it was testing. That is the gate working -- and it is also a reminder
+that "passes locally" was never evidence of anything.
+
+## 18. Verifying On Ubuntu Locally, And What Slicer Leaves Behind
+
+The pip bug in section 17 cost a push, a CI round trip, and a red build to find
+something a local Ubuntu box would have shown in minutes. This host has Slicer
+(Firecracker microVMs), so that loop is avoidable. The workflow is recorded in
+the n-dotfiles project memory `slicer-verification-workflow`, which is why it
+did not surface here -- **memories are per-project, and this is a different
+project**. Worth knowing before re-deriving it a third time.
+
+### The shape of it
+
+```bash
+sudo -E slicer up ~/sandbox.yaml          # operator runs this; the daemon needs root
+slicer workspace --rm --hostgroup sandbox --tag purpose=platform-gate
+slicer wt push sandbox-1 <dir>            # carries uncommitted working-tree changes
+slicer vm exec sandbox-1 -- bash -lc '...'
+```
+
+Client commands need no sudo -- `nick` is in the `slicer` group and can read
+`/var/lib/slicer/auth/token`. Only the daemon needs root.
+
+The base image is **Ubuntu 22.04.5 with `/bin/sh -> dash`**, which is precisely
+the condition behind the section 13 `pipefail` failure. That class is now
+reproducible without pushing.
+
+It is *not* automatically a stand-in for `ubuntu-latest`. The image ships **no
+pip at all**, so it would not have reproduced the section 17 failure by default;
+`python3-pip` has to be installed deliberately to match the runner. A VM that
+differs from CI in a *different* direction just relocates the blind spot.
+
+### Do not run slicer from inside the repository
+
+This is the part worth remembering. The daemon runs as root and writes into the
+directory the command was invoked from. Running `slicer workspace` with the repo
+as the working directory left three root-owned artifacts in the repo root:
+
+| Artifact | Mode | What it is |
+| --- | --- | --- |
+| `.slicer/` | `drwx------ root` | daemon state |
+| `sandbox-1.img` | `-rw------- root` | the live VM disk, 25GiB apparent, ~900MB sparse |
+| `vm_agent_secret` | `-rw------- root` | the VM agent's auth token |
+
+Each one broke something different, and the failures were not obviously related
+to each other:
+
+- `.slicer/` made `slicer wt push` fail with `permission denied`, because the
+  overlay walks the **filesystem** rather than git -- so adding it to
+  `.gitignore` did not help. The push only worked after staging a clean copy of
+  the tree outside the repo.
+- `sandbox-1.img` broke `git add -A` outright: `unable to index file`. Not a
+  warning, a hard failure. `git status` could not walk `.slicer/` either.
+- `vm_agent_secret` is a **credential**. Mode 600 and root-owned is the only
+  reason `git add -A` did not stage it. That is luck, not design.
+
+All three are now in `.gitignore`, which keeps the working tree usable if it
+happens again. **The actual fix is to invoke slicer from outside the repo.**
+
+The disk image must not be deleted while the VM is running -- it *is* the VM.
+Clean up in order: `slicer vm delete sandbox-1`, then remove the artifacts as
+root.
+
+### What the VM found once it was made faithful
+
+The first full run in the microVM reported 13 failures against CI's 2. Rather
+than assume they were noise, each was checked against the CI log for the same
+run: **all 13 were `ok` on the runner**. That comparison is the whole method —
+a difference between the VM and CI is a question, not a verdict.
+
+Closing them took four environment additions and turned up three real defects:
+
+| Cause | Tests | Verdict |
+| --- | --- | --- |
+| No Go | 8 | VM gap; runners preinstall it |
+| ripgrep 13.0.0 without PCRE2 | 1 | VM gap; 22.04 ships an older build than 24.04 |
+| No helm | 1 | VM gap; runners preinstall it |
+| `cp -R` fallback with no exclusions | 1 | **real bug** |
+| `ubuntu` contains `bun` | 1 | **real bug** |
+| mawk instead of gawk | 2 | **real latent bug** |
+
+Final state: **621/621, exit 0**, on both Arch and Ubuntu.
+
+#### The fallback that copied everything
+
+`copy_app_repo_source_dir` in `sync-gitea-app-repo.sh` excluded `.git`,
+`node_modules`, `.venv`, `__pycache__`, `.run`, `.pytest_cache` and
+`.ruff_cache` -- but only in its `rsync` branch. The `else` branch was a bare
+`cp -R` with **no exclusion mechanism at all**, so on a host without rsync the
+projected Gitea app repo receives build output and dependency trees wholesale.
+
+Arch, macOS and `ubuntu-latest` all ship rsync, so that branch had never once
+executed. `tests/validate-gitea-app-repo-sync.bats` asserts exactly this and
+would have caught it immediately -- given a host that takes the branch.
+
+Both paths now share a single `APP_REPO_SOURCE_EXCLUDES` list, with the fallback
+using `tar --exclude`. Verified twice: standalone with the exclusions applied to
+a fixture tree, and in the rsync-less VM where the test now passes.
+
+#### `ubuntu` contains `bun`
+
+`tests/subnetcalc-makefile.bats` asserted `[[ "${output}" != *"bun"* ]]` on the
+output of `make -C`, which prints `Entering directory '<abspath>'`. The absolute
+path is the operator's, so the test was quietly asserting something about their
+home directory -- and `/home/ubuntu` contains `bun`.
+
+Fourth instance of section 1's Entering-directory bug, after the `$HOME` case,
+the JSON-parse case, and `apps` containing `ps`. The pattern is now unmistakable:
+**a substring assertion over `make -C` output is an assertion about the
+filesystem path it happens to run from.** `--no-print-directory` is the fix
+every time.
+
+#### The render that needs gawk and does not say so
+
+`render_prometheus_application_manifest` uses `awk`. Under **mawk** it emits
+`alertmanager: enabled: false` when `ENABLE_ALERTMANAGER=true` was requested --
+wrong output, exit status 0, no warning of any kind.
+
+Stock Ubuntu ships mawk. Arch ships gawk, and the GitHub runner images install
+gawk, so both environments this platform is normally exercised in hide it.
+
+**Not fixed here, deliberately.** gawk was installed in the VM to match CI
+rather than rewriting the awk program, because the choice is a real one: either
+make the script mawk-safe, or declare gawk a prerequisite and check for it the
+way `require` already does for `curl`, `jq` and `perl`. This repo already runs a
+macOS CI job specifically because awk implementations differ, so it has the
+appetite for the former -- but it should be decided, not slipped in beside a
+green-up.
+
+A silently wrong render is worse than a failed one. Whichever way it goes, it
+wants a guard rather than a comment.

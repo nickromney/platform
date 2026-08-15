@@ -17,6 +17,24 @@ playwright-report/
 .playwright-cli/
 .playwright-mcp/
 
+# Slicer microVM sandboxes. The daemon runs as root and writes into whatever
+# directory a slicer command is invoked from, so both of these appear in the
+# repo the moment the VM workflow is driven from here: a root-owned .slicer/,
+# and the VM's raw disk image -- 25GiB apparent, ~900MB sparse on disk.
+#
+# Neither is readable by the invoking user, which is worse than it sounds:
+# `git add -A` fails outright on the image ("unable to index file"), and
+# `git status` cannot even walk .slicer/. Ignoring them keeps the working tree
+# usable if it happens again. The real fix is to run slicer from outside the
+# repository.
+.slicer/
+**/.slicer/
+*.img
+# The VM agent's auth token. Root-owned and mode 600 here, so git could not have
+# staged it -- but it is a credential written into the working directory, and it
+# should be ignored on its own merits rather than by luck of the permissions.
+vm_agent_secret
+
 # Python
 __pycache__/
 **/__pycache__/

@@ -19,7 +19,15 @@ setup() {
 }
 
 @test "subnetcalc update is a no-op for the Go-only wrapper" {
-  run make -n -C "${REPO_ROOT}/apps/subnetcalc" update
+  # --no-print-directory because the absence assertions below are substring
+  # matches and `make -C` prints "Entering directory '<abspath>'". The path is
+  # the operator's, so the test was asserting something about their home
+  # directory: "bun" is a substring of "ubuntu", so this failed for any user
+  # named ubuntu -- which is exactly what a CI-like Linux VM gives you.
+  #
+  # Same shape as the apps/ps case in app-layout-consistency.bats, and the
+  # fourth instance of section 1's Entering-directory bug.
+  run make -n --no-print-directory -C "${REPO_ROOT}/apps/subnetcalc" update
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Go-only app; no package-manager locks to update"* ]]

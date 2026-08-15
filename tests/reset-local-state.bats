@@ -102,6 +102,41 @@ make_fake_home() {
   [ -f "${TEST_WORKSPACE}/dist/keep.txt" ]
 }
 
+@test "reset-local-state collects known cache locations even when the tool reports one" {
+  make_fake_workspace
+  make_fake_home
+
+  # This suite passed on Arch and failed on ubuntu-latest, because the tool
+  # lookup and the well-known locations were alternatives rather than additive.
+  # `pip cache dir` returns ~/.cache/pip, so on a host with pip the macOS-style
+  # ~/Library/Caches/pip was never looked at; on a host without pip it was. The
+  # stub pins that condition so the result no longer depends on the host.
+  stub_bin="${BATS_TEST_TMPDIR}/stub-bin"
+  mkdir -p "${stub_bin}"
+  cat >"${stub_bin}/pip" <<'EOF'
+#!/usr/bin/env bash
+[[ "${1:-}" == "cache" && "${2:-}" == "dir" ]] && { printf '%s\n' "${HOME}/.cache/pip"; exit 0; }
+exit 1
+EOF
+  chmod +x "${stub_bin}/pip"
+  mkdir -p "${TEST_HOME}/.cache/pip"
+  printf 'pip-xdg\n' >"${TEST_HOME}/.cache/pip/cache.txt"
+
+  run env \
+    PATH="${stub_bin}:${PATH}" \
+    HOME="${TEST_HOME}" \
+    RESET_LOCAL_STATE_WORKSPACE_ROOT="${TEST_WORKSPACE}" \
+    RESET_LOCAL_STATE_GIT_ROOT="${TEST_WORKSPACE}" \
+    "${SCRIPT}" \
+    --dry-run \
+    --include-host-caches
+
+  [ "${status}" -eq 0 ]
+  # Both, not either: the path pip reported and the macOS location it does not.
+  [[ "${output}" == *"${TEST_HOME}/.cache/pip"* ]]
+  [[ "${output}" == *"${TEST_HOME}/Library/Caches/pip"* ]]
+}
+
 @test "reset-local-state refuses a host cache resolved outside HOME" {
   make_fake_workspace
   make_fake_home
