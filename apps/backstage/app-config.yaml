@@ -127,6 +127,9 @@ catalog:
       target: ../../../langfuse-demos/catalog-info.yaml
 
     - type: file
+      target: ../../../auth-chat/catalog-info.yaml
+
+    - type: file
       target: ../../../chatgpt-sim/catalog-info.yaml
 
     - type: file

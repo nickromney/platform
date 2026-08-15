@@ -347,8 +347,18 @@ EOF
     [ "${status}" -eq 0 ]
     [ "${output}" = "${expected_command}"$'\n'"${expected_command}" ]
 
-    run make -C "${REPO_ROOT}/kubernetes/${variant}" -n readiness
+    # This used to run `make -n readiness` as a stand-in for "the target is
+    # wired". The dry-run refusal from #198/#199 now rejects that, correctly:
+    # readiness recurses into prereqs, and -n on that path would run the real
+    # operation rather than preview it. The refusal turned this test red on
+    # 2026-08-14 and nothing reported it, because the file sits outside the
+    # gate. Reading the goal out of the make database proves the same thing
+    # without asking make to pretend.
+    run bash -c 'make -pn -C "$1" __noop__ 2>/dev/null | awk -F " := " '"'"'/^MAKE_KNOWN_GOALS :=/{ print $2; exit }'"'" \
+      bash "${REPO_ROOT}/kubernetes/${variant}"
+
     [ "${status}" -eq 0 ]
+    [[ " ${output} " == *" readiness "* ]]
   done
 }
 

@@ -55,26 +55,47 @@ app_repo_sync_has_extra_source_dirs() {
   jq -e '(.extra_source_dirs // []) | length > 0' "${file}" >/dev/null 2>&1
 }
 
+# Generated directories that must never reach a projected app repo. Declared
+# once so the two copy implementations below cannot drift apart -- which is
+# exactly what had happened.
+APP_REPO_SOURCE_EXCLUDES=(
+  '.git'
+  '.DS_Store'
+  'node_modules'
+  '.venv'
+  '__pycache__'
+  '.run'
+  '.pytest_cache'
+  '.ruff_cache'
+)
+
 copy_app_repo_source_dir() {
   local source="$1"
   local target="$2"
+  local pattern=""
+  local rsync_args=()
+  local tar_args=()
 
   [[ -d "${source}" ]] || fail "extra source_dir does not exist: ${source}"
   mkdir -p "${target}"
+
+  for pattern in "${APP_REPO_SOURCE_EXCLUDES[@]}"; do
+    rsync_args+=(--exclude "${pattern}")
+    tar_args+=(--exclude "${pattern}")
+  done
+
   if command -v rsync >/dev/null 2>&1; then
-    rsync -a \
-      --exclude '.git' \
-      --exclude '.DS_Store' \
-      --exclude 'node_modules' \
-      --exclude '.venv' \
-      --exclude '__pycache__' \
-      --exclude '.run' \
-      --exclude '.pytest_cache' \
-      --exclude '.ruff_cache' \
-      "${source}/" "${target}/"
-  else
-    cp -R "${source}/." "${target}/"
+    rsync -a "${rsync_args[@]}" "${source}/" "${target}/"
+    return 0
   fi
+
+  # The fallback used to be a bare `cp -R`, which has no exclusion mechanism at
+  # all: on a host without rsync it copied .run, node_modules and .venv straight
+  # into the projected repo. tests/validate-gitea-app-repo-sync.bats asserts
+  # they are absent and has always been able to catch this -- but only a host
+  # missing rsync ever takes this branch, and CI, macOS and Arch all ship it.
+  # Found on Ubuntu 22.04 in a microVM, which does not.
+  tar -C "${source}" "${tar_args[@]}" -cf - . | tar -C "${target}" -xf -
 }
 
 prepare_app_repo_source_projection() {

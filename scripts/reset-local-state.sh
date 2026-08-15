@@ -99,6 +99,34 @@ append_unique_path() {
   eval "${array_name}+=(\"\${path}\")"
 }
 
+# Host caches are located by asking each tool where its cache lives, and not
+# every tool honours a reassigned HOME. `uv cache dir` returns the invoking
+# user's real cache even under HOME=<sandbox>, so this script -- which deletes
+# what it collects -- resolved a path outside the sandbox it was given. That is
+# how tests/reset-local-state.bats came to delete the operator's actual
+# ~/.cache/uv instead of its own fixture.
+#
+# Containment is enforced here rather than at each call site, so a tool that
+# starts ignoring HOME cannot widen the blast radius again. A path outside HOME
+# is skipped with a warning, never removed.
+append_host_cache_path() {
+  local array_name="${1}"
+  local path="${2}"
+  local resolved=""
+  local home_resolved=""
+
+  resolved="$(cd "$(dirname "${path}")" 2>/dev/null && pwd -P)" || return 0
+  resolved="${resolved}/$(basename "${path}")"
+  home_resolved="$(cd "${HOME}" 2>/dev/null && pwd -P)" || return 0
+
+  if [[ "${resolved}" != "${home_resolved}/"* ]]; then
+    printf 'WARN ignoring host cache outside HOME: %s\n' "${path}" >&2
+    return 0
+  fi
+
+  append_unique_path "${array_name}" "${path}"
+}
+
 collect_repo_paths() {
   local path=""
   while IFS= read -r -d '' path; do
@@ -132,68 +160,69 @@ collect_repo_paths() {
   )
 }
 
+# Collect one tool's cache: the path the tool reports, *plus* the well-known
+# locations for it. Additive on purpose.
+#
+# These used to be alternatives -- ask the tool, and only fall back to the known
+# locations when it said nothing. That made the result depend on whether the tool
+# happened to be installed. `pip cache dir` returns ~/.cache/pip, so on a host
+# with pip the macOS-style ~/Library/Caches/pip was never even looked at, while
+# on a host without pip it was. tests/reset-local-state.bats passed on Arch,
+# which ships no pip, and failed on ubuntu-latest, which does.
+#
+# A cache directory that exists is worth removing regardless of which tool
+# claimed it, and append_unique_path already dedupes the overlap.
+collect_host_cache() {
+  local reported="$1"
+  shift
+  local candidate=""
+
+  if [[ -n "${reported}" && -e "${reported}" ]]; then
+    append_host_cache_path host_paths "${reported}"
+  fi
+
+  for candidate in "$@"; do
+    if [[ -n "${candidate}" && -e "${candidate}" ]]; then
+      append_host_cache_path host_paths "${candidate}"
+    fi
+  done
+}
+
 collect_host_paths() {
   local npm_cache_dir=""
   local uv_cache_dir=""
   local pip_cache_dir=""
   local playwright_cache_dir=""
-  local candidate=""
 
   if [[ "${INCLUDE_HOST_CACHES}" -eq 1 ]]; then
     npm_cache_dir="${NPM_CACHE_DIR_OVERRIDE}"
     if [[ -z "${npm_cache_dir}" ]] && command -v npm >/dev/null 2>&1; then
       npm_cache_dir="$(npm config get cache 2>/dev/null || true)"
     fi
-    if [[ -n "${npm_cache_dir}" && -e "${npm_cache_dir}" ]]; then
-      append_unique_path host_paths "${npm_cache_dir}"
-    fi
+    collect_host_cache "${npm_cache_dir}" "${HOME}/.npm"
 
-    if [[ -n "${BUN_CACHE_DIR_OVERRIDE}" && -e "${BUN_CACHE_DIR_OVERRIDE}" ]]; then
-      append_unique_path host_paths "${BUN_CACHE_DIR_OVERRIDE}"
-    fi
+    collect_host_cache "${BUN_CACHE_DIR_OVERRIDE}" "${HOME}/.bun/install/cache"
 
+    # uv is never asked. `uv cache dir` ignores a reassigned HOME and returns the
+    # invoking user's real cache, which is how this script came to delete an
+    # operator's ~/.cache/uv from inside a test fixture.
     uv_cache_dir="${UV_CACHE_DIR_OVERRIDE}"
-    if [[ -z "${uv_cache_dir}" ]] && command -v uv >/dev/null 2>&1; then
-      uv_cache_dir="$(uv cache dir 2>/dev/null || true)"
-    fi
-    if [[ -n "${uv_cache_dir}" && -e "${uv_cache_dir}" ]]; then
-      append_unique_path host_paths "${uv_cache_dir}"
-    fi
+    collect_host_cache "${uv_cache_dir}" \
+      "${HOME}/Library/Caches/uv" \
+      "${HOME}/.cache/uv"
 
     playwright_cache_dir="${PLAYWRIGHT_CACHE_DIR_OVERRIDE}"
-    if [[ -n "${playwright_cache_dir}" ]]; then
-      if [[ -e "${playwright_cache_dir}" ]]; then
-        append_unique_path host_paths "${playwright_cache_dir}"
-      fi
-    else
-      for candidate in \
-        "${HOME}/Library/Caches/ms-playwright" \
-        "${HOME}/.cache/ms-playwright"
-      do
-        if [[ -e "${candidate}" ]]; then
-          append_unique_path host_paths "${candidate}"
-        fi
-      done
-    fi
+    collect_host_cache "${playwright_cache_dir}" \
+      "${HOME}/Library/Caches/ms-playwright" \
+      "${HOME}/.cache/ms-playwright"
 
     pip_cache_dir="${PIP_CACHE_DIR_OVERRIDE}"
     if [[ -z "${pip_cache_dir}" ]] && command -v pip >/dev/null 2>&1; then
       pip_cache_dir="$(pip cache dir 2>/dev/null || true)"
     fi
-    if [[ -n "${pip_cache_dir}" ]]; then
-      if [[ -e "${pip_cache_dir}" ]]; then
-        append_unique_path host_paths "${pip_cache_dir}"
-      fi
-    else
-      for candidate in \
-        "${HOME}/Library/Caches/pip" \
-        "${HOME}/.cache/pip"
-      do
-        if [[ -e "${candidate}" ]]; then
-          append_unique_path host_paths "${candidate}"
-        fi
-      done
-    fi
+    collect_host_cache "${pip_cache_dir}" \
+      "${HOME}/Library/Caches/pip" \
+      "${HOME}/.cache/pip"
   fi
 
   if [[ "${INCLUDE_KUBECONFIGS}" -eq 1 ]]; then

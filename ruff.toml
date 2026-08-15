@@ -1,0 +1,32 @@
+# Ruff configuration for the repo's Python, which is tests/app_contracts.py --
+# ~6,000 lines of contract logic that every bats suite imports.
+#
+# It went unlinted until 2026-08-15. The cost was concrete: a dict literal
+# carried "lima" twice, so Python kept the second value and the Keycloak image
+# contract asserted a registry host that appears nowhere in the repo, while the
+# correct entry sat shadowed and dead. Ruff reports that as F601.
+#
+# The rule set is stated explicitly rather than left to ruff's defaults, because
+# the defaults change between ruff releases and n-dotfiles pins ruff at "latest".
+# Without this file the lint surface would drift under the repo, which is the
+# same class of problem the CI gate work exists to end.
+#
+# Selection rationale:
+#   E4/E7/E9, F  ruff's default correctness set; F is where F601 lives
+#   I            import sorting, so import blocks stop being a diff surface
+#   UP           syntax that the pinned Python version has made obsolete
+#   B            bugbear: likely-wrong code rather than style
+#   SIM          simplifications that remove branches rather than reword them
+#
+# FURB and RUF are deliberately excluded. They add 15 findings on this file,
+# all cosmetic (re.S versus re.DOTALL), and none describe a defect.
+
+# Nothing in this repo pins a Python version: the devcontainer installs the
+# distro interpreter and CI uses whatever ubuntu-latest ships. py310 is the oldest
+# syntax this file actually relies on (PEP 604 `X | Y` unions), so UP proposes
+# nothing that a slightly older interpreter would reject.
+target-version = "py310"
+line-length = 120
+
+[lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "SIM"]

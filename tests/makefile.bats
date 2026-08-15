@@ -375,7 +375,6 @@ EOF
   # this list when its file joins CI_BATS_TESTS; do not keep the file out to
   # satisfy the test.
   [[ "${output}" != *"tests/platform-workflow-ui.bats"* ]]
-  [[ "${output}" != *"tests/release-script.bats"* ]]
   [[ "${output}" != *"tests/smoke-sentiment-api-image.bats"* ]]
 
   run bash -c 'tr " " "\n" <"$1" | LC_ALL=C sort -c' bash "${log_file}"

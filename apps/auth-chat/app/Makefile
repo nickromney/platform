@@ -1,4 +1,4 @@
-.PHONY: help run
+.PHONY: help prereqs run
 
 AUTH_CHAT_LOCAL_GOARCH ?= $(shell uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
 GO_APP_BINARY := auth-chat
@@ -14,6 +14,11 @@ help:
 	@echo "  build-linux  Build the Linux binary used by kind images"
 	@echo "  run          Run the app directly"
 	@echo "  clean        Remove generated .run artifacts"
+
+prereqs:
+	@set -euo pipefail; \
+	command -v go >/dev/null 2>&1 || { echo "FAIL go (missing)"; exit 1; }; \
+	echo "OK   go"
 
 run:
 	PORT=18086 PUBLIC_BASE_URL=http://localhost:18086 go run ./cmd/auth-chat

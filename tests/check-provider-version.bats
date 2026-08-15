@@ -56,7 +56,11 @@ EOF
 
   cat >"${stub_bin}/curl" <<'EOF'
 #!/usr/bin/env bash
-sleep 1
+# 2s rather than 1s so the timing bands below cannot be crossed by load. With
+# 3 providers at concurrency 2: unbounded finishes near 2s, bounded near 4s,
+# serial near 6s. At 1s those landmarks sat 1s apart and a busy machine failed
+# the test for being busy rather than for being wrong.
+sleep 2
 case "$*" in
   *"/hashicorp/aws/versions"*) printf '%s\n' '{"versions":[{"version":"1.0.1"}]}' ;;
   *"/hashicorp/azurerm/versions"*) printf '%s\n' '{"versions":[{"version":"1.0.1"}]}' ;;
@@ -72,5 +76,12 @@ EOF
   [[ "${output}" =~ hashicorp/aws ]]
   [[ "${output}" =~ hashicorp/azurerm ]]
   [[ "${output}" =~ hashicorp/random ]]
-  [[ "${output}" =~ elapsed=2|elapsed=1 ]]
+  # Integer comparison, not a regex: `elapsed=1|elapsed=2` is unanchored, so it
+  # also matched elapsed=10 and elapsed=20. The lower bound is the real claim --
+  # unbounded concurrency would finish in ~2s -- and the upper bound rejects
+  # serial execution at ~6s.
+  elapsed="$(printf '%s\n' "${output}" | sed -n 's/^elapsed=//p')"
+  [ -n "${elapsed}" ]
+  [ "${elapsed}" -ge 4 ]
+  [ "${elapsed}" -lt 6 ]
 }

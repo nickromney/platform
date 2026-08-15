@@ -1020,3 +1020,734 @@ unnoticed. This is the same shape as section 1's discovery that
 which therefore defends it. The absence checks now carry a comment saying they
 exist to prove the subset is an explicit list rather than a glob, and that a
 name should be removed when its file joins the gate.
+
+### Burning it down further, 2026-08-15: 26 to 21
+
+Five more files joined the gate. The counts the previous pass claimed to have
+recorded were not actually written down, so every safe-to-run file was re-run in
+isolation and its real fail/total is now in `tests/ci-test-gate.bats`. 16 of the
+20 are red, the worst being `vanilla-js-typecheck` at 15/61.
+
+Two of the four green additions were merely unlisted. The other two were red for
+reasons worth stating.
+
+**A policy test that could never pass.** `tests/python-wrapper-policy.bats`
+greps the tree for `python3` and fails on any hit outside an allowlist. The grep
+line itself contains the string, and the file was not in its own allowlist, so
+it failed on every tree since #68 — a test with no passing input, invisible
+because it sat outside the gate. Its allowlist had also rotted **in both
+directions**: six entries permitted nothing at all, while ten tracked files used
+`python3` with four named. It now excludes itself by pathspec, and a second test
+asserts no allowlist entry has gone dead.
+
+That second assertion is the general lesson. An allowlist is normally guarded
+only against being too small; nothing notices when it grows permissions for
+files that no longer need them, and a stale entry is an unreviewed permission.
+
+**A scanner blind to dotfiles.** `tests/subnetcalc-naming.bats` used `rg`, which
+skips hidden files by default, so it could not see dot-directories at all. It
+also needed six globs to talk itself out of `node_modules` and `dist`, none of
+which are tracked. Switching to `git grep` over tracked files removed the globs,
+removed the dependency on `rg` being installed, and immediately surfaced two
+genuine stale references the old scan had never been capable of seeing: a
+`.yamllint` ignore for `apps/subnet-calculator/apim-simulator/`, a path that has
+not existed since the rename and was matching nothing, and
+`apps/subnetcalc/.gitea/workflows/build-images.yaml` still titled
+`Build subnet-calculator images` with `WORKDIR: /tmp/subnet-calculator`.
+
+`kubernetes/kind/tests/app-repo-sync.bats` already banned `subnet-calculator.git`
+in that exact workflow file and passed the whole time. The assertion was narrower
+than the class it was meant to enforce.
+
+### A backlog test was deleting the operator's real cache
+
+The most serious finding, and it argues for triaging these files rather than
+adding them blind.
+
+`tests/reset-local-state.bats` builds a fixture HOME and runs
+`reset-local-state.sh --execute --include-host-caches` against it. The script
+locates the uv cache by running `uv cache dir` — and **`uv` ignores a reassigned
+`HOME`**, returning the invoking user's real cache instead. So the test deleted
+`~/.cache/uv` on this host rather than its fixture. Observed directly:
+
+```text
+$ ls /home/nick/.cache/uv
+ls: cannot access '/home/nick/.cache/uv': No such file or directory
+```
+
+Only a cache, and uv repopulates it, but the sandbox was not a sandbox. uv was
+the single host cache resolved *only* by asking the tool; `playwright` and `pip`
+already fell back to `${HOME}`-derived candidates and were never exposed. uv now
+uses that same shape.
+
+The per-call fix is not the real one. `append_host_cache_path` now enforces
+containment centrally: a host cache resolving outside `HOME` is skipped with a
+warning and never removed, so the next tool that ignores `HOME` cannot widen the
+blast radius again. Verified by pointing the override outside `HOME` and
+asserting the file survives.
+
+Worth carrying forward: **a test that sets `HOME` has not sandboxed anything.**
+It has only sandboxed the tools that read `HOME`, and which those are is not
+knowable from the test.
+
+### The 1Password signing trap, twice
+
+Both `release-script.bats` and `reset-local-state.bats` build fixture git repos
+and commit into them. A fixture repo inherits global config, so a host with
+`commit.gpgsign = true` sends every fixture commit to that signer:
+
+```text
+error: 1Password: failed to fill whole buffer
+fatal: failed to write commit object
+```
+
+CI has no signing configured, so this passes there and fails only on a developer
+workstation — section 1's one-direction host dependence again, pointing the
+opposite way from the usual case. `git-hooks.bats` and
+`check-worktree-unchanged.bats` already pin `commit.gpgsign false`; the idiom
+existed and two files had simply not adopted it. Both now do.
+
+### The absence assertion, third instance
+
+`tests/makefile.bats` asserted `tests/release-script.bats` was **absent** from
+`CI_BATS_TESTS`. The comment added on 2026-08-14 says to remove a name when its
+file joins the gate, so it was removed. Recording it because it is now a
+reliable pattern rather than a coincidence: each time a file joins the gate,
+check what asserted its absence.
+
+### What is left, and what it needs
+
+21 files. Two of them are not assertion fixes:
+
+- `grafana-dashboard-quality` (2/4) asserts that live Prometheus queries return
+  series. It cannot be hermetic in its present shape and needs either a recorded
+  fixture or a decision that it is a cluster test rather than a gate test.
+- `platform-workflow-ui` (2/11) does not fail so much as never finish; it was
+  killed at 300s. A hanging test in a gate is worse than a red one.
+
+Six are untriaged because they drive `docker build`/`run`/compose. Given what
+`reset-local-state` turned out to be doing to the host, those should be run
+deliberately and watched, not swept in.
+
+### 21 to 16, and one refactor accounts for three of them
+
+Five more added. The pattern in this batch is different from the last one: these
+were not tests that had rotted slowly, they were tests left behind by a single
+change.
+
+**PR #126 broke three of them and nothing said so.** That refactor moved the
+Kubernetes and build plumbing around, and three suites still asserted the shapes
+it replaced:
+
+- `kubernetes-stage-helper-surface` asserted the diagnostic runner is invoked
+  with `--show-urls`. #126 created `run-diagnostic-check.sh`, which has only ever
+  taken `--action show-urls`, and created this test in the same commit. It was
+  **born red** and has never passed on any tree.
+- `sso-e2e-app-toggles` asserted the kind Makefile contains
+  `STAGE_TFVARS_FILES="$$tfvar_files_joined"`. #126 moved that layering into
+  `build-sso-e2e-env.sh`; the local variable has not existed since.
+- `local-idp-container-images` asserted an inline
+  `GOOS=linux GOARCH=$${GOARCH:-$(IDP_GOARCH)}` in the idp-core app Makefile.
+  #126 moved the build line into `mk/go-app-core.mk`, where it now reads
+  `GO_APP_GOARCH`. The behaviour is intact; only the assertion was stranded.
+
+A refactor that lands with three of its tests asserting the old code is what
+"outside the gate" costs, stated as a number. None of these were subtle, and any
+one CI run would have caught all three.
+
+**A policy assertion that could not see the thing it guards.**
+`kubernetes-mcp-manifests` checks which workloads may reach the MCP namespace. It
+compared two sets: source *names*, collected only from endpoints carrying
+`k8s:app.kubernetes.io/name`, and source *namespaces*. PR #189 added a rule
+letting `dev`/`langfuse-demos` reach `platform-mcp` on 8080 — selected by
+`part-of`, not `name` — so the name set never saw it, and only the namespace set
+noticed. A source could have been added under any other label key and been
+invisible to both.
+
+The rule itself is legitimate and merged; the test was simply not updated,
+because it does not run. It now compares the full ingress surface as exact
+`(ports, selector)` pairs, so a new source is either listed or the test fails.
+For a policy guard, "the sets I happened to collect match" is not the same
+assertion as "this is the entire surface".
+
+**`subnetcalc-go-only`** was the locale-collation trap from section 1 again,
+plus real drift: `edge/` and `update-subnetcalc-image-tags.sh` are canonical —
+`sentiment` carries the same pair — and arrived in #111 and #113 without this
+list following.
+
+### The new guards immediately caught their own author
+
+Appending the previous section to this document turned both policy tests red:
+it names `python3` and `subnet-calculator` in order to describe them. That is
+the guards working, but it also showed the allowlists were the wrong shape.
+Prose and recorded artifacts are not host-side code and are not renameable
+source, so `docs/` (python) and `docs/adr/`, `docs/plans/` (naming) are now
+scan-level prefix exemptions rather than per-file allowlist entries. Prefixes
+are deliberately not dead-checked: a document may stop mentioning something
+without that being a finding, whereas a code path that stops needing an
+exception is a live permission nobody reviewed.
+
+### 16 to 9: auth-chat was never registered anywhere
+
+Seven more added, and the batch has a single dominant theme: an application
+that exists, deploys, and serves traffic, but which none of the repo's registries
+knew about.
+
+`auth-chat` has carried `apps/auth-chat/app/go.mod` since it was added. It was
+missing from **five** separate places:
+
+- `canonical_go_app_names()`, while `discovered_go_app_names()` found it on the
+  filesystem. `app-layout-consistency` asserts those two are equal, which is
+  exactly the check designed to catch this, and it had been failing unwatched.
+- the Backstage production catalog (`apps/backstage/catalog/apps/auth-chat/`),
+  though `apps/auth-chat/catalog-info.yaml` existed and was correct
+- both Backstage `app-config` location lists, dev and production
+- `catalogMetrics.ts`, so it was outside catalog observability
+- the ubiquitous language service-surface paragraph in `docs/ddd/`
+
+Its wrapper Makefile also declared `prereqs` in `MAKE_KNOWN_GOALS` with no rule
+anywhere defining it, and `build:` depended on that non-existent target. It only
+appeared to work because an unmatched prerequisite with no recipe is inert.
+`auth-chat` now follows `langfuse-demos`, the other app with no `compose.yml`:
+`app-prereqs` in the wrapper delegating to a real `prereqs` in the app Makefile.
+
+One application, five registries, and every contract meant to notice was in the
+backlog. This is the clearest case yet that the gate's value is not the tests it
+contains but the ones it does not.
+
+### Two more tests that could never have passed
+
+- `app-layout-consistency` asserts a fixture wrapper's help output does **not**
+  contain `ps`. The fixture is created under `apps/`, and `make -C` prints
+  `Entering directory .../apps/zz-test-common-wrapper` — and `apps` contains
+  `ps`. Section 1's Entering-directory bug, this time hidden inside a path
+  component rather than at the start of a line. `--no-print-directory` fixes it.
+- `docs-site` checked the **filesystem** for `.next`, `node_modules` and stray
+  images. All are gitignored, so it failed on any machine that had built the
+  site and passed on a clean CI checkout — host-dependence pointing at the
+  developer rather than at CI, the mirror image of the usual case. The claim is
+  about what the import committed, so it now asks `git ls-files`. Its `find` for
+  images was walking `node_modules` and reporting assets shipped by vendored
+  packages.
+
+### Two tests that were executing real work
+
+`docs-site` also ran `rm -rf node_modules` followed by `make -C sites/docs
+build` — a real `bun install` over the network and a Next.js build, which
+destroyed the developer's installed dependencies on the way past.
+`apim-simulator-makefile` ran `make app-js-check`, which executes `biome`: a
+tool this repo pins nowhere, does not install in CI, and which is absent from
+this host.
+
+Both are now static assertions over the Makefiles, following the precedent set
+by the `make -n` guard test in section 12: where running the thing is either
+destructive or impossible, assert the wiring instead. Both still fail if the
+contract they describe changes.
+
+### A duplicate dict key, and no Python linting at all
+
+`tests/app_contracts.py` had `"lima"` twice in one dict literal, so Python kept
+the second value and the Keycloak image contract asserted a registry host —
+`192.168.64.1:5002` — that appears **nowhere else in the repository**. The
+correct `host.lima.internal:5002` entry was shadowed and dead. A second dict had
+the same key twice with the same value, meaning that contract has only ever
+validated lima where the sibling function below it validates both targets.
+
+`ruff` reports both as F601, and `ruff` is installed. Nothing in `make lint`
+runs it: the repo lints YAML, Markdown, shell, HCL, Cilium and Kyverno, but not
+its own 5,800-line Python contract library. Worth closing, and deliberately not
+closed here — a first `ruff` run also reports unused imports, so it is its own
+change rather than a rider on a green-up.
+
+Extending the second contract to `kind` is also left undone on purpose:
+`kind.tfvars` has no `external_workload_image_refs` map, so the validator fails
+on it. That is a real coverage gap needing an owner, not a test edit.
+
+### And one caused by the section 12 fix
+
+`platform-workflow` ran `make -n readiness` as a proxy for "the target is
+wired". The dry-run refusal added in #198/#199 now rejects that — correctly,
+because `readiness` recurses into `prereqs`, and `-n` there would run the real
+operation. So a fix landed in the gate broke a test outside it, and nothing
+reported the breakage for a day. It now reads the goal out of the make database
+instead of asking make to pretend.
+
+### What is left
+
+Nine files. Six are the untriaged docker set, and after `reset-local-state`
+turned out to be deleting the operator's uv cache, they should be run
+deliberately and watched rather than swept in. The other three are
+`vanilla-js-typecheck` (15/61), `grafana-dashboard-quality`, which queries a
+live Prometheus and cannot be hermetic as written, and `platform-workflow-ui`,
+which hangs rather than fails.
+
+### 9 to 8: vanilla-js-typecheck, and what #125 left behind
+
+15 of 61 failing, and almost all of it traces to one architectural change that
+the contracts never followed.
+
+**#125 deleted every app's `style.css`.** The five canonical browser apps now
+load the pinned 5h3ll-ui CDN stylesheet followed by the shared
+`/app-shell.css`, and own no CSS of their own. Six contract helpers still read
+`apps/<app>/app/internal/app/web/style.css` and died with `FileNotFoundError`
+before asserting anything. They now skip a stylesheet that is not there, which
+is the guard `browser_sso_static_allowlist_contract_violations` already used a
+few hundred lines further down the same file. The checks are about an app not
+re-owning shared styling, which is vacuously true when it owns no stylesheet.
+
+**The palette moved behind the library's tokens.** `--page: #f6f8fb;` became
+`--page: var(--background, #f6f8fb);` and so on for every token, so the shared
+sheet defers to 5h3ll-ui and falls back to exactly the previous hexes. `--border`
+was renamed `--app-shell-border` because `--border` now belongs to the library.
+The contract asserted the old literals; it now asserts the layered form, with
+the same hex values it always did.
+
+**Selectors grew `:not()` guards for the same reason.**
+`:where(input, textarea, select)` became
+`:where(input:not(.input), textarea:not(.textarea), select:not(.select))` so
+shared rules stop overriding the library's own classes, and the formatter
+wrapped the longer ones across lines. Both contracts locating a block by exact
+selector string reported the block as *missing* while every declaration inside
+it was correct. They now normalize selectors before matching and assert on the
+declarations, which is where the meaning lives.
+
+### Assertions that were testing the formatter
+
+`renderStatusInto(apiStatusEl` matched nothing, not because the call was gone
+but because Biome wraps a three-argument call across lines. The code did exactly
+what was being asserted. Collapsing whitespace after `(` before matching fixes
+the class, not just the instance -- any single-line call fragment in this module
+was one formatter run away from the same failure.
+
+Two more were an abstraction level out of date rather than wrong:
+`subnetcalc` now composes `keyValueArticleElement`, which calls
+`keyValueTableElement` internally -- *more* use of the shared helpers, which is
+the thing the contract exists to encourage -- and sentiment's comment article
+carries `"comment card"` since the 5h3ll-ui adoption, where the contract wanted
+the class list to be exactly `"comment"`.
+
+### The contract that forbade what TypeScript requires
+
+`browser_public_unknown_contract_violations` bans `unknown` from public browser
+surfaces. It flagged `auth-chat`:
+
+```javascript
+const config = /** @type {RuntimeConfig} */ (
+  /** @type {unknown} */ (readRuntimeConfig("AUTH_CHAT_CONFIG"))
+);
+```
+
+That cast is not a lapse, it is what the compiler demands. Removing it and
+running `deno check` gives:
+
+```text
+TS2352: Conversion of type 'JSONObject' to type 'RuntimeConfig' may be a
+mistake because neither type sufficiently overlaps with the other. If this was
+intentional, convert the expression to 'unknown' first.
+```
+
+So the contract as written offered a choice between satisfying it and compiling.
+The `/** @type {unknown} */` cast idiom is now exempt; `unknown` in a declared
+public shape, which is the actual target, still fails.
+
+The second hit was real. `apps/idp-sdk/src/index.ts` exported
+`type IdpStatus = Record<string, unknown>` while every sibling type in that SDK
+is concrete. `schemas/idp/status.schema.json` and `schemas/idp/action.schema.json`
+already describe the shape, so `IdpStatus` and a new `IdpAction` now state it.
+Nothing outside the SDK consumed the type, and `deno check` passes.
+
+### biome is not installed anywhere
+
+Two tests invoked `biome`, which this repo pins nowhere, does not install in CI,
+and which is absent from this host -- the third and fourth instance in this
+effort after `apim-simulator-makefile`. Their hermetic contract assertions run
+unconditionally; only the tool invocation is now guarded by
+`command -v biome || skip`, the idiom `tests/app-healthcheck-commands.bats`
+already uses for `python3`.
+
+That biome is unpinned while `deno` is present is worth deciding on its own.
+Every browser app's `js-check` depends on it, so `make -C apps js-check` cannot
+currently run on a clean machine or in CI.
+
+## 16. Two Linters The Repo Did Not Run
+
+Both gaps were found by the section 15 work rather than by anything watching for
+them, and both had already cost something.
+
+### Python was never linted
+
+`tests/app_contracts.py` is ~6,000 lines that every bats suite imports, and
+`make lint` covered YAML, Markdown, shell, HCL, Cilium and Kyverno -- not it.
+
+The cost was concrete. A dict literal carried `"lima"` twice, so Python kept the
+second value and the Keycloak image contract asserted a registry host,
+`192.168.64.1:5002`, that appears nowhere in the repository, while the correct
+`host.lima.internal:5002` entry sat shadowed and dead. `ruff` reports exactly
+that as `F601`, and `ruff` was already pinned in the n-dotfiles global mise
+config. It was installed and never invoked.
+
+`make lint-python` now runs it through `scripts/lint-python.sh`, following the
+same shape as the other lint scripts: a `--dry-run`/`--execute` interface, a
+missing-binary path with install hints, and tracked-file discovery via
+`git ls-files`.
+
+**The rule set is pinned in `ruff.toml` rather than left to ruff's defaults.**
+n-dotfiles tracks ruff at `latest`, so the default selection would change under
+the repo between releases -- the same drift this effort exists to end. The
+selection is `E4,E7,E9,F,I,UP,B,SIM`: 5 findings on the current tree, all
+meaningful. `FURB` and `RUF` were considered and rejected; they add 15 findings,
+every one cosmetic (`re.S` versus `re.DOTALL`), and none describes a defect.
+
+The five were an unused `sys` import, an unsorted import block, a quoted type
+annotation, and **two dead `content = makefile.read_text(...)` reads** left
+behind when those checks moved from parsing Makefile text to
+`_evaluated_make_targets`. CI installs `ruff==0.16.2` alongside the pinned
+yamllint.
+
+`tests/lint-python.bats` guards the wiring, and one case asserts `F` is in the
+selection rather than asserting the tree is currently clean, so the rule that
+would have caught the duplicate key cannot be dropped silently.
+
+### biome was installed nowhere at all
+
+Four tests across three files invoke `biome`: `apim-simulator-makefile`,
+and two in `vanilla-js-typecheck`. It was pinned in no mise config, installed by
+no CI step, and absent from this host, so `make -C apps js-check` could not run
+on a clean machine or on a runner. `deno`, its companion in the same target, was
+present only as an Arch package -- the same host-dependence in a quieter form.
+
+Both are now pinned in the n-dotfiles global mise config, and CI installs
+`@biomejs/biome@2.5.8` and `deno 2.9.5` explicitly.
+
+**Installing it proved the point immediately.** `make -C apps js-check` was
+failing, with seven findings in `apps/shared/appshell/app-shell.js`: six
+`forEach` callbacks returning a value (`useIterableCallbackReturn`) and one
+missed optional chain. The same function already used braced callback bodies for
+several of its calls, so the six were an internal inconsistency rather than a
+style choice. Fixed, plus an 82-line reformat of a 1,288-line file to match the
+formatter -- contained, because the file was already close.
+
+That is the fourth tool in this effort found to be missing rather than
+misconfigured, after `uv`, `helm` and the host locale. The pattern is worth
+stating plainly: **a check that cannot run reports nothing, and reporting
+nothing is indistinguishable from passing** unless something asserts the tool
+is present. The CI install step now ends with `biome --version` and
+`deno --version` for exactly that reason, so a broken install fails the job
+rather than quietly turning the browser contracts into skips.
+
+### biome dumped core three times
+
+Worth recording because it is unresolved. `biome` 2.5.8 from mise left three
+50MB core files -- two in `apps/shared/appshell/`, one in n-dotfiles from a bare
+`biome --version`. It has not reproduced since: `--version` and `check` now run
+cleanly, and the error path exits 1 without crashing. Treat a `core.*` file
+appearing next to a JavaScript check as this, not as a repo bug.
+
+`core.*` is deliberately **not** added to `.gitignore`. The full test-ci run that
+followed failed with:
+
+```text
+FAIL the command under test changed the working tree
+     removed:    ?? apps/shared/appshell/core.888778
+```
+
+`check-worktree-unchanged.sh` caught them, which is the behaviour worth keeping.
+Ignoring the pattern would make a future crash silent, and the whole point of
+this document is that silence is the expensive failure mode.
+
+### Two flaky timing tests already inside the gate
+
+Found by running the gate on a machine that was also compiling something else.
+`tests/parallel.bats` and `tests/check-provider-version.bats` both prove bounded
+concurrency by wall clock: three items at concurrency two, one second each, so
+unbounded finishes near 1s, bounded near 2s and serial near 3s. Those landmarks
+are one second apart, which means a busy host fails the test for being busy
+rather than for being wrong. This is section 2's "timeouts assume fast hardware"
+living inside the safety net itself.
+
+Both now sleep two seconds per item, moving the landmarks to 2s, 4s and 6s, and
+assert `4 <= elapsed < 6`. Two seconds of headroom on each side instead of half
+a second. Verified by running the same helper at concurrency 3 (2s, correctly
+below the band) and concurrency 1 (6s, correctly at the top of it).
+
+The assertion was also wrong in a quieter way. It read:
+
+```bash
+[[ "${output}" =~ elapsed=1|elapsed=2 ]]
+```
+
+That regex is unanchored, so `elapsed=10` and `elapsed=20` matched it too --
+a serial run slow enough would have passed. Both now compare integers.
+
+### A test that hangs depending on what stdin is
+
+`make test-ci` stopped dead for twelve minutes on
+`tests/audit-shell-scripts.bats`, test 11. The blocked process was:
+
+```text
+rg -l shell_cli_handle_standard_flag -g *.sh
+```
+
+There is no path argument. `rg` then decides what to search from stdin: a TTY
+or `/dev/null` makes it walk the current directory, but an **open pipe makes it
+read stdin**, and it waits there forever. bats gives each test a pipe, so the
+suite could hang on this line at any time.
+
+The first guess -- that it silently searched nothing and passed vacuously --
+was wrong, and worth recording because it is the more attractive story. Checked
+rather than assumed:
+
+```text
+$ rg -l 'shell_cli_handle_standard_flag' -g '*.sh' < /dev/null | wc -l
+76
+```
+
+So CI is unaffected: a workflow step's stdin is `/dev/null`, which makes `rg`
+behave correctly. That is precisely what keeps this invisible. The failure only
+appears when someone pipes into `make test-ci`, and then it presents as a hang
+rather than a failure -- no output, no timeout, nothing to attribute it to.
+
+The fix is one character: pass `.` so `rg` never consults stdin. Verified by
+running the fixed form with a deliberately blocking pipe on stdin, where it now
+returns all 76 matches immediately.
+
+`tests/platform-workflow-ui.bats`, still in the backlog, also hangs rather than
+fails. Worth checking it for this same shape before assuming it is a different
+bug.
+
+## 17. Handoff
+
+State as at 2026-08-15, end of the CI gate burn-down.
+
+### Where the gate stands
+
+`make test-ci` is **620 passing, 0 failing**, up from 396 when this started.
+`make lint` is clean and now includes `lint-python`. The section 15 backlog is
+**37 -> 8**.
+
+### The eight files still outside the gate
+
+Six are untriaged because they drive `docker build`/`run`/compose:
+`backstage-compose`, `backstage-portal`, `devcontainer-makefile`,
+`smoke-sentiment-api-image`, `validate-app-runtime-surfaces`,
+`validate-docker-optimization-contracts`.
+
+**Run these one at a time and watch them.** `reset-local-state.bats` turned out
+to be deleting the operator's real `~/.cache/uv`, and that was a file with no
+docker in it at all. The risk here is higher, not lower.
+
+The other two need more than an assertion fix:
+
+- **`grafana-dashboard-quality`** (2/4) asserts that live Prometheus queries
+  return series. It cannot be hermetic in its present shape. It needs either a
+  recorded fixture or a decision that it is a cluster test rather than a gate
+  test. That is a judgement about what the gate is for, not a bug.
+- **`platform-workflow-ui`** (2/11) *hangs* rather than fails; `bats` produces
+  all 11 results and then never exits, so a 120s timeout kills it at `rc=124`.
+  It starts an HTTP server per test and something is not being reaped at
+  teardown. Checked against the `rg`/stdin hang in section 16 -- **not** the same
+  cause. A hanging test in a gate is worse than a red one, so fix the teardown
+  before listing it.
+
+### Open decisions, not open bugs
+
+- **`image_catalog_target_ref_contract` only validates lima.** Extending it to
+  kind fails because `kubernetes/kind/targets/kind.tfvars` has no
+  `external_workload_image_refs` map. Real coverage gap; closing it means
+  changing target tfvars, which needs an owner.
+- **`biome` has no config and no repo-level pin.** It runs on defaults, so its
+  rule set moves with the version. CI pins `2.5.8` and n-dotfiles tracks
+  `latest`, which will diverge. A `biome.json` would settle it.
+- **`ruff.toml` excludes `FURB` and `RUF`** as 15 purely cosmetic findings.
+  Revisit if you want them.
+
+### Gotchas worth not rediscovering
+
+- **`rg` with no path argument reads stdin when stdin is a pipe.** It hung the
+  suite for twelve minutes. Always pass a path. CI hides this because a workflow
+  step's stdin is `/dev/null`.
+- **Setting `HOME` does not sandbox a test.** It sandboxes only the tools that
+  read `HOME`, and which those are is not knowable from the test. `uv cache dir`
+  ignores it.
+- **A fixture git repo inherits global config**, including `commit.gpgsign`.
+  Pin it off, as `git-hooks.bats` already did.
+- **Wall-clock concurrency assertions need landmarks further apart than the
+  noise.** One second is not enough on a machine doing anything else.
+- **`biome` 2.5.8 left three 50MB `core.*` files** and has not reproduced since.
+  `core.*` is deliberately not gitignored so `check-worktree-unchanged.sh` keeps
+  catching it.
+
+### The pattern this whole effort found
+
+Stated once, because it recurred in every section: **a check that cannot run
+reports nothing, and reporting nothing is indistinguishable from passing.**
+
+It appeared as a test outside the gate, a tool installed nowhere, an allowlist
+nobody could see rotting, an assertion that could never match, a scanner blind
+to dotfiles, and a workflow that was never triggered. In every case the fix was
+cheap and the finding was only expensive because nothing said it was there.
+
+### Correction 2026-08-15: the first CI run on the new gate went red
+
+PR #200's first run failed, and the finding is the best possible advertisement
+for the exercise: `make lint` passed -- ruff, biome and deno all installed
+cleanly -- and two tests in `tests/reset-local-state.bats` failed on
+`ubuntu-latest` having passed on this host.
+
+```text
+# (in test file tests/reset-local-state.bats, line 68)
+#   `[[ "${output}" == *"${TEST_HOME}/Library/Caches/pip"* ]]' failed
+```
+
+`reset-local-state.sh` resolved each host cache by asking the tool **or**, only
+if the tool said nothing, checking the well-known locations. Those were
+alternatives rather than additions. `pip cache dir` returns `~/.cache/pip`, so
+on a host with pip the macOS-style `~/Library/Caches/pip` was never looked at at
+all. **Arch ships no pip and ubuntu-latest does**, so the test passed here and
+failed there.
+
+The tool lookup and the known locations are now additive; `append_unique_path`
+already deduped the overlap. Verified by stubbing a `pip` onto `PATH` to
+reproduce the runner's condition exactly -- the same two assertions failed at
+the same two lines -- and confirming the fix passes both with and without pip.
+
+The suite no longer depends on the answer. A new case stubs `pip`, creates both
+cache locations, and asserts **both** are collected, so the behaviour is pinned
+rather than inherited from whatever the host has installed. It fails on the
+pre-fix script.
+
+This is section 1's thesis reaching its own conclusion: the file had been in the
+backlog, was triaged as green on this workstation, joined the gate on that
+basis, and the very first run on different hardware found a real defect in the
+script it was testing. That is the gate working -- and it is also a reminder
+that "passes locally" was never evidence of anything.
+
+## 18. Verifying On Ubuntu Locally, And What Slicer Leaves Behind
+
+The pip bug in section 17 cost a push, a CI round trip, and a red build to find
+something a local Ubuntu box would have shown in minutes. This host has Slicer
+(Firecracker microVMs), so that loop is avoidable. The workflow is recorded in
+the n-dotfiles project memory `slicer-verification-workflow`, which is why it
+did not surface here -- **memories are per-project, and this is a different
+project**. Worth knowing before re-deriving it a third time.
+
+### The shape of it
+
+```bash
+sudo -E slicer up ~/sandbox.yaml          # operator runs this; the daemon needs root
+slicer workspace --rm --hostgroup sandbox --tag purpose=platform-gate
+slicer wt push sandbox-1 <dir>            # carries uncommitted working-tree changes
+slicer vm exec sandbox-1 -- bash -lc '...'
+```
+
+Client commands need no sudo -- `nick` is in the `slicer` group and can read
+`/var/lib/slicer/auth/token`. Only the daemon needs root.
+
+The base image is **Ubuntu 22.04.5 with `/bin/sh -> dash`**, which is precisely
+the condition behind the section 13 `pipefail` failure. That class is now
+reproducible without pushing.
+
+It is *not* automatically a stand-in for `ubuntu-latest`. The image ships **no
+pip at all**, so it would not have reproduced the section 17 failure by default;
+`python3-pip` has to be installed deliberately to match the runner. A VM that
+differs from CI in a *different* direction just relocates the blind spot.
+
+### Do not run slicer from inside the repository
+
+This is the part worth remembering. The daemon runs as root and writes into the
+directory the command was invoked from. Running `slicer workspace` with the repo
+as the working directory left three root-owned artifacts in the repo root:
+
+| Artifact | Mode | What it is |
+| --- | --- | --- |
+| `.slicer/` | `drwx------ root` | daemon state |
+| `sandbox-1.img` | `-rw------- root` | the live VM disk, 25GiB apparent, ~900MB sparse |
+| `vm_agent_secret` | `-rw------- root` | the VM agent's auth token |
+
+Each one broke something different, and the failures were not obviously related
+to each other:
+
+- `.slicer/` made `slicer wt push` fail with `permission denied`, because the
+  overlay walks the **filesystem** rather than git -- so adding it to
+  `.gitignore` did not help. The push only worked after staging a clean copy of
+  the tree outside the repo.
+- `sandbox-1.img` broke `git add -A` outright: `unable to index file`. Not a
+  warning, a hard failure. `git status` could not walk `.slicer/` either.
+- `vm_agent_secret` is a **credential**. Mode 600 and root-owned is the only
+  reason `git add -A` did not stage it. That is luck, not design.
+
+All three are now in `.gitignore`, which keeps the working tree usable if it
+happens again. **The actual fix is to invoke slicer from outside the repo.**
+
+The disk image must not be deleted while the VM is running -- it *is* the VM.
+Clean up in order: `slicer vm delete sandbox-1`, then remove the artifacts as
+root.
+
+### What the VM found once it was made faithful
+
+The first full run in the microVM reported 13 failures against CI's 2. Rather
+than assume they were noise, each was checked against the CI log for the same
+run: **all 13 were `ok` on the runner**. That comparison is the whole method —
+a difference between the VM and CI is a question, not a verdict.
+
+Closing them took four environment additions and turned up three real defects:
+
+| Cause | Tests | Verdict |
+| --- | --- | --- |
+| No Go | 8 | VM gap; runners preinstall it |
+| ripgrep 13.0.0 without PCRE2 | 1 | VM gap; 22.04 ships an older build than 24.04 |
+| No helm | 1 | VM gap; runners preinstall it |
+| `cp -R` fallback with no exclusions | 1 | **real bug** |
+| `ubuntu` contains `bun` | 1 | **real bug** |
+| mawk instead of gawk | 2 | **real latent bug** |
+
+Final state: **621/621, exit 0**, on both Arch and Ubuntu.
+
+#### The fallback that copied everything
+
+`copy_app_repo_source_dir` in `sync-gitea-app-repo.sh` excluded `.git`,
+`node_modules`, `.venv`, `__pycache__`, `.run`, `.pytest_cache` and
+`.ruff_cache` -- but only in its `rsync` branch. The `else` branch was a bare
+`cp -R` with **no exclusion mechanism at all**, so on a host without rsync the
+projected Gitea app repo receives build output and dependency trees wholesale.
+
+Arch, macOS and `ubuntu-latest` all ship rsync, so that branch had never once
+executed. `tests/validate-gitea-app-repo-sync.bats` asserts exactly this and
+would have caught it immediately -- given a host that takes the branch.
+
+Both paths now share a single `APP_REPO_SOURCE_EXCLUDES` list, with the fallback
+using `tar --exclude`. Verified twice: standalone with the exclusions applied to
+a fixture tree, and in the rsync-less VM where the test now passes.
+
+#### `ubuntu` contains `bun`
+
+`tests/subnetcalc-makefile.bats` asserted `[[ "${output}" != *"bun"* ]]` on the
+output of `make -C`, which prints `Entering directory '<abspath>'`. The absolute
+path is the operator's, so the test was quietly asserting something about their
+home directory -- and `/home/ubuntu` contains `bun`.
+
+Fourth instance of section 1's Entering-directory bug, after the `$HOME` case,
+the JSON-parse case, and `apps` containing `ps`. The pattern is now unmistakable:
+**a substring assertion over `make -C` output is an assertion about the
+filesystem path it happens to run from.** `--no-print-directory` is the fix
+every time.
+
+#### The render that needs gawk and does not say so
+
+`render_prometheus_application_manifest` uses `awk`. Under **mawk** it emits
+`alertmanager: enabled: false` when `ENABLE_ALERTMANAGER=true` was requested --
+wrong output, exit status 0, no warning of any kind.
+
+Stock Ubuntu ships mawk. Arch ships gawk, and the GitHub runner images install
+gawk, so both environments this platform is normally exercised in hide it.
+
+**Not fixed here, deliberately.** gawk was installed in the VM to match CI
+rather than rewriting the awk program, because the choice is a real one: either
+make the script mawk-safe, or declare gawk a prerequisite and check for it the
+way `require` already does for `curl`, `jq` and `perl`. This repo already runs a
+macOS CI job specifically because awk implementations differ, so it has the
+appetite for the former -- but it should be decided, not slipped in beside a
+green-up.
+
+A silently wrong render is worse than a failed one. Whichever way it goes, it
+wants a guard rather than a comment.

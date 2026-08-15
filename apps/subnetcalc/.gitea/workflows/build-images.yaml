@@ -1,4 +1,4 @@
-name: Build subnet-calculator images
+name: Build subnetcalc images
 
 on:
   push:
@@ -12,7 +12,7 @@ on:
 
 env:
   DOCKER_HOST: unix:///var/run/docker.sock
-  WORKDIR: /tmp/subnet-calculator
+  WORKDIR: /tmp/subnetcalc
   APP_REPO_NAME: subnetcalc
 
 jobs:

@@ -342,7 +342,14 @@ EOF
     if ! rg -q 'shell_cli_init_standard_flags|shell_cli_parse_standard_only|shell_cli_handle_standard_no_args' "${file}"; then
       offenders+=("${file}")
     fi
-  done < <(cd "${REPO_ROOT}" && rg -l 'shell_cli_handle_standard_flag' -g '*.sh')
+  # The trailing "." matters. Without a path argument rg decides what to search
+  # from stdin: a TTY or /dev/null makes it walk the current directory, but an
+  # open pipe makes it read stdin instead and block forever. bats gives each
+  # test a pipe, so `make test-ci` could hang here indefinitely -- observed on
+  # 2026-08-15, stuck 12 minutes on this one test with rg waiting on input.
+  # CI is unaffected because a workflow step's stdin is /dev/null, which is
+  # exactly what makes the failure look like it does not exist.
+  done < <(cd "${REPO_ROOT}" && rg -l 'shell_cli_handle_standard_flag' -g '*.sh' .)
 
   [ "${#offenders[@]}" -eq 0 ]
 }

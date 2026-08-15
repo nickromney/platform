@@ -56,13 +56,26 @@ setup() {
 @test "idp-core linux build follows the target host architecture by default" {
   makefile="${REPO_ROOT}/apps/idp-core/app/Makefile"
 
-  [ -f "${makefile}" ]
-  run rg -n 'IDP_GOARCH \?= \$\(shell uname -m \| sed .*x86_64/amd64.*aarch64/arm64|GOOS=linux GOARCH=\$\$\{GOARCH:-\$\(IDP_GOARCH\)\}' "${makefile}"
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"IDP_GOARCH ?="* ]]
-  [[ "${output}" == *'GOARCH=$${GOARCH:-$(IDP_GOARCH)}'* ]]
+  # #126 moved the build line into mk/go-app-core.mk, so the arch default now
+  # spans two files: the app Makefile derives IDP_GOARCH from uname and hands it
+  # over as GO_APP_GOARCH, and the shared include consumes it. This asserted the
+  # old single-file inline form and has been red since that refactor.
+  core_makefile="${REPO_ROOT}/mk/go-app-core.mk"
 
-  run rg -n 'GOOS=linux GOARCH=amd64' "${makefile}"
+  [ -f "${makefile}" ]
+  [ -f "${core_makefile}" ]
+
+  run rg -n 'IDP_GOARCH \?= \$\(shell uname -m \| sed .*x86_64/amd64.*aarch64/arm64' "${makefile}"
+  [ "${status}" -eq 0 ]
+
+  run rg -n 'GO_APP_GOARCH := \$\(IDP_GOARCH\)' "${makefile}"
+  [ "${status}" -eq 0 ]
+
+  run rg -n 'GOOS=linux GOARCH=\$\$\{GOARCH:-\$\(GO_APP_GOARCH\)\}' "${core_makefile}"
+  [ "${status}" -eq 0 ]
+
+  # Neither file may pin the architecture, which is what the default exists for.
+  run rg -n 'GOOS=linux GOARCH=amd64' "${makefile}" "${core_makefile}"
   [ "${status}" -ne 0 ]
 }
 

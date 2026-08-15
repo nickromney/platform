@@ -8,7 +8,6 @@ ignore: |
   **/.venv/
   **/.terraform/
   .playwright-mcp/*.yml
-  apps/subnet-calculator/apim-simulator/
   apps/backstage/catalog/templates/platform-service/content/kubernetes/routing/httproutes.yaml
   kubernetes/kind/tests/fixtures/policy-render/
   terraform/kubernetes/apps/nginx-gateway-fabric-crds/*.yaml

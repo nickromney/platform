@@ -6,10 +6,16 @@ setup() {
 }
 
 @test "subnetcalc app tree contains only the canonical Go app surface" {
-  run bash -lc "cd '${REPO_ROOT}' && for path in apps/subnetcalc/* apps/subnetcalc/.[!.]*; do [ -e \"\${path}\" ] && basename \"\${path}\"; done | sort"
+  # LC_ALL=C for the same reason as sentiment-go-only.bats: the expected list is
+  # in C collation, and a working en_GB.UTF-8 locale sorts it differently.
+  #
+  # `edge` and `update-subnetcalc-image-tags.sh` are part of the canonical
+  # surface, not drift -- sentiment carries the same pair. They arrived in #111
+  # and #113 and were never added here, because this file has never run in CI.
+  run bash -lc "cd '${REPO_ROOT}' && ls -A apps/subnetcalc | LC_ALL=C sort"
 
   [ "${status}" -eq 0 ]
-  expected=$'.dockerignore\n.gitea\n.gitignore\nMakefile\nREADME.md\napp\ncatalog-info.yaml\ncompose.yml\nmkdocs.yml\ntests'
+  expected=$'.dockerignore\n.gitea\n.gitignore\nMakefile\nREADME.md\napp\ncatalog-info.yaml\ncompose.yml\nedge\nmkdocs.yml\ntests\nupdate-subnetcalc-image-tags.sh'
   [ "${output}" = "${expected}" ]
 }
 
