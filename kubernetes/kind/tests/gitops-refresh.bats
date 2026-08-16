@@ -37,7 +37,19 @@ setup() {
 }
 
 @test "gitops refresh allows Lima-length Argo comparison settling" {
-  run grep -Fn 'end=$((SECONDS + 300))' "${GITOPS_FILE}"
+  # Asserts the intent, not a literal. This read `end=$((SECONDS + 300))` until
+  # the wait was refactored behind local.platform_wait_seconds so
+  # PLATFORM_TIMEOUT_SCALE could stretch it for slow hosts. The literal vanished,
+  # the assertion kept looking for it, and the file sits outside CI_BATS_TESTS so
+  # nothing reported it -- the same shape as the kind dry-run assertion in
+  # section 19.3 of docs/plans/omarchy-portability-followups.md.
+  run grep -Fn 'end=$((SECONDS + ${local.platform_wait_seconds.rollout_default}))' "${GITOPS_FILE}"
+
+  [ "${status}" -eq 0 ]
+
+  # And that the scaled default is still the Lima-length 300s at scale 1.
+  run grep -En 'rollout_default[[:space:]]*=[[:space:]]*ceil\(300 \* var\.platform_timeout_scale\)' \
+    "${REPO_ROOT}/terraform/kubernetes/locals.tf"
 
   [ "${status}" -eq 0 ]
 }

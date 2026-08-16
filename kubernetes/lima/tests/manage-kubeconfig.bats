@@ -116,8 +116,8 @@ contexts:
 - context:
     cluster: default
     user: default
-  name: lima-k3s
-current-context: lima-k3s
+  name: limavm-k3s
+current-context: limavm-k3s
 users:
 - name: default
   user:
@@ -143,12 +143,12 @@ users:
     token: prod
 YAML
 
-  run "${HELPER}" merge "${source_kubeconfig}" "${target_kubeconfig}" "lima-k3s"
+  run "${HELPER}" merge "${source_kubeconfig}" "${target_kubeconfig}" "limavm-k3s"
 
   [ "${status}" -eq 0 ]
   run env KUBECONFIG="${target_kubeconfig}" kubectl config view --raw -o jsonpath='{range .contexts[*]}{.name}{"\t"}{.context.cluster}{"\t"}{.context.user}{"\n"}{end}'
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *$'lima-k3s\tlima-k3s-cluster\tlima-k3s-user'* ]]
+  [[ "${output}" == *$'limavm-k3s\tlimavm-k3s-cluster\tlimavm-k3s-user'* ]]
   [[ "${output}" == *$'prod\tprod\tprod'* ]]
 }
 

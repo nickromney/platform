@@ -49,14 +49,58 @@ HOST_PORTABLE_BATS_TESTS := \
 	tests/update-versions.bats
 
 CI_BATS_TESTS := \
+	kubernetes/kind/tests/app-boundary-labels.bats \
+	kubernetes/kind/tests/app-image-readiness.bats \
+	kubernetes/kind/tests/app-repo-sync.bats \
+	kubernetes/kind/tests/apply-progress.bats \
+	kubernetes/kind/tests/check-docker-registry-auth.bats \
+	kubernetes/kind/tests/check-gateway-urls.bats \
+	kubernetes/kind/tests/check-memory-preflight.bats \
 	kubernetes/kind/tests/check-policy-drift.bats \
+	kubernetes/kind/tests/check-provider-version.bats \
+	kubernetes/kind/tests/check-security.bats \
+	kubernetes/kind/tests/check-version.bats \
+	kubernetes/kind/tests/cilium-fqdn-policies.bats \
+	kubernetes/kind/tests/cilium-module-renderers.bats \
+	kubernetes/kind/tests/delete-kind-cluster.bats \
 	kubernetes/kind/tests/dependency-audit.bats \
+	kubernetes/kind/tests/dhi-creds-offline.bats \
+	kubernetes/kind/tests/docker-credential-platform-file.bats \
+	kubernetes/kind/tests/ensure-kind-kubeconfig.bats \
 	kubernetes/kind/tests/ensure-node-host-alias.bats \
+	kubernetes/kind/tests/gitea-runner-token.bats \
+	kubernetes/kind/tests/gitops-refresh.bats \
+	kubernetes/kind/tests/hubble-audit-cilium-policies.bats \
+	kubernetes/kind/tests/hubble-capture-flows.bats \
+	kubernetes/kind/tests/hubble-generate-cilium-policy.bats \
+	kubernetes/kind/tests/hubble-observe-cilium-policies.bats \
+	kubernetes/kind/tests/hubble-tooling.bats \
 	kubernetes/kind/tests/install-host-alias-timer.bats \
 	kubernetes/kind/tests/makefile.bats \
+	kubernetes/kind/tests/oidc-recovery-harness.bats \
+	kubernetes/kind/tests/platform-gateway-tls.bats \
+	kubernetes/kind/tests/preload-images.bats \
+	kubernetes/kind/tests/reconcile-keycloak-realm.bats \
+	kubernetes/kind/tests/refresh-kind-kubeconfig.bats \
+	kubernetes/kind/tests/render-cilium-policy-values.bats \
+	kubernetes/kind/tests/render-kind-apiserver-oidc-manifest.bats \
+	kubernetes/kind/tests/render-operator-overrides.bats \
+	kubernetes/kind/tests/reset-kubeconfig-context.bats \
+	kubernetes/kind/tests/review-environment-dispatch.bats \
+	kubernetes/kind/tests/rewrite-devcontainer-kubeconfig.bats \
+	kubernetes/kind/tests/show-policy-composition.bats \
+	kubernetes/kind/tests/snapshot-tfstate.bats \
+	kubernetes/kind/tests/sso-oidc-health.bats \
 	kubernetes/kind/tests/stage-tfvars-no-duplicate-attributes.bats \
+	kubernetes/kind/tests/stop-platform-runtimes.bats \
 	kubernetes/kind/tests/sync-gitea-policies.bats \
+	kubernetes/kind/tests/sync-gitea.bats \
+	kubernetes/lima/tests/check-kind-stopped.bats \
+	kubernetes/lima/tests/configure-k3s-apiserver-oidc.bats \
+	kubernetes/lima/tests/exercise-k3s-oidc-recovery.bats \
 	kubernetes/lima/tests/makefile.bats \
+	kubernetes/lima/tests/manage-kubeconfig.bats \
+	kubernetes/lima/tests/ssh-agent.bats \
 	tests/apim-simulator-makefile.bats \
 	tests/app-healthcheck-commands.bats \
 	tests/app-layout-consistency.bats \

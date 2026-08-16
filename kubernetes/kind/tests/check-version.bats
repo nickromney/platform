@@ -107,6 +107,16 @@ EOF
     skip "kind is required"
   fi
 
+  # Same guard the two tests above already carry. macOS ships no coreutils
+  # `timeout`, so without this the test does not fail on its subject -- it fails
+  # on `env: timeout: No such file or directory` and reports a status mismatch,
+  # which reads as a check-version bug. kubernetes/scripts/k3s-bootstrap-lib.sh
+  # has the portable timeout/gtimeout wrapper if this ever needs to run rather
+  # than skip.
+  if ! command -v timeout >/dev/null 2>&1; then
+    skip "timeout is required"
+  fi
+
   run env KUBECONFIG="${KIND_KUBECONFIG}" timeout 300 "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]

@@ -1615,7 +1615,12 @@ EOF
     --output-dir "${output_dir}"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"observing namespace observability (1/1)"* ]]
+  # Matched by shape, not prose. This asserted "observing namespace observability
+  # (1/1)" until the emitter was reworded to "<ns>: capture iteration i/n"; the
+  # literal went stale and this file sits outside CI_BATS_TESTS, so nothing said
+  # so. What matters is that a per-iteration line names the namespace and the
+  # iteration counter.
+  [[ "${output}" =~ observability:\ capture\ iteration\ 1/1 ]]
   [[ "${output}" =~ capture\ observability\ iteration\ 1/1:\ still\ running\ after\ [12]s ]]
 }
 
@@ -1684,7 +1689,8 @@ EOF
     --output-dir "${output_dir}"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"observing namespace observability"* ]]
+  # Same reword as above; assert the namespace is named in a capture line.
+  [[ "${output}" =~ observability:\ capture\ iteration\ [0-9]+/2 ]]
   [[ "${output}" == *"observability: ingress raw=0 usable=0 candidate=omitted, egress raw=0 usable=0 candidate=omitted"* ]]
   [[ "${output}" == *"no candidate policies generated across 1 namespace(s); widen --since, increase --iterations, or narrow --namespace"* ]]
   [[ "${output}" != *"hubble-summarise-flows.sh: no matching flows"* ]]
