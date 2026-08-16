@@ -379,7 +379,18 @@ EOF
   [[ "${output}" != *"tests/platform-workflow-ui.bats"* ]]
   [[ "${output}" != *"tests/smoke-sentiment-api-image.bats"* ]]
 
-  run bash -c 'tr " " "\n" <"$1" | LC_ALL=C sort -c' bash "${log_file}"
+  # CI_BATS_TESTS is kept alphabetically sorted and must be passed in that order.
+  # Checked per bats invocation rather than across the whole log: run-bats-suite.sh
+  # splits the run into a parallel batch and a serial batch for the files that
+  # mutate shared repo state, so the concatenation of two sorted lists is not
+  # itself sorted. Non-.bats tokens are dropped because the parallel call also
+  # carries `--jobs N`.
+  run bash -c '
+    while IFS= read -r line; do
+      [ -n "${line}" ] || continue
+      printf "%s\n" "${line}" | tr " " "\n" | grep "\.bats$" | LC_ALL=C sort -c || exit 1
+    done <"$1"
+  ' bash "${log_file}"
 
   [ "${status}" -eq 0 ]
 }

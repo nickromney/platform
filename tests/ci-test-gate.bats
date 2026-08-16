@@ -57,8 +57,13 @@ setup() {
 #                               rather than on its subject. Two sibling tests in
 #                               the same file already carried that skip guard.
 #
-# All 44 are now in CI_BATS_TESTS. Only the three below remain, and only because
-# they invoke docker build/run/compose and were not run unsupervised.
+# 2026-08-16, later: the last three are in too. They were held back as
+# "docker build/run/compose", but that classification came from grepping for the
+# word rather than from reading them: docker-safe-clean and docker-prune-estimate
+# stub docker entirely and only assert on the commands they would print, and
+# aks-ai-foundry-experiment gates its two live tests behind
+# KIND_AKS_AI_FOUNDRY_LIVE=1, so they skip by default. All three run in about a
+# second. The kubernetes/*/tests backlog is now empty.
 CI_GATE_BACKLOG="tests/backstage-compose.bats
 tests/backstage-portal.bats
 tests/devcontainer-makefile.bats
@@ -66,10 +71,7 @@ tests/grafana-dashboard-quality.bats
 tests/platform-workflow-ui.bats
 tests/smoke-sentiment-api-image.bats
 tests/validate-app-runtime-surfaces.bats
-tests/validate-docker-optimization-contracts.bats
-kubernetes/kind/tests/aks-ai-foundry-experiment.bats
-kubernetes/kind/tests/docker-prune-estimate.bats
-kubernetes/kind/tests/docker-safe-clean.bats"
+tests/validate-docker-optimization-contracts.bats"
 
 # Measured 2026-08-15, each file run in isolation. fail/total:
 #

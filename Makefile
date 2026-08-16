@@ -35,21 +35,27 @@ WORKFLOW_UI_HTTP ?= h2
 CI_UV_CACHE_DIR ?= $(CURDIR)/.run/uv-cache
 CHECK_WORKTREE_UNCHANGED ?= scripts/check-worktree-unchanged.sh
 RUN_BATS_SUITE ?= scripts/run-bats-suite.sh
-# Serial by default, and that is a measured decision rather than caution.
-# BATS_JOBS=auto takes the suite from 715s to ~170s on a 10-core box -- but it
-# also turns the gate flaky. Six files failed under --jobs that pass serially,
-# and not the same six each run: four mutate state shared with the real repo
-# (a Terraform lock, a real git tag, make invoked against the working tree) and
-# are handled by the serial list in run-bats-suite.sh, while others are timing
-# assertions that only fail when the box is loaded -- a retry-on-timeout test
-# and a bounded-concurrency test. A 4x faster gate that reports different
-# failures on each run is worth less than a slow one that does not.
+# Serial by default, on the evidence rather than by preference.
 #
-# The push problem this was meant to solve is fixed in the pre-push hook
-# instead, which now runs lint plus the host-portable subset in ~77s.
+# Three defects were fixed to make parallel viable: a concurrency test asserting
+# a wall-clock band while writing to a fixed /tmp path, a retry test with ~1s of
+# margin between a 1s timeout and a 2s sleep, and a sort assertion of ours that
+# did not expect the run to be split into two batches. Five files that mutate
+# state shared with the real repo run in a serial phase in run-bats-suite.sh.
 #
-# Opt in with `make test-ci BATS_JOBS=auto` when you want the speed and can
-# tolerate re-running a flake. Fixing the load-sensitive files is the real job.
+# That got it from "six failures, never the same six" to 5 clean runs out of 6.
+# The sixth failed two tests in tests/apps-makefile.bats -- a file already in the
+# serial phase, which passes alone, and which does not fail when run beside
+# either its serial neighbours or the three files added just before it. So the
+# residual is load-related and not yet understood.
+#
+# One flake in six is why this stays off. The whole argument for the serial phase
+# was that a gate reporting different failures each run is worth less than a slow
+# one that does not; defaulting to auto on 5/6 would contradict it.
+#
+# Opt in with `make test-ci BATS_JOBS=auto` -- roughly 180-420s against 715s
+# serial, varying with what else is on the box. Diagnosing the apps-makefile
+# residual is what would let this flip.
 BATS_JOBS ?= off
 CI_WORKTREE_SNAPSHOT ?= $(CURDIR)/.run/worktree-status
 # Tests that depend only on the host toolchain: no cluster, no Docker, no
@@ -67,6 +73,7 @@ HOST_PORTABLE_BATS_TESTS := \
 	tests/update-versions.bats
 
 CI_BATS_TESTS := \
+	kubernetes/kind/tests/aks-ai-foundry-experiment.bats \
 	kubernetes/kind/tests/app-boundary-labels.bats \
 	kubernetes/kind/tests/app-image-readiness.bats \
 	kubernetes/kind/tests/app-repo-sync.bats \
@@ -84,6 +91,8 @@ CI_BATS_TESTS := \
 	kubernetes/kind/tests/dependency-audit.bats \
 	kubernetes/kind/tests/dhi-creds-offline.bats \
 	kubernetes/kind/tests/docker-credential-platform-file.bats \
+	kubernetes/kind/tests/docker-prune-estimate.bats \
+	kubernetes/kind/tests/docker-safe-clean.bats \
 	kubernetes/kind/tests/ensure-kind-kubeconfig.bats \
 	kubernetes/kind/tests/ensure-node-host-alias.bats \
 	kubernetes/kind/tests/gitea-runner-token.bats \

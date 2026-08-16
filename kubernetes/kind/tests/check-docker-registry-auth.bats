@@ -142,7 +142,12 @@ state_file="${FAKE_HELPER_STATE_FILE:?}"
 if [[ "${1:-}" == "list" ]]; then
   if [[ ! -f "${state_file}" ]]; then
     printf 'called\n' >"${state_file}"
-    sleep 2
+    # Far beyond the timeout, deliberately. The first call only has to exceed it;
+    # the retry has to come in under it, and the retry does no work at all. With
+    # a 1s timeout against a 2s sleep those two margins were about a second
+    # apart, so a machine busy enough to delay process startup failed the retry
+    # and the test reported a credential bug that was not there.
+    sleep 30
   fi
   printf '%s\n' '{"https://dhi.io":"user"}'
   exit 0
@@ -151,7 +156,7 @@ exit 1
 EOF
   chmod +x "${TEST_BIN}/docker-credential-desktop"
 
-  run env DOCKER_CONFIG_PATH="${config_file}" DOCKER_CREDENTIAL_HELPER_TIMEOUT_SECONDS=1 FAKE_HELPER_STATE_FILE="${state_file}" \
+  run env DOCKER_CONFIG_PATH="${config_file}" DOCKER_CREDENTIAL_HELPER_TIMEOUT_SECONDS=3 FAKE_HELPER_STATE_FILE="${state_file}" \
     "${SCRIPT}" --execute dhi.io "Docker Hardened Images (dhi.io)"
 
   [ "${status}" -eq 0 ]

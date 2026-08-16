@@ -128,7 +128,36 @@ parallel remains the only implementation verified against this suite.
 
 - [x] Add `scripts/run-bats-suite.sh` with a guard against the zero-tests trap
 - [x] Cut `pre-push` to lint + host-portable subset: **~77s**
-- [ ] Fix the six load-sensitive test files, then flip `BATS_JOBS` back to `auto`
+- [x] Triage the last three docker-touching tests -- **all three now in the gate**
+- [x] Fix the load-sensitive test files (three distinct defects, not six)
+- [ ] Diagnose the residual `apps-makefile` flake, then flip `BATS_JOBS` to `auto`
+
+**Three defects, fixed:**
+
+| Test | Defect |
+| --- | --- |
+| `check-provider-version` | asserted a wall-clock band (>=4s, <6s) *and* wrote to a fixed `/tmp` path, so concurrent runs clobbered each other. Rewritten to measure concurrency directly -- the fake `curl` registers a marker for its lifetime and logs how many exist; asserts peak > 1 and <= 2. Verified it fails at `PLATFORM_PARALLEL_JOBS=1` and at `9`. |
+| `check-docker-registry-auth` | 1s timeout against a 2s sleep, about a second of margin. Now 3s against 30s. Scoped to the retry test; its sibling always times out and was never load-sensitive. |
+| `makefile.bats` | ours: asserts `CI_BATS_TESTS` is passed sorted, but the parallel/serial split emits two separately-sorted batches. Now checked per invocation, ignoring `--jobs` tokens. Verified it still catches an out-of-order entry. |
+
+**Still `off`, and this is the honest reason.** That took it from "six failures,
+never the same six" to **5 clean full runs out of 6**. The sixth failed two tests
+in `tests/apps-makefile.bats` -- already in the serial phase, passes alone, and
+does not fail beside either its serial neighbours or the three files added just
+before it. The residual is load-related and not yet understood. One flake in six
+is not a default; the argument for the serial phase was that a gate reporting
+different failures each run is worth less than a slow one that does not, and
+defaulting to `auto` on 5/6 would contradict it.
+
+**The docker three were never destructive.** They were held back as
+"docker build/run/compose", but that came from grepping for the word rather than
+reading them: `docker-safe-clean` and `docker-prune-estimate` write a `docker`
+stub into `${BATS_TEST_TMPDIR}/bin` and prepend it to `PATH`, so the real binary
+is never reached -- they assert on the commands they *would* print. The scripts
+under test would indeed destroy a cluster; the tests never call them for real.
+`aks-ai-foundry-experiment` gates its two live tests behind
+`KIND_AKS_AI_FOUNDRY_LIVE=1` and skips by default. All three run in ~1s. The
+`kubernetes/*/tests` backlog is now empty.
 
 **Parallelism is built but deliberately NOT the default.** `BATS_JOBS=auto` takes
 the suite from 715s to ~170s, a 4.2x win — and makes the gate flaky. Six files
