@@ -107,7 +107,25 @@ hook in item 5.
 
 - [x] Measure it: 715s serial, 1084 tests, docker down
 - [x] Confirm `test-ci` does not need Docker -- **no test in the gate references it**
-- [x] Add GNU parallel to the install hints (brew, pacman, apt; not mise/arkade)
+- [x] Add GNU parallel to the install hints (brew, pacman, apt; **not mise** -- see below)
+
+**Why not mise.** Asked directly, and probed rather than assumed. GNU parallel is
+not installable through mise by any route:
+
+| Probe | Result |
+| --- | --- |
+| `mise registry \| grep parallel` | no entry |
+| `mise plugins ls-remote \| grep -ix parallel` | no asdf plugin |
+| `mise ls-remote aqua:GNU/parallel` | no aqua-registry package |
+| `mise ls-remote github:gnu/parallel` | 404 -- GNU hosts releases on savannah, not GitHub |
+
+So brew/pacman/apt is the whole managed surface, which is what the hints now say.
+bats does support an alternative implementation via `--parallel-binary-name` /
+`BATS_PARALLEL_BINARY_NAME`, and `run-bats-suite.sh` now passes `PARALLEL_BIN`
+through to it -- previously that variable gated detection only, so pointing it at
+another binary passed the check and then left bats looking for `parallel`. GNU
+parallel remains the only implementation verified against this suite.
+
 - [x] Add `scripts/run-bats-suite.sh` with a guard against the zero-tests trap
 - [x] Cut `pre-push` to lint + host-portable subset: **~77s**
 - [ ] Fix the six load-sensitive test files, then flip `BATS_JOBS` back to `auto`

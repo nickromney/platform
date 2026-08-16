@@ -8,6 +8,13 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/lib/shell-cli.sh"
 
 BATS_BIN="${BATS_BIN:-bats}"
+# bats resolves the binary itself via BATS_PARALLEL_BINARY_NAME/--parallel-binary-name,
+# so pointing this at an alternative has to tell bats too -- otherwise the check
+# here passes and bats still goes looking for "parallel". GNU parallel is the only
+# implementation verified against this suite; the hook exists because GNU parallel
+# is not installable through mise (no registry entry, no asdf plugin, no aqua
+# package, and GNU hosts releases outside GitHub), so a host without brew/pacman/apt
+# has no managed route to it.
 PARALLEL_BIN="${PARALLEL_BIN:-parallel}"
 INSTALL_HINTS_SCRIPT="${INSTALL_HINTS_SCRIPT:-${REPO_ROOT}/scripts/install-tool-hints.sh}"
 JOBS="${BATS_JOBS:-auto}"
@@ -184,7 +191,11 @@ done
 rc=0
 if [[ "${#parallel_files[@]}" -gt 0 ]]; then
   echo "INFO running ${#parallel_files[@]} Bats file(s) across ${resolved_jobs} job(s)"
-  "${BATS_BIN}" --jobs "${resolved_jobs}" "${parallel_files[@]}" || rc=$?
+  bats_parallel_args=(--jobs "${resolved_jobs}")
+  if [[ "${PARALLEL_BIN}" != "parallel" ]]; then
+    bats_parallel_args+=(--parallel-binary-name "${PARALLEL_BIN}")
+  fi
+  "${BATS_BIN}" "${bats_parallel_args[@]}" "${parallel_files[@]}" || rc=$?
 fi
 
 if [[ "${#serial_files[@]}" -gt 0 ]]; then
