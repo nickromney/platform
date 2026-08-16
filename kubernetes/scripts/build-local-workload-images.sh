@@ -38,7 +38,9 @@ registry_require_tools
 registry_assert_reachable "${CACHE_PUSH_HOST}"
 image_signing_ensure_keypair
 
+# shellcheck disable=SC2034 # exported into the image build environment
 IMAGE_BUILD_REQUIRE_COMMIT_TAG=1
+# shellcheck disable=SC2034 # exported into the image build environment
 IMAGE_BUILD_COMMIT_TAG="$(git -C "${REPO_ROOT}" rev-parse --short=12 HEAD 2>/dev/null || true)"
 
 image_build_catalog_build_loop workload workload

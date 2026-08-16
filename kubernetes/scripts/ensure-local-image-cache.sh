@@ -19,6 +19,7 @@ cache_container_name="${CACHE_CONTAINER_NAME:-platform-local-image-cache}"
 cache_container_image="${CACHE_CONTAINER_IMAGE:-registry:2}"
 port="${cache_push_host##*:}"
 
+# shellcheck disable=SC2329 # invoked by name through the shell_cli_* helpers
 usage() {
   cat <<EOF
 Usage: ${0##*/} [--dry-run] [--execute]

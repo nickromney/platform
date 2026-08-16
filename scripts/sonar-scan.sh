@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC2034 # consumed by the sonar-project.properties rendering below
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # shellcheck source=/dev/null
@@ -89,6 +90,8 @@ sanitize_slug() {
 }
 
 expand_home_path() {
+  # shellcheck disable=SC2088 # the "~/" patterns are literal prefixes being
+  # matched, then expanded explicitly against ${HOME} in each branch.
   case "$1" in
     "~")
       printf '%s\n' "${HOME}"

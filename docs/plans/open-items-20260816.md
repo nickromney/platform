@@ -42,9 +42,29 @@ never invokes shellcheck. shellcheck runs only in the lefthook pre-commit hook,
 over staged files, so a script is checked once when first committed and never
 again.
 
-- [ ] Fix the 18 files that fail `shellcheck -x`
-- [ ] Add a real shellcheck target and wire it into `make lint`
-- [ ] Guard: assert `make lint` actually invokes shellcheck
+- [x] Fix the 18 files that fail `shellcheck -x` -- **0 of 207 now fail**
+- [x] Add a real shellcheck target and wire it into `make lint`
+- [x] Guard: assert `make lint` actually invokes shellcheck, and that the tree stays clean
+
+**Closed.** `make lint` 0, `make test-ci` 1084/1084.
+
+Fixed rather than suppressed wherever the finding was real:
+
+| Fix | Sites |
+| --- | --- |
+| Quote the pattern in `${x#${y}/}` so a glob char cannot silently skip the strip | 3 |
+| Split `export X="$(cmd)"` so the command's exit status is not masked | 2 |
+| Delete a genuinely dead assignment (`NAMESPACE_DIR`, written, never read) | 1 |
+| Hoist a prefix assignment whose `${STACK_DIR}` read the outer variable, not the prefix | 1 |
+
+The remainder are scoped disables that each state *why* -- functions invoked by
+name through the `shell_cli_*` helpers, variables produced by an `eval`'d
+`printf 'NAME=%q'` block, positional `read` columns, and values exported for a
+subprocess. Two directives had to move above their `case` rather than sit on a
+branch, which shellcheck rejects outright.
+
+`scripts/lint-shellcheck.sh` uses `-x` so it and the pre-commit hook cannot
+disagree about whether the tree is clean.
 
 ## 3. apim-simulator
 
@@ -74,3 +94,5 @@ picks this up on the Omarchy box.
 ## Log
 
 - 2026-08-16: tracker created.
+- 2026-08-16: items 1, 2 and 3 closed. Only item 4 (push) remains, and it needs
+  an operator decision rather than a change.

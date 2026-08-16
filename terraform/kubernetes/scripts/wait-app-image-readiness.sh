@@ -43,8 +43,10 @@ contract_bool() {
 load_app_image_readiness_contract() {
   APP_REPO_NAME="$(contract_value repo_name)"
   APP_DISPLAY_NAME="$(contract_value display_name)"
+  # shellcheck disable=SC2034 # part of the app fact block consumed by run-diagnostic-check.sh
   APP_WORKFLOW_ID="$(contract_value workflow_id)"
   APP_WORKFLOW_REF="$(contract_value workflow_ref)"
+  # shellcheck disable=SC2034 # part of the app fact block consumed by run-diagnostic-check.sh
   APP_FAILURE_CONSEQUENCE="$(contract_value failure_consequence)"
   APP_ENSURE_WORKFLOW_STARTED="$(contract_bool ensure_workflow_started false)"
 }
@@ -307,6 +309,7 @@ main() {
   SLEEP_SECONDS="${SLEEP_SECONDS:-5}"
   RUNNER_WAIT_SECONDS="${RUNNER_WAIT_SECONDS:-900}"
   ARGOCD_NAMESPACE="${ARGOCD_NAMESPACE:-argocd}"
+  # shellcheck disable=SC2034 # exported for the diagnostic summary emitted by the caller
   ACTIONS_RETRIGGERED_TAG=""
 
   wait_for_gitea

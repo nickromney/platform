@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/../../scripts/lib/shell-cli.sh"
 
+# shellcheck disable=SC2329 # invoked by name through the shell_cli_* helpers
 usage() {
   cat <<EOF
 Usage: ${0##*/} [--dry-run] [--execute]

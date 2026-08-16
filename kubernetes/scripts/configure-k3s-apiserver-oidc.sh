@@ -158,6 +158,7 @@ oidc_discovery_ready_from_vm() {
   lima_exec "$K3S_OIDC_NODE_NAME" sudo curl -fsS --max-time 5 --cacert "$MKCERT_CA_DEST" "${OIDC_ISSUER_URL}/.well-known/openid-configuration" >/dev/null
 }
 
+# shellcheck disable=SC2329 # invoked by name through the shell_cli_* helpers
 usage() {
   cat <<EOF
 Usage: ${0##*/} [--dry-run] [--execute]

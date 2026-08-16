@@ -483,3 +483,38 @@ EOF
 
   [ -z "${offenders}" ]
 }
+
+@test "make lint actually runs shellcheck, not only the conventions audit" {
+  # `lint-shell` calls audit-shell-scripts.sh, which checks entrypoint flags and
+  # the Python wrapper policy -- it has never invoked shellcheck. The only
+  # shellcheck run was the lefthook pre-commit hook, over staged files, so an
+  # untouched script was never rechecked and 18 of 207 had drifted red.
+  #
+  # Asserts both halves: the target exists and lint depends on it. Asserting only
+  # that the target exists would pass while nothing called it, which is the
+  # defect being guarded.
+  run grep -cE '^\s*@\$\(MAKE\) --no-print-directory lint-shellcheck$' "${REPO_ROOT}/Makefile"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" -ge 1 ]
+
+  run bash -lc "awk '/^lint-shellcheck:/{f=1;next} f&&/^\\t/{print;exit}' '${REPO_ROOT}/Makefile'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"LINT_SHELLCHECK_SCRIPT"* ]]
+
+  run bash -lc "grep -c 'shellcheck' '${REPO_ROOT}/scripts/lint-shellcheck.sh'"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" -ge 1 ]
+}
+
+@test "every tracked shell script passes shellcheck" {
+  # The ratchet. This went from 18 failing to 0 on 2026-08-16; asserting it here
+  # means a new script cannot quietly reintroduce the backlog, and it holds even
+  # for files nobody stages.
+  run make -C "${REPO_ROOT}" lint-shellcheck
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"OK   shellcheck"* ]]
+}
