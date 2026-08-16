@@ -75,7 +75,7 @@ class, with a worse consequence than either platform instance.
 - [x] Repair the spliced build-log lines -- **128 lines per doc, not 62 total**
 - [x] Pin `SHELL := /bin/bash` in the Makefile (latent #197 exposure)
 - [x] Port the backtick guard, plus a second guard on the symptom
-- [ ] The 9/35 shellcheck failures there -- left for its own pass
+- [x] The 9/35 shellcheck failures -- **0/36 now**, and `make lint` runs shellcheck there too
 
 **Closed** as commit `1cf8f26` on `fix/20260816-executing-docs`. The damage was
 larger than first measured: the whole `make up-otel` build log was substituted,
@@ -185,3 +185,15 @@ its own stubs, not Docker.
 - 2026-08-16: tracker created.
 - 2026-08-16: items 1, 2 and 3 closed. Only item 4 (push) remains, and it needs
   an operator decision rather than a change.
+- 2026-08-16 (late): items 4 and 5 closed too. Both branches pushed, PRs open
+  (platform #201, apim-simulator #28). The kubernetes gate backlog is empty,
+  both repos are shellcheck-clean and enforce it from `make lint`, and the
+  pre-push gate finishes in ~77s.
+
+  **One item remains, and it is a real unknown rather than unstarted work:**
+  `tests/apps-makefile.bats` failed two tests in one full parallel run out of
+  six. It is already in the serial phase, passes alone, and does not fail beside
+  either its serial neighbours or the three files added just before it. Until
+  that is understood, `BATS_JOBS` stays `off`. Everything needed to chase it is
+  recorded above: the serial list, the three fixed defects, and the fact that
+  the failure appeared only after `CI_BATS_TESTS` grew to 148 files.
