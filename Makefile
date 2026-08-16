@@ -49,8 +49,14 @@ HOST_PORTABLE_BATS_TESTS := \
 	tests/update-versions.bats
 
 CI_BATS_TESTS := \
+	kubernetes/kind/tests/check-policy-drift.bats \
+	kubernetes/kind/tests/dependency-audit.bats \
+	kubernetes/kind/tests/ensure-node-host-alias.bats \
+	kubernetes/kind/tests/install-host-alias-timer.bats \
+	kubernetes/kind/tests/makefile.bats \
 	kubernetes/kind/tests/stage-tfvars-no-duplicate-attributes.bats \
 	kubernetes/kind/tests/sync-gitea-policies.bats \
+	kubernetes/lima/tests/makefile.bats \
 	tests/apim-simulator-makefile.bats \
 	tests/app-healthcheck-commands.bats \
 	tests/app-layout-consistency.bats \

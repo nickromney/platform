@@ -48,7 +48,16 @@ EOF
   # every Makefile that includes them are Bash under test -- 5.x on Arch, 3.2 on
   # macOS. Scanning only *.sh meant a Bash 4-only recipe would pass every Linux
   # check and break on the Mac, which is the exact class this check exists for.
-  candidate="${BATS_TEST_TMPDIR}/Makefile"
+  #
+  # The path passed below is a DIRECTORY, and that is the whole point. An
+  # explicit *file* path bypasses the glob entirely -- append_scan_path appends
+  # it verbatim -- so a file-path version of this test passes against the old
+  # *.sh-only script too, and proves nothing. Only the directory walk exercises
+  # the name filter that this change widened. Verified by running both scripts
+  # against both forms.
+  scan_dir="${BATS_TEST_TMPDIR}/tree"
+  mkdir -p "${scan_dir}"
+  candidate="${scan_dir}/Makefile"
 
   cat >"${candidate}" <<'EOF'
 SHELL := /bin/bash
@@ -60,10 +69,11 @@ demo:
 	printf '%s\n' "${names[@]}"
 EOF
 
-  run /bin/bash "${SCRIPT}" --execute "${candidate}"
+  run /bin/bash "${SCRIPT}" --execute "${scan_dir}"
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"mapfile"* ]]
+  [[ "${output}" == *"Makefile"* ]]
 }
 
 @test "check-bash32-compat includes tracked makefiles in the default scan set" {

@@ -15,14 +15,14 @@ Usage: ${0##*/} [--snapshot <file>] [--verify <file>] [--dry-run] [--execute]
 Assert that a command left the working tree exactly as it found it.
 
 Take a snapshot before running a test suite, verify after it. Verification
-fails if the run introduced, removed, or modified anything that `git status`
+fails if the run introduced, removed, or modified anything that \`git status\`
 can see.
 
 This exists because a test that silently does not do what it claims can still
 pass. The regression that motivated it was a stray line continuation that made
-`touch` swallow the following `cp` command: the suite stayed green, a fixture
+\`touch\` swallow the following \`cp\` command: the suite stayed green, a fixture
 was quietly created empty instead of copied, and the only outward evidence was
-an untracked file named `cp` in the repo root that nobody attributed to a test.
+an untracked file named \`cp\` in the repo root that nobody attributed to a test.
 
 A dirty tree at snapshot time is fine and expected mid-session. The assertion
 is that the run changed nothing, not that the tree started clean.

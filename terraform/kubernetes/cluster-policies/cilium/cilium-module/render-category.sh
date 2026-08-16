@@ -10,8 +10,8 @@ usage() {
   cat <<EOF
 Usage: ${0##*/} --input CATEGORY_OR_SOURCE_DIR [--dry-run] [--execute]
 
-Render one Cilium module category from `sources/` into the equivalent
-`categories/` directory using `render-cilium-policy-values.sh`.
+Render one Cilium module category from \`sources/\` into the equivalent
+\`categories/\` directory using \`render-cilium-policy-values.sh\`.
 
 Examples:
   render-category.sh --input observability

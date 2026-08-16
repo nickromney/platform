@@ -1994,3 +1994,123 @@ Arch version of the *fix* and keep the guard from here. Every item in section 19
 carries a test that fails when the condition returns, and those are what stop
 the same finding arriving a third time -- the guards are the durable half, not
 the one-line changes they protect.
+
+## 20. Second Round: Auditing The Audit
+
+Section 19 was reviewed sceptically before it was trusted. That pass found a
+defect in section 19's own work, and then three more in the repo, all of the
+same family: **the checking apparatus is not checked.**
+
+### 20.1 One of section 19's own guards could not fail
+
+The commit for section 19 claimed each new guard was "verified by reproducing
+its condition". That claim was false when written. Verifying it properly found
+that `check-bash32-compat scans makefiles, not just shell scripts` passed
+against the *old* `*.sh`-only script too.
+
+The reason is worth keeping: the test passed an explicit **file** path, and
+`append_scan_path` appends a file verbatim without consulting any name filter.
+Only a **directory** path exercises the `find` glob that the change widened. So
+the test exercised `scan_file`, which never cared about filenames, and proved
+nothing about the change it was written to protect.
+
+Fixed by pointing the test at a directory. Then every guard from section 19 was
+challenged by reverting the thing it guards:
+
+| Guard | Injected regression | Result |
+| --- | --- | --- |
+| bash32 scans makefiles | narrow the scan to `*.sh` | fails |
+| bash32 default set grew | narrow the scan to `*.sh` | fails |
+| lint/test tools have hints | drop `ruff` from `mise_tool` | fails |
+| arkade catalogue name | drop the `ripgrep`->`rg` mapping | fails |
+| pinned version, not latest | unmap `lefthook` | fails |
+| rendered help has no placeholder | restore the `1s\|` form | fails |
+| no script uses `1s\|` | restore the `1s\|` form | fails |
+| lima refuses `--just-print` | neuter `LIMA_DRY_RUN_REQUESTED` | fails |
+| lima goal list (positive) | drop `reset` from the list | fails |
+| lima goal list (negative) | add `sync-image-cache` back | fails |
+| kind refusal wiring | rename the goal variable | fails |
+
+A guard that has never been observed failing is a hypothesis, not a guard.
+
+### 20.2 The completeness guard was itself incomplete
+
+`tests/ci-test-gate.bats` exists to assert that no test file escapes
+`CI_BATS_TESTS`. It enumerated `git ls-files 'tests/*.bats'` and nothing else,
+so the entire `kubernetes/*/tests/` tree was invisible to it: **49 of those 55
+files were outside the gate and the completeness check had no way to say so.**
+
+That is section 15's defect one level up. It is also why
+`kubernetes/kind/tests/makefile.bats` could sit red on `main` (section 19.3)
+while a guard whose whole job is to prevent that reported green.
+
+Two things fell out of fixing the enumeration:
+
+- Four files were in `HOST_PORTABLE_BATS_TESTS` but **not** `CI_BATS_TESTS` --
+  `check-policy-drift`, `dependency-audit`, `ensure-node-host-alias`,
+  `install-host-alias-timer`. Every guard #196 added ran on the macOS job and
+  never on the Linux gate that is the actual gate. Now in both.
+- `kind/tests/makefile.bats` and `lima/tests/makefile.bats` hold the `make -n`
+  refusal guards and were unwatched. Both verified hermetic (84/84 and 37/37
+  with the repo `.env` absent) and added, at ~50s combined.
+
+The remaining 47 are recorded in the backlog as **untriaged** -- deliberately
+distinguished from the `tests/*.bats` backlog above, which carries measured
+per-file failure counts. Claiming a triage that has not happened is the mistake
+20.1 documents.
+
+### 20.3 `make lint` has never run shellcheck
+
+`lint-shell` calls `scripts/audit-shell-scripts.sh`, which audits *conventions*
+-- entrypoint flags, the Python wrapper policy -- and never invokes shellcheck.
+shellcheck runs only in the lefthook **pre-commit** hook, and only over
+**staged** files. A script therefore gets checked when it is first committed and
+never again, and a repo-wide `make lint` reports nothing.
+
+**18 of 207 tracked `*.sh` files currently fail `shellcheck -x`.** Three were
+repaired here because they blocked the commit; the rest stand. Note what is in
+that list: `scripts/check-worktree-unchanged.sh`, added by #196 as a *guard*.
+The PR that set out to catch silent test failures shipped a script the repo
+could not lint.
+
+Not fixed wholesale here. Adding shellcheck to `make lint` turns 18 files red at
+once, and the repo's own precedent (#199) is to triage before adding, not to
+move redness inside the gate.
+
+### 20.4 Prose backticks that execute
+
+`shell_cli` usage blocks need `cat <<EOF` unquoted, because the text
+interpolates `${0##*/}` and `$(shell_cli_standard_options)`. That also makes
+every backtick in the prose live command substitution.
+
+Two scripts had unescaped backticks in their help text:
+
+- `scripts/check-worktree-unchanged.sh --help` executed `cp`, `touch` and
+  `git status`, printing `cp`'s usage error to stderr and splicing the working
+  tree's status into the middle of its own help output.
+- `render-category.sh --help` attempted `sources/`, `categories/` and
+  `render-cilium-policy-values.sh` -- the last of which would have *run that
+  script* had it been on `PATH`.
+
+Both read as ordinary markdown, and both were reported by shellcheck as SC2006
+"use `$(...)` instead of legacy backticks" -- a style code, in a tool nothing
+runs. Three other scripts already escape their backticks correctly, and
+`check-worktree-unchanged.sh` escapes them in its Options block four lines below
+the paragraph that does not. The knowledge was present; the check was not.
+
+Both fixed, and guarded by a static assertion over every tracked script,
+verified by unescaping one pair and watching it fail.
+
+### 20.5 Swept and clean
+
+Recorded so the next pass does not repeat them:
+
+- No other `?=` on a variable GNU make always defines. `SHELL` was the only one.
+- No other line-addressed `sed` that under-substitutes. The one hit,
+  `sed -n '1s/^OpenTofu v//p'`, is correct: it wants the first line only.
+- No `continue-on-error`, never-true `if:`, or `|| true` on a verifying step in
+  any workflow. The single `|| true` in `ci.yml` is on the interpreter-recording
+  step, which the file already documents as recorded rather than asserted.
+- The lefthook escape hatch (`PLATFORM_SKIP_HOOKS=1`) prints a warning rather
+  than skipping silently.
+- No other `make -n` caller in the repo targets a goal the lima guard refuses.

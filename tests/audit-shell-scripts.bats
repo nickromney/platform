@@ -445,3 +445,41 @@ EOF
   [ "${status}" -eq 0 ]
   [ "${output}" = "" ]
 }
+
+@test "no unquoted usage heredoc contains an unescaped backtick" {
+  # `cat <<EOF` (unquoted) is required wherever the usage text interpolates
+  # $(shell_cli_standard_options) or ${0##*/} -- but it also makes prose
+  # backticks live command substitution. scripts/check-worktree-unchanged.sh
+  # --help executed `cp`, `touch` and `git status` and spliced the working-tree
+  # status into its own help text; render-category.sh --help tried to execute
+  # `render-cilium-policy-values.sh`. Both read as ordinary markdown.
+  #
+  # shellcheck reports this as SC2006, but `make lint` never runs shellcheck --
+  # lint-shell audits conventions -- so nothing surfaced it. The fix is to
+  # escape the backticks (\`like this\`), which several scripts already do.
+  local offenders=""
+
+  while IFS= read -r file; do
+    [ -n "${file}" ] || continue
+    local hits
+    hits="$(
+      awk '
+        /cat <<EOF$/ { inh = 1; next }
+        /^EOF$/      { inh = 0 }
+        inh {
+          line = $0
+          gsub(/\\`/, "", line)      # escaped backticks are correct
+          if (line ~ /`/) { print FILENAME ":" FNR }
+        }
+      ' "${REPO_ROOT}/${file}"
+    )"
+    [ -z "${hits}" ] || offenders="${offenders}${hits}"$'\n'
+  done < <(cd "${REPO_ROOT}" && git ls-files -- '*.sh')
+
+  if [ -n "${offenders}" ]; then
+    printf 'unescaped backtick inside an unquoted heredoc (runs as a command):\n%s\n' "${offenders}" >&2
+    printf 'Escape them as \\` or switch the heredoc to <<%s.\n' "'EOF'" >&2
+  fi
+
+  [ -z "${offenders}" ]
+}
