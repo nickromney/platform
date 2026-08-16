@@ -18,7 +18,7 @@ EOF
 }
 
 shell_cli_handle_standard_no_args usage \
-  "would run pre-push local CI gate: make lint && make test-ci" \
+  "would run pre-push local CI gate: make lint plus the Bats suite" \
   "$@"
 
 if hook_skip_requested; then
@@ -32,12 +32,34 @@ fi
 
 cd "${HOOKS_REPO_ROOT}"
 
-cat <<'EOF'
+# The full suite is the wrong thing to run here, and not for taste reasons.
+# git opens the SSH connection to the remote BEFORE running pre-push, so a gate
+# that takes ~12 minutes outlives it: the hook passes and the push then fails
+# with "Connection to github.com closed by remote host". A gate that prevents
+# the operation it guards is not a gate.
+#
+# So the default is the fast pair -- lint plus the host-portable subset, about 90
+# seconds -- and the full suite runs in CI, which #196 wired to pull_request and
+# push. Set PLATFORM_LOCAL_CI_FULL=1 to run the whole thing locally anyway,
+# knowing the push itself may then time out.
+LOCAL_CI_FULL="${PLATFORM_LOCAL_CI_FULL:-0}"
+if [[ "${LOCAL_CI_FULL}" == "1" ]]; then
+  suite_target="test-ci"
+  suite_label="the full Bats suite"
+else
+  suite_target="test-host-portable"
+  suite_label="the host-portable Bats subset (full suite runs in CI)"
+fi
+
+cat <<EOF
 Platform pre-push local CI gate
 
 Running:
   make lint
-  make test-ci
+  make ${suite_target}   -- ${suite_label}
+
+Run everything locally instead:
+  PLATFORM_LOCAL_CI_FULL=1 git push
 
 Skip only when you have a reason:
   LEFTHOOK=0 git push
@@ -50,8 +72,8 @@ failed_gate=""
 
 if ! make lint; then
   failed_gate="make lint"
-elif ! make test-ci; then
-  failed_gate="make test-ci"
+elif ! make "${suite_target}"; then
+  failed_gate="make ${suite_target}"
 fi
 
 if [[ -n "${failed_gate}" ]]; then
@@ -59,4 +81,4 @@ if [[ -n "${failed_gate}" ]]; then
   exit 1
 fi
 
-hook_ok "pre-push gate passed: make lint && make test-ci"
+hook_ok "pre-push gate passed: make lint && make ${suite_target}"

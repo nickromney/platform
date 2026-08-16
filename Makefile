@@ -34,6 +34,23 @@ WORKFLOW_UI_PORT ?= 8443
 WORKFLOW_UI_HTTP ?= h2
 CI_UV_CACHE_DIR ?= $(CURDIR)/.run/uv-cache
 CHECK_WORKTREE_UNCHANGED ?= scripts/check-worktree-unchanged.sh
+RUN_BATS_SUITE ?= scripts/run-bats-suite.sh
+# Serial by default, and that is a measured decision rather than caution.
+# BATS_JOBS=auto takes the suite from 715s to ~170s on a 10-core box -- but it
+# also turns the gate flaky. Six files failed under --jobs that pass serially,
+# and not the same six each run: four mutate state shared with the real repo
+# (a Terraform lock, a real git tag, make invoked against the working tree) and
+# are handled by the serial list in run-bats-suite.sh, while others are timing
+# assertions that only fail when the box is loaded -- a retry-on-timeout test
+# and a bounded-concurrency test. A 4x faster gate that reports different
+# failures on each run is worth less than a slow one that does not.
+#
+# The push problem this was meant to solve is fixed in the pre-push hook
+# instead, which now runs lint plus the host-portable subset in ~77s.
+#
+# Opt in with `make test-ci BATS_JOBS=auto` when you want the speed and can
+# tolerate re-running a flake. Fixing the load-sensitive files is the real job.
+BATS_JOBS ?= off
 CI_WORKTREE_SNAPSHOT ?= $(CURDIR)/.run/worktree-status
 # Tests that depend only on the host toolchain: no cluster, no Docker, no
 # network. This is the subset that must also pass on macOS, where the stock awk
@@ -303,14 +320,15 @@ test:
 	@echo "  make -C kubernetes/lima test"
 
 test-host-portable:
-	@"$(BATS_BIN)" $(HOST_PORTABLE_BATS_TESTS)
+	@BATS_BIN="$(BATS_BIN)" BATS_JOBS="$(BATS_JOBS)" "$(RUN_BATS_SUITE)" --execute -- $(HOST_PORTABLE_BATS_TESTS)
 
 test-ci:
 	@mkdir -p "$(CI_UV_CACHE_DIR)"
 	@"$(CHECK_WORKTREE_UNCHANGED)" --execute --snapshot "$(CI_WORKTREE_SNAPSHOT)"
 	@set -euo pipefail; \
 	rc=0; \
-	UV_CACHE_DIR="$(CI_UV_CACHE_DIR)" "$(BATS_BIN)" $(CI_BATS_TESTS) || rc=$$?; \
+	UV_CACHE_DIR="$(CI_UV_CACHE_DIR)" BATS_BIN="$(BATS_BIN)" BATS_JOBS="$(BATS_JOBS)" \
+		"$(RUN_BATS_SUITE)" --execute -- $(CI_BATS_TESTS) || rc=$$?; \
 	if ! "$(CHECK_WORKTREE_UNCHANGED)" --execute --verify "$(CI_WORKTREE_SNAPSHOT)"; then rc=1; fi; \
 	exit $$rc
 

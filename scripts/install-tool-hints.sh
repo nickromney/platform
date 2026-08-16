@@ -238,7 +238,7 @@ brew_formula() {
     cilium|hubble)
       printf 'cilium-cli\n'
       ;;
-    biome|cosign|curl|deno|gh|git|helm|jq|k3sup|kind|kubie|kubectx|kyverno|lefthook|markdownlint-cli2|mkcert|podman|podman-compose|ripgrep|ruff|shellcheck|starship|step|terragrunt|uv|yamllint|yq)
+    biome|cosign|curl|deno|gh|git|helm|jq|k3sup|kind|kubie|kubectx|kyverno|lefthook|markdownlint-cli2|mkcert|parallel|podman|podman-compose|ripgrep|ruff|shellcheck|starship|step|terragrunt|uv|yamllint|yq)
       printf '%s\n' "${tool}"
       ;;
     docker)
@@ -290,7 +290,7 @@ pacman_packages() {
     cilium|hubble)
       printf 'cilium-cli\n'
       ;;
-    cosign|curl|deno|docker|git|helm|jq|kind|kubectl|kubectx|podman|podman-compose|ripgrep|ruff|shellcheck|starship|terragrunt|uv|yamllint)
+    cosign|curl|deno|docker|git|helm|jq|kind|kubectl|kubectx|parallel|podman|podman-compose|ripgrep|ruff|shellcheck|starship|terragrunt|uv|yamllint)
       printf '%s\n' "$1"
       ;;
     gh)
@@ -352,6 +352,9 @@ apt_packages() {
       ;;
     ripgrep)
       printf 'ripgrep\n'
+      ;;
+    parallel)
+      printf 'parallel\n'
       ;;
     mkcert)
       printf 'mkcert libnss3-tools\n'

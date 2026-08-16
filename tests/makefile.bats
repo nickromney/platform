@@ -352,7 +352,9 @@ EOF
   cat >"${bats_stub}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' "\$*" >"${log_file}"
+# Appends: test-ci delegates to run-bats-suite.sh, which may invoke bats more
+# than once (parallel batch, then shared-state files serially).
+printf '%s\n' "\$*" >>"${log_file}"
 EOF
   chmod +x "${bats_stub}"
 
