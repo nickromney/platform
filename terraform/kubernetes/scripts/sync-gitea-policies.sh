@@ -1132,8 +1132,10 @@ render_platform_launchpad_dashboard() {
   [[ -f "${app_file}" ]] || return 0
   [[ -x "${renderer}" ]] || return 0
 
+  local inventory_file="${STACK_DIR}/config/platform-launchpad.apps.json"
+
   STACK_DIR="${STACK_DIR}" \
-    INVENTORY_FILE="${STACK_DIR}/config/platform-launchpad.apps.json" \
+    INVENTORY_FILE="${inventory_file}" \
     ENABLE_SSO="${ENABLE_SSO:-true}" \
     ENABLE_BACKSTAGE="${ENABLE_BACKSTAGE:-false}" \
     ENABLE_HEADLAMP="${ENABLE_HEADLAMP:-true}" \

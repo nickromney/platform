@@ -227,7 +227,8 @@ gitea_local_access_setup_nodeport() {
   if [[ "${require}" == "http" || "${require}" == "both" ]]; then
     if [[ "${GITEA_LOCAL_ACCESS_HTTP_READY}" != "1" ]]; then
       : "${GITEA_HTTP_NODE_PORT:=30090}"
-      export GITEA_HTTP_BASE="$(gitea_local_access_rewrite_loopback_base "${GITEA_HTTP_BASE:-http://${nodeport_host}:${GITEA_HTTP_NODE_PORT}}")"
+      GITEA_HTTP_BASE="$(gitea_local_access_rewrite_loopback_base "${GITEA_HTTP_BASE:-http://${nodeport_host}:${GITEA_HTTP_NODE_PORT}}")"
+      export GITEA_HTTP_BASE
       GITEA_LOCAL_ACCESS_HTTP_READY=1
     fi
   fi
@@ -235,7 +236,8 @@ gitea_local_access_setup_nodeport() {
   if [[ "${require}" == "ssh" || "${require}" == "both" ]]; then
     if [[ "${GITEA_LOCAL_ACCESS_SSH_READY}" != "1" ]]; then
       : "${GITEA_SSH_NODE_PORT:=30022}"
-      export GITEA_SSH_HOST="$(gitea_local_access_rewrite_loopback_host "${GITEA_SSH_HOST:-${nodeport_host}}")"
+      GITEA_SSH_HOST="$(gitea_local_access_rewrite_loopback_host "${GITEA_SSH_HOST:-${nodeport_host}}")"
+      export GITEA_SSH_HOST
       export GITEA_SSH_PORT="${GITEA_SSH_PORT:-${GITEA_SSH_NODE_PORT}}"
       GITEA_LOCAL_ACCESS_SSH_READY=1
     fi

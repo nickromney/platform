@@ -21,7 +21,7 @@ json_mode() {
 }
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--dry-run] [--execute]
 
 Forces the kind post-kube-apiserver OIDC recovery branch in a controlled way,

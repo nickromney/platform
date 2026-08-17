@@ -80,7 +80,7 @@ docker_push_local_registry() {
       # The devcontainer shell can reach the host via host.docker.internal,
       # but the Docker daemon pushes this local registry more reliably via
       # loopback. Keep the image refs stable and rewrite only the push target.
-      push_ref="127.0.0.1${push_ref#${devcontainer_host_alias}}"
+      push_ref="127.0.0.1${push_ref#"${devcontainer_host_alias}"}"
     fi
   fi
 

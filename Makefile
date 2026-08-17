@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-MAKE_KNOWN_GOALS := help prereqs init-env test test-ci test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-python lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+MAKE_KNOWN_GOALS := help prereqs init-env test test-ci test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-python lint-bash32 lint-shell lint-shellcheck lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
 APP_ENTRYPOINT_DIRS_CMD := { printf '%s\n' apps; find apps -mindepth 2 -maxdepth 2 -name Makefile -print | xargs -n 1 dirname; } | LC_ALL=C sort
@@ -8,6 +8,7 @@ LINT_MARKDOWN_SCRIPT ?= scripts/lint-markdown.sh
 LINT_PYTHON_SCRIPT ?= scripts/lint-python.sh
 LINT_BASH32_SCRIPT ?= scripts/check-bash32-compat.sh
 AUDIT_SHELL_SCRIPTS_SCRIPT ?= scripts/audit-shell-scripts.sh
+LINT_SHELLCHECK_SCRIPT ?= scripts/lint-shellcheck.sh
 VALIDATE_CILIUM_POLICIES_SCRIPT ?= scripts/validate-cilium-policies.sh
 VALIDATE_KYVERNO_POLICIES_SCRIPT ?= scripts/validate-kyverno-policies.sh
 FMT_MARKDOWN_SCRIPT ?= scripts/fmt-markdown.sh
@@ -33,6 +34,29 @@ WORKFLOW_UI_PORT ?= 8443
 WORKFLOW_UI_HTTP ?= h2
 CI_UV_CACHE_DIR ?= $(CURDIR)/.run/uv-cache
 CHECK_WORKTREE_UNCHANGED ?= scripts/check-worktree-unchanged.sh
+RUN_BATS_SUITE ?= scripts/run-bats-suite.sh
+# Serial by default, on the evidence rather than by preference.
+#
+# Three defects were fixed to make parallel viable: a concurrency test asserting
+# a wall-clock band while writing to a fixed /tmp path, a retry test with ~1s of
+# margin between a 1s timeout and a 2s sleep, and a sort assertion of ours that
+# did not expect the run to be split into two batches. Five files that mutate
+# state shared with the real repo run in a serial phase in run-bats-suite.sh.
+#
+# That got it from "six failures, never the same six" to 5 clean runs out of 6.
+# The sixth failed two tests in tests/apps-makefile.bats -- a file already in the
+# serial phase, which passes alone, and which does not fail when run beside
+# either its serial neighbours or the three files added just before it. So the
+# residual is load-related and not yet understood.
+#
+# One flake in six is why this stays off. The whole argument for the serial phase
+# was that a gate reporting different failures each run is worth less than a slow
+# one that does not; defaulting to auto on 5/6 would contradict it.
+#
+# Opt in with `make test-ci BATS_JOBS=auto` -- roughly 180-420s against 715s
+# serial, varying with what else is on the box. Diagnosing the apps-makefile
+# residual is what would let this flip.
+BATS_JOBS ?= off
 CI_WORKTREE_SNAPSHOT ?= $(CURDIR)/.run/worktree-status
 # Tests that depend only on the host toolchain: no cluster, no Docker, no
 # network. This is the subset that must also pass on macOS, where the stock awk
@@ -45,11 +69,65 @@ HOST_PORTABLE_BATS_TESTS := \
 	kubernetes/kind/tests/install-host-alias-timer.bats \
 	tests/check-bash32-compat.bats \
 	tests/check-worktree-unchanged.bats \
-	tests/locale-independence.bats
+	tests/locale-independence.bats \
+	tests/update-versions.bats
 
 CI_BATS_TESTS := \
+	kubernetes/kind/tests/aks-ai-foundry-experiment.bats \
+	kubernetes/kind/tests/app-boundary-labels.bats \
+	kubernetes/kind/tests/app-image-readiness.bats \
+	kubernetes/kind/tests/app-repo-sync.bats \
+	kubernetes/kind/tests/apply-progress.bats \
+	kubernetes/kind/tests/check-docker-registry-auth.bats \
+	kubernetes/kind/tests/check-gateway-urls.bats \
+	kubernetes/kind/tests/check-memory-preflight.bats \
+	kubernetes/kind/tests/check-policy-drift.bats \
+	kubernetes/kind/tests/check-provider-version.bats \
+	kubernetes/kind/tests/check-security.bats \
+	kubernetes/kind/tests/check-version.bats \
+	kubernetes/kind/tests/cilium-fqdn-policies.bats \
+	kubernetes/kind/tests/cilium-module-renderers.bats \
+	kubernetes/kind/tests/delete-kind-cluster.bats \
+	kubernetes/kind/tests/dependency-audit.bats \
+	kubernetes/kind/tests/dhi-creds-offline.bats \
+	kubernetes/kind/tests/docker-credential-platform-file.bats \
+	kubernetes/kind/tests/docker-prune-estimate.bats \
+	kubernetes/kind/tests/docker-safe-clean.bats \
+	kubernetes/kind/tests/ensure-kind-kubeconfig.bats \
+	kubernetes/kind/tests/ensure-node-host-alias.bats \
+	kubernetes/kind/tests/gitea-runner-token.bats \
+	kubernetes/kind/tests/gitops-refresh.bats \
+	kubernetes/kind/tests/hubble-audit-cilium-policies.bats \
+	kubernetes/kind/tests/hubble-capture-flows.bats \
+	kubernetes/kind/tests/hubble-generate-cilium-policy.bats \
+	kubernetes/kind/tests/hubble-observe-cilium-policies.bats \
+	kubernetes/kind/tests/hubble-tooling.bats \
+	kubernetes/kind/tests/install-host-alias-timer.bats \
+	kubernetes/kind/tests/makefile.bats \
+	kubernetes/kind/tests/oidc-recovery-harness.bats \
+	kubernetes/kind/tests/platform-gateway-tls.bats \
+	kubernetes/kind/tests/preload-images.bats \
+	kubernetes/kind/tests/reconcile-keycloak-realm.bats \
+	kubernetes/kind/tests/refresh-kind-kubeconfig.bats \
+	kubernetes/kind/tests/render-cilium-policy-values.bats \
+	kubernetes/kind/tests/render-kind-apiserver-oidc-manifest.bats \
+	kubernetes/kind/tests/render-operator-overrides.bats \
+	kubernetes/kind/tests/reset-kubeconfig-context.bats \
+	kubernetes/kind/tests/review-environment-dispatch.bats \
+	kubernetes/kind/tests/rewrite-devcontainer-kubeconfig.bats \
+	kubernetes/kind/tests/show-policy-composition.bats \
+	kubernetes/kind/tests/snapshot-tfstate.bats \
+	kubernetes/kind/tests/sso-oidc-health.bats \
 	kubernetes/kind/tests/stage-tfvars-no-duplicate-attributes.bats \
+	kubernetes/kind/tests/stop-platform-runtimes.bats \
 	kubernetes/kind/tests/sync-gitea-policies.bats \
+	kubernetes/kind/tests/sync-gitea.bats \
+	kubernetes/lima/tests/check-kind-stopped.bats \
+	kubernetes/lima/tests/configure-k3s-apiserver-oidc.bats \
+	kubernetes/lima/tests/exercise-k3s-oidc-recovery.bats \
+	kubernetes/lima/tests/makefile.bats \
+	kubernetes/lima/tests/manage-kubeconfig.bats \
+	kubernetes/lima/tests/ssh-agent.bats \
 	tests/apim-simulator-makefile.bats \
 	tests/app-healthcheck-commands.bats \
 	tests/app-layout-consistency.bats \
@@ -148,7 +226,7 @@ CI_BATS_TESTS := \
 
 include mk/common.mk
 
-.PHONY: default help prereqs init-env test test-ci test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-python lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+.PHONY: default help prereqs init-env test test-ci test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-python lint-bash32 lint-shell lint-shellcheck lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 
 default:
 	@$(MAKE) --no-print-directory help
@@ -251,14 +329,15 @@ test:
 	@echo "  make -C kubernetes/lima test"
 
 test-host-portable:
-	@"$(BATS_BIN)" $(HOST_PORTABLE_BATS_TESTS)
+	@BATS_BIN="$(BATS_BIN)" BATS_JOBS="$(BATS_JOBS)" "$(RUN_BATS_SUITE)" --execute -- $(HOST_PORTABLE_BATS_TESTS)
 
 test-ci:
 	@mkdir -p "$(CI_UV_CACHE_DIR)"
 	@"$(CHECK_WORKTREE_UNCHANGED)" --execute --snapshot "$(CI_WORKTREE_SNAPSHOT)"
 	@set -euo pipefail; \
 	rc=0; \
-	UV_CACHE_DIR="$(CI_UV_CACHE_DIR)" "$(BATS_BIN)" $(CI_BATS_TESTS) || rc=$$?; \
+	UV_CACHE_DIR="$(CI_UV_CACHE_DIR)" BATS_BIN="$(BATS_BIN)" BATS_JOBS="$(BATS_JOBS)" \
+		"$(RUN_BATS_SUITE)" --execute -- $(CI_BATS_TESTS) || rc=$$?; \
 	if ! "$(CHECK_WORKTREE_UNCHANGED)" --execute --verify "$(CI_WORKTREE_SNAPSHOT)"; then rc=1; fi; \
 	exit $$rc
 
@@ -301,6 +380,7 @@ lint:
 	@$(MAKE) --no-print-directory lint-python
 	@$(MAKE) --no-print-directory lint-bash32
 	@$(MAKE) --no-print-directory lint-shell
+	@$(MAKE) --no-print-directory lint-shellcheck
 	@$(MAKE) --no-print-directory lint-cilium
 	@$(MAKE) --no-print-directory lint-kyverno
 
@@ -323,6 +403,11 @@ lint-bash32:
 
 lint-shell:
 	@"$(AUDIT_SHELL_SCRIPTS_SCRIPT)" --execute
+
+# lint-shell audits conventions; this is the one that runs shellcheck. They
+# were the same target in name only until 2026-08-16.
+lint-shellcheck:
+	@"$(LINT_SHELLCHECK_SCRIPT)" --execute
 
 lint-cilium:
 	@"$(VALIDATE_CILIUM_POLICIES_SCRIPT)" --mode static --execute

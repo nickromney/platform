@@ -10,6 +10,7 @@ fail() { echo "promote-gitea-admin: $*" >&2; exit 1; }
 warn() { echo "promote-gitea-admin: $*" >&2; }
 ok() { echo "promote-gitea-admin: $*"; }
 
+# shellcheck disable=SC2329 # invoked by name through the shell_cli_* helpers
 usage() {
   cat <<EOF
 Usage: ${0##*/} [--dry-run] [--execute]

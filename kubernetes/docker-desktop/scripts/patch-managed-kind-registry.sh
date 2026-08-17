@@ -13,7 +13,7 @@ registries=(
 )
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [options]
 
 Patch Docker Desktop managed kind nodes so containerd can pull local workload

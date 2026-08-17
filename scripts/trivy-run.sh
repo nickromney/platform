@@ -12,8 +12,9 @@ source "${SCRIPT_DIR}/lib/shell-cli.sh"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/trivy-common.sh"
 
+# shellcheck disable=SC2329 # invoked by name through the shell_cli_* helpers
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--dry-run] [--execute] [-- <trivy args...>]
 
 Run the local Trivy binary with the repo cache directory configured.
@@ -28,6 +29,7 @@ Options:
 EOF
 }
 
+# shellcheck disable=SC2329 # invoked by name through the shell_cli_* helpers
 print_dry_run() {
   shell_cli_print_dry_run_command trivy --cache-dir "${TRIVY_CACHE_DIR}" ${trivy_args[@]+"${trivy_args[@]}"}
 }

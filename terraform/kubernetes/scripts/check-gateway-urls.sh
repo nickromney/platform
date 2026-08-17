@@ -15,7 +15,7 @@ warn() { echo "WARN $*"; }
 ok() { echo "OK   $*"; }
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--var-file PATH] [--host-port PORT] [--wait-seconds N] [--retry-interval-seconds N] [--extended]
 
 Checks the NGINX Gateway Fabric + TLS path for public and admin gateway URLs.
@@ -393,7 +393,7 @@ probe_route_urls() {
 
 probe_tls_certificate() {
   local host="$1"
-  local tmp_err cert_pem check_output rc check_rc err connect_host sans san suffix prefix
+  local tmp_err cert_pem check_output check_rc err connect_host sans san suffix prefix
 
   TLS_CERT_OK=0
   TLS_CERT_DETAIL=""
@@ -402,8 +402,11 @@ probe_tls_certificate() {
   tmp_err="$(mktemp)"
 
   set +e
+  # No rc capture here: the pipeline's status is openssl x509's, and an empty
+  # cert_pem is the condition actually tested below. The variable was assigned
+  # and never read (SC2034), which shellcheck flags but `make lint` never sees --
+  # lint-shell audits conventions, not correctness.
   cert_pem="$(openssl s_client -connect "${connect_host}:${HOST_PORT}" -servername "${host}" </dev/null 2>"${tmp_err}" | openssl x509 2>>"${tmp_err}")"
-  rc=$?
   set -e
 
   if [[ -z "${cert_pem}" ]]; then

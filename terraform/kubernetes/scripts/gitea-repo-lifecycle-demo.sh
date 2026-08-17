@@ -14,7 +14,7 @@ fail() { echo "FAIL $*" >&2; exit 1; }
 ok() { echo "OK   $*"; }
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--repo NAME]
 
 Demonstrates the local internal-Git lifecycle: check whether a repo exists,

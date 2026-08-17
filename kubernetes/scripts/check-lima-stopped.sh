@@ -13,6 +13,7 @@ running_lima_vms=""
 running_lima_proxies=""
 active_shared_ports=""
 
+# shellcheck disable=SC2329 # invoked by name through the shell_cli_* helpers
 usage() {
   cat <<EOF
 Usage: ${0##*/} [--dry-run] [--execute]

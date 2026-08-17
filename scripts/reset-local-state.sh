@@ -25,7 +25,9 @@ INCLUDE_KUBECONFIGS=0
 INCLUDE_DOCKER=0
 INCLUDE_DOCKER_VOLUMES=0
 
+# shellcheck disable=SC2034 # populated and read through eval by append_unique_path
 repo_paths=()
+# shellcheck disable=SC2034 # populated and read through eval by append_unique_path
 host_paths=()
 skipped_tracked_paths=()
 
@@ -77,7 +79,7 @@ path_is_tracked() {
     return 1
   fi
 
-  rel="${path#${GIT_ROOT}/}"
+  rel="${path#"${GIT_ROOT}"/}"
   if [[ "${rel}" == "${path}" ]]; then
     return 1
   fi
@@ -88,6 +90,7 @@ path_is_tracked() {
 append_unique_path() {
   local array_name="${1}"
   local path="${2}"
+  # shellcheck disable=SC2034 # populated and read through eval by append_unique_path
   local existing=""
 
   eval "for existing in \${${array_name}[@]+\"\${${array_name}[@]}\"}; do

@@ -111,6 +111,46 @@ VALID_HELPER_MODES := auto on off
 MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file readiness prereqs image-signing-prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig ensure-k3s-api-tunnel ensure-k3s-shared-port-tunnels ensure-image-cache sync-image-cache build-workload-images build-local-platform-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render idp-api backstage idp-sdk idp-mcp show-urls reset state-reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 MAKE_UNKNOWN_GOAL_GUARD_DEFER_GOALS := $(VALID_STAGES)
 
+# `make -n` is not a preview here, for the same reason it is not one in
+# kubernetes/kind: GNU make exempts recipe *lines* containing $(MAKE) from
+# --just-print, and these recipes are single backslash-continued blocks, so the
+# whole block runs. `make -n reset` would delete the Lima VMs
+# (`limactl delete --yes --force`) and rm -rf the terragrunt state, cache, and
+# stack runtime directory. See section 12 of
+# docs/plans/omarchy-portability-followups.md; kind gained this guard in #198
+# and #199, and lima has the identical shape.
+#
+# The refusal must be parse-time. A recipe-line guard would itself be skipped
+# under -n, which is the trap being guarded.
+#
+# Membership is by the criterion above -- a logical recipe line holding both
+# $(MAKE) and a mutating command -- not by copying kind's list:
+#   apply, plan        $(call tg_stack_apply/plan,...) in a $(MAKE) block
+#   prereqs            $(MAKE) check-conflicting-clusters-stopped in-block
+#   reset              limactl delete + three rm -rf
+#   stop-lima          limactl stop
+#
+# Two targets are deliberately absent, and copying kind's list would have added
+# both wrongly:
+#   start              a bare `@$(MAKE) lima-vms-up` line, so the child make
+#                      inherits -n and previews correctly
+#   sync-image-cache   kind's recipe opens with a $(MAKE) line; lima's has no
+#                      $(MAKE) at all, so nothing is exempt and -n is a real
+#                      preview. tests/kubernetes-sync-image-cache-adapter.bats
+#                      depends on that -- listing it here broke the test, which
+#                      is the criterion doing its job.
+LIMA_DRY_RUN_UNSAFE_GOALS := apply plan prereqs reset stop-lima
+
+LIMA_DRY_RUN_REQUESTED := $(findstring n,$(firstword -$(MAKEFLAGS)))
+ifneq ($(LIMA_DRY_RUN_REQUESTED),)
+ifneq ($(filter $(LIMA_DRY_RUN_UNSAFE_GOALS),$(MAKECMDGOALS)),)
+$(error make -n/--just-print is unsafe for '$(filter $(LIMA_DRY_RUN_UNSAFE_GOALS),$(MAKECMDGOALS))': \
+GNU make exempts $$(MAKE) recipe lines from --just-print, so this would run the \
+real operation instead of previewing it. Use `make <stage> plan` for a genuine \
+preview, which reports changes without applying them)
+endif
+endif
+
 include ../../mk/common.mk
 include ../../mk/k8s-terragrunt.mk
 include ../../mk/stage-workflow.mk

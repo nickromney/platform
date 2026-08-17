@@ -445,3 +445,76 @@ EOF
   [ "${status}" -eq 0 ]
   [ "${output}" = "" ]
 }
+
+@test "no unquoted usage heredoc contains an unescaped backtick" {
+  # `cat <<EOF` (unquoted) is required wherever the usage text interpolates
+  # $(shell_cli_standard_options) or ${0##*/} -- but it also makes prose
+  # backticks live command substitution. scripts/check-worktree-unchanged.sh
+  # --help executed `cp`, `touch` and `git status` and spliced the working-tree
+  # status into its own help text; render-category.sh --help tried to execute
+  # `render-cilium-policy-values.sh`. Both read as ordinary markdown.
+  #
+  # shellcheck reports this as SC2006, but `make lint` never runs shellcheck --
+  # lint-shell audits conventions -- so nothing surfaced it. The fix is to
+  # escape the backticks (\`like this\`), which several scripts already do.
+  local offenders=""
+
+  while IFS= read -r file; do
+    [ -n "${file}" ] || continue
+    local hits
+    hits="$(
+      awk '
+        /cat <<EOF$/ { inh = 1; next }
+        /^EOF$/      { inh = 0 }
+        inh {
+          line = $0
+          gsub(/\\`/, "", line)      # escaped backticks are correct
+          if (line ~ /`/) { print FILENAME ":" FNR }
+        }
+      ' "${REPO_ROOT}/${file}"
+    )"
+    [ -z "${hits}" ] || offenders="${offenders}${hits}"$'\n'
+  done < <(cd "${REPO_ROOT}" && git ls-files -- '*.sh')
+
+  if [ -n "${offenders}" ]; then
+    printf 'unescaped backtick inside an unquoted heredoc (runs as a command):\n%s\n' "${offenders}" >&2
+    printf 'Escape them as \\` or switch the heredoc to <<%s.\n' "'EOF'" >&2
+  fi
+
+  [ -z "${offenders}" ]
+}
+
+@test "make lint actually runs shellcheck, not only the conventions audit" {
+  # `lint-shell` calls audit-shell-scripts.sh, which checks entrypoint flags and
+  # the Python wrapper policy -- it has never invoked shellcheck. The only
+  # shellcheck run was the lefthook pre-commit hook, over staged files, so an
+  # untouched script was never rechecked and 18 of 207 had drifted red.
+  #
+  # Asserts both halves: the target exists and lint depends on it. Asserting only
+  # that the target exists would pass while nothing called it, which is the
+  # defect being guarded.
+  run grep -cE '^\s*@\$\(MAKE\) --no-print-directory lint-shellcheck$' "${REPO_ROOT}/Makefile"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" -ge 1 ]
+
+  run bash -lc "awk '/^lint-shellcheck:/{f=1;next} f&&/^\\t/{print;exit}' '${REPO_ROOT}/Makefile'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"LINT_SHELLCHECK_SCRIPT"* ]]
+
+  run bash -lc "grep -c 'shellcheck' '${REPO_ROOT}/scripts/lint-shellcheck.sh'"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" -ge 1 ]
+}
+
+@test "every tracked shell script passes shellcheck" {
+  # The ratchet. This went from 18 failing to 0 on 2026-08-16; asserting it here
+  # means a new script cannot quietly reintroduce the backlog, and it holds even
+  # for files nobody stages.
+  run make -C "${REPO_ROOT}" lint-shellcheck
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"OK   shellcheck"* ]]
+}

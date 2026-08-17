@@ -15,7 +15,7 @@ source "${SCRIPT_DIR}/kind-apiserver-oidc-lib.sh"
 
 # shellcheck disable=SC2329
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--dry-run] [--execute]
 
 Configures the kind control-plane kube-apiserver static manifest for OIDC auth

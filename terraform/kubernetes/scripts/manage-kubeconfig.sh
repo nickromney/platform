@@ -590,6 +590,7 @@ main() {
   fi
 
   if [[ "${legacy_positional_form}" -eq 1 && "${SHELL_CLI_DRY_RUN}" -ne 1 ]]; then
+    # shellcheck disable=SC2034 # read by scripts/lib/shell-cli.sh after this assignment
     SHELL_CLI_EXECUTE=1
   fi
 

@@ -9,7 +9,7 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 source "${SCRIPT_DIR}/helper-mode-lib.sh"
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ --stage N --cache-mode MODE --platform-images-mode MODE --workload-images-mode MODE --prefer-external-platform-images true|false --cache-available true|false --runtime-image-cache-host HOST --push-image-cache-url URL
 
 Purpose:

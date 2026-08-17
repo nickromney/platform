@@ -830,6 +830,7 @@ lookup_controller_json() {
   done
 
   LOOKUP_CONTROLLER_JSON=""
+  # shellcheck disable=SC2034 # reset of state the caller reads back after the lookup
   LOOKUP_CONTROLLER_KIND=""
   return 1
 }
@@ -849,6 +850,7 @@ lookup_owner_controller_json() {
       ;;
     *)
       LOOKUP_OWNER_CONTROLLER_JSON=""
+      # shellcheck disable=SC2034 # reset of state the caller reads back after the lookup
       LOOKUP_OWNER_CONTROLLER_KIND=""
       return 1
       ;;
@@ -867,6 +869,7 @@ lookup_owner_controller_json() {
   fi
 
   LOOKUP_OWNER_CONTROLLER_JSON=""
+  # shellcheck disable=SC2034 # reset of state the caller reads back after the lookup
   LOOKUP_OWNER_CONTROLLER_KIND=""
   return 1
 }
@@ -1077,6 +1080,7 @@ namespace_is_default_excluded() {
   return 1
 }
 
+# shellcheck disable=SC2329 # called from the awk-driven filter path, not directly
 peer_namespace_should_be_excluded() {
   local namespace="$1"
 
@@ -1301,6 +1305,7 @@ discover_hubble_relay_service_port() {
   SHARED_HUBBLE_SERVICE_PORT="${service_port}"
 }
 
+# shellcheck disable=SC2329 # installed as an EXIT trap handler
 stop_shared_hubble_relay() {
   if [[ -n "${SHARED_HUBBLE_RELAY_PID:-}" ]]; then
     kill "${SHARED_HUBBLE_RELAY_PID}" 2>/dev/null || true
@@ -1624,7 +1629,6 @@ collect_namespace_data() {
   local filtered_flow_count=0
   local capture_sample_target="0"
 
-  NAMESPACE_DIR="${namespace_dir}"
 
   if [[ "${dry_run}" -eq 0 ]]; then
     mkdir -p "${namespace_dir}"
@@ -2186,6 +2190,7 @@ generate_ingress_policy() {
     write_namespace_policy_header "${policy_file}" "${policy_name}" "${namespace}" "${title}" "ingress" "${mode}" "${row_count}"
 
     : > "${tmp_rules}"
+    # shellcheck disable=SC2034 # positional column; dropping it would shift the rest
     while IFS=$'\t' read -r protocol port kind peer_value _ _; do
       [[ -n "${protocol}" && -n "${port}" && -n "${kind}" ]] || continue
       case "${kind}" in
@@ -2453,6 +2458,7 @@ generate_egress_policy() {
     write_namespace_policy_header "${policy_file}" "${policy_name}" "${namespace}" "${title}" "egress" "${mode}" "${row_count}"
 
     : > "${tmp_rules}"
+    # shellcheck disable=SC2034 # positional column; dropping it would shift the rest
     while IFS=$'\t' read -r protocol port kind peer_value _ _; do
       [[ -n "${protocol}" && -n "${port}" && -n "${kind}" ]] || continue
       case "${kind}" in
@@ -2885,6 +2891,7 @@ fi
 discover_namespaces "${NAMESPACE_FILE}"
 discover_host_peer_ips
 [[ -s "${NAMESPACE_FILE}" ]] || fail "no namespaces matched the requested filters"
+# shellcheck disable=SC2034 # consumed by the summary emitted from the EXIT trap
 TOTAL_NAMESPACES="$(count_lines "${NAMESPACE_FILE}")"
 
 if [[ "${dry_run}" -eq 0 ]]; then
@@ -2985,6 +2992,9 @@ while IFS= read -r namespace; do
   generation_seconds=$((SECONDS - generation_started))
   rmdir "${policy_dir}" 2>/dev/null || true
 
+  # shellcheck disable=SC2153 # CAPTURE_*/FILTERED_FLOW_COUNT are set by the
+  # eval'd `printf '\''NAME=%q'\''` block above, which shellcheck cannot follow,
+  # so it reads them as misspellings of the lowercase locals.
   append_report_row \
     "${namespace}" \
     "ingress" \

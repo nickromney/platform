@@ -16,7 +16,7 @@ LIVE_VALIDATION_TMP_KUBECONFIG=""
 mode="static"
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--mode static|live] [--dry-run] [--execute]
 
 static

@@ -10,7 +10,7 @@ BUILD_TFVAR_ARGS="${SCRIPT_DIR}/build-tfvar-args.sh"
 RESOLVE_TFVAR_VALUE="${SCRIPT_DIR}/resolve-tfvar-value.sh"
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ --stage-tfvars PATH [--optional-file PATH]...
 
 Purpose:

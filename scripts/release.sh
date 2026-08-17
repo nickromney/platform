@@ -90,7 +90,7 @@ fi
 
 TAG="v${VERSION}"
 RELEASE_COMMIT_SUBJECT="chore(release): bump version to ${VERSION}"
-VERSION_REL_PATH="${VERSION_FILE#${ROOT_DIR}/}"
+VERSION_REL_PATH="${VERSION_FILE#"${ROOT_DIR}"/}"
 CURRENT_VERSION=""
 if [[ -f "${VERSION_FILE}" ]]; then
   CURRENT_VERSION="$(tr -d '[:space:]' <"${VERSION_FILE}")"

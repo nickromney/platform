@@ -12,7 +12,7 @@ stage=""
 make_dir=""
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--dry-run] [--execute] --variant-json PATH --stage STAGE --make-dir DIR
 
 Runs planned post-apply verification Make targets read from stdin.

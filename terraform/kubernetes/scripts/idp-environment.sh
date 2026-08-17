@@ -43,7 +43,7 @@ relative_to_repo_path() {
 }
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ --action create|delete|promote --app NAME --env NAME [--image REF] [--target-env NAME]
 
 Creates or deletes a local generated environment request, or promotes an app

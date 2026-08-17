@@ -29,6 +29,41 @@ setup() {
 # compose, and running them unsupervised risks real side effects.
 #
 # Adding a new test file? Put it in CI_BATS_TESTS. Do not add it here.
+#
+# 2026-08-15, second pass: this guard only ever enumerated `tests/*.bats`, so it
+# could not see `kubernetes/*/tests/*.bats` at all -- 49 of those 55 files were
+# outside the gate and the completeness check had no way to say so. That is the
+# same defect the guard exists to catch, one level up. Enumeration now covers
+# both trees.
+#
+# 2026-08-16: the 47 that pass added left UNTRIAGED are now triaged, by the same
+# method #199 used. 44 were safe to run and each was run in isolation; 40 were
+# green and 4 were red. All four reds were STALE ASSERTIONS, not product bugs,
+# and every one of them was invisible precisely because the file was outside the
+# gate:
+#
+#   lima/manage-kubeconfig      asserted context `lima-k3s`; it was renamed
+#                               `limavm-k3s` and every other test in the file
+#                               was updated. Fixed.
+#   kind/gitops-refresh         asserted the literal `SECONDS + 300` after the
+#                               wait moved behind local.platform_wait_seconds so
+#                               PLATFORM_TIMEOUT_SCALE could stretch it. Now
+#                               asserts the local, and that it is 300 at scale 1.
+#   kind/hubble-observe         asserted "observing namespace <ns>" after the
+#                               emitter was reworded to "<ns>: capture iteration
+#                               i/n". Two tests. Now matched by shape.
+#   kind/check-version          called coreutils `timeout`, which macOS does not
+#                               ship, so it failed on `env: timeout: not found`
+#                               rather than on its subject. Two sibling tests in
+#                               the same file already carried that skip guard.
+#
+# 2026-08-16, later: the last three are in too. They were held back as
+# "docker build/run/compose", but that classification came from grepping for the
+# word rather than from reading them: docker-safe-clean and docker-prune-estimate
+# stub docker entirely and only assert on the commands they would print, and
+# aks-ai-foundry-experiment gates its two live tests behind
+# KIND_AKS_AI_FOUNDRY_LIVE=1, so they skip by default. All three run in about a
+# second. The kubernetes/*/tests backlog is now empty.
 CI_GATE_BACKLOG="tests/backstage-compose.bats
 tests/backstage-portal.bats
 tests/devcontainer-makefile.bats
@@ -62,7 +97,7 @@ is_backlogged() {
   listed="$(
     cd "${REPO_ROOT}" &&
       awk '/^CI_BATS_TESTS :=/,/[^\\]$/' Makefile |
-      grep -oE '(tests|kubernetes/kind/tests)/[A-Za-z0-9._-]+\.bats' |
+      grep -oE '(tests|kubernetes/[a-z0-9-]+/tests)/[A-Za-z0-9._-]+\.bats' |
       sort -u
   )"
 
@@ -74,7 +109,7 @@ is_backlogged() {
     if ! printf '%s\n' "${listed}" | grep -qxF "${file}"; then
       missing="${missing}${file}"$'\n'
     fi
-  done < <(cd "${REPO_ROOT}" && git ls-files 'tests/*.bats')
+  done < <(cd "${REPO_ROOT}" && git ls-files 'tests/*.bats' 'kubernetes/*/tests/*.bats')
 
   if [ -n "${missing}" ]; then
     printf 'not in CI_BATS_TESTS:\n%s\n' "${missing}" >&2
@@ -93,7 +128,7 @@ is_backlogged() {
   done < <(
     cd "${REPO_ROOT}" &&
       awk '/^CI_BATS_TESTS :=/,/[^\\]$/' Makefile |
-      grep -oE '(tests|kubernetes/kind/tests)/[A-Za-z0-9._-]+\.bats' |
+      grep -oE '(tests|kubernetes/[a-z0-9-]+/tests)/[A-Za-z0-9._-]+\.bats' |
       sort -u
   )
 

@@ -19,7 +19,7 @@ have_cmd() {
 INSTALL_TOOL_HINTS_MANAGERS="${INSTALL_TOOL_HINTS_MANAGERS:-mise brew pacman apt arkade curl}"
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--plain] [--tool TOOL]... [--dry-run] [--execute]
 
 Print install commands for missing tools using this preference order:
@@ -51,6 +51,12 @@ normalize_tool() {
     bats-core)
       echo "bats"
       ;;
+    # Everything but arkade calls it "ripgrep"; arkade's own name is "rg", which
+    # arkade_tool_name maps back. The root Makefile shells out to `rg`, so the
+    # binary name has to resolve here too.
+    rg)
+      echo "ripgrep"
+      ;;
     *)
       echo "$1"
       ;;
@@ -61,11 +67,23 @@ normalize_tool() {
 # node, shellcheck) fall through to the next manager in the chain.
 tool_supports_arkade_get() {
   case "$1" in
-    argocd|bun|cilium|gh|helm|hubble|jq|k3sup|k9s|kind|kubectl|kubie|kubectx|kyverno|mkcert|starship|step|terragrunt|tofu|trivy|yq)
+    argocd|bun|cilium|cosign|gh|helm|hubble|jq|k3sup|k9s|kind|kubectl|kubie|kubectx|kyverno|mkcert|ripgrep|starship|step|terragrunt|tofu|trivy|yq)
       return 0
       ;;
     *)
       return 1
+      ;;
+  esac
+}
+
+# arkade's catalogue name where it differs from the binary this repo invokes.
+arkade_tool_name() {
+  case "$1" in
+    ripgrep)
+      printf 'rg\n'
+      ;;
+    *)
+      printf '%s\n' "$1"
       ;;
   esac
 }
@@ -84,15 +102,17 @@ tool_supports_arkade_system() {
 arkade_hint() {
   local tool="$1"
   local pinned=""
+  local arkade_name=""
 
   if tool_supports_arkade_get "${tool}"; then
+    arkade_name="$(arkade_tool_name "${tool}")"
     pinned="$(pinned_version_for_tool "${tool}" || true)"
     # No sudo, no /usr/local/bin: installing into the arkade-owned user
     # directory keeps the platform out of system-wide PATH.
     if [[ -n "${pinned}" ]]; then
-      printf 'arkade get %s@%s\n' "${tool}" "${pinned}"
+      printf 'arkade get %s@%s\n' "${arkade_name}" "${pinned}"
     else
-      printf 'arkade get %s\n' "${tool}"
+      printf 'arkade get %s\n' "${arkade_name}"
     fi
     return 0
   fi
@@ -147,7 +167,7 @@ pinned_version_for_tool() {
   done
 
   case "${tool}" in
-    bun|kyverno|lima|limactl|mkcert|starship|step) ;;
+    bun|kyverno|lefthook|lima|limactl|mkcert|starship|step) ;;
     tofu) var_name="OPENTOFU_VERSION" ;;
     node|npm|npx) var_name="DEVCONTAINER_NODE_VERSION" ;;
     *) return 1 ;;
@@ -167,7 +187,7 @@ pinned_version_for_tool() {
 
 mise_tool() {
   case "$1" in
-    bats|bun|gh|go|helm|jq|k3sup|kind|kubectl|kubectx|kyverno|mkcert|node|shellcheck|starship|step|terragrunt|yamllint|yq)
+    bats|biome|bun|cosign|deno|gh|go|helm|jq|k3sup|kind|kubectl|kubectx|kyverno|lefthook|markdownlint-cli2|mkcert|node|ripgrep|ruff|shellcheck|starship|step|terragrunt|uv|yamllint|yq)
       printf '%s\n' "$1"
       ;;
     cilium)
@@ -218,7 +238,7 @@ brew_formula() {
     cilium|hubble)
       printf 'cilium-cli\n'
       ;;
-    curl|gh|git|helm|jq|k3sup|kind|kubie|kubectx|kyverno|mkcert|podman|podman-compose|shellcheck|starship|step|terragrunt|yamllint|yq)
+    biome|cosign|curl|deno|gh|git|helm|jq|k3sup|kind|kubie|kubectx|kyverno|lefthook|markdownlint-cli2|mkcert|parallel|podman|podman-compose|ripgrep|ruff|shellcheck|starship|step|terragrunt|uv|yamllint|yq)
       printf '%s\n' "${tool}"
       ;;
     docker)
@@ -270,7 +290,7 @@ pacman_packages() {
     cilium|hubble)
       printf 'cilium-cli\n'
       ;;
-    curl|docker|git|helm|jq|kind|kubectl|kubectx|podman|podman-compose|shellcheck|starship|terragrunt|yamllint)
+    cosign|curl|deno|docker|git|helm|jq|kind|kubectl|kubectx|parallel|podman|podman-compose|ripgrep|ruff|shellcheck|starship|terragrunt|uv|yamllint)
       printf '%s\n' "$1"
       ;;
     gh)
@@ -329,6 +349,12 @@ apt_packages() {
       ;;
     yq)
       printf 'yq\n'
+      ;;
+    ripgrep)
+      printf 'ripgrep\n'
+      ;;
+    parallel)
+      printf 'parallel\n'
       ;;
     mkcert)
       printf 'mkcert libnss3-tools\n'

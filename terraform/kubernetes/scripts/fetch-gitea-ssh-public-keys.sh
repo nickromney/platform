@@ -45,6 +45,8 @@ wait_for_gitea_ssh() {
         -o jsonpath='{.subsets[0].ports[0].port}' 2>/dev/null || true
     )"
 
+    # shellcheck disable=SC2016 # the single-quoted body is the remote sh -c
+    # script; it takes ssh_target_port as $1 and must not expand locally.
     if [[ -n "${pod_name}" && -n "${ssh_target_port}" ]] && kubectl "${kubectl_args[@]}" -n "${namespace}" exec "${pod_name}" -- sh -c '
       ssh_target_port="$1"
       if command -v ss >/dev/null 2>&1; then
@@ -64,6 +66,7 @@ wait_for_gitea_ssh() {
   fail "Timed out waiting for Gitea SSH listener to become ready"
 }
 
+# shellcheck disable=SC2329 # invoked by name through the shell_cli_* helpers
 usage() {
   cat <<EOF
 Usage: ${0##*/} [--dry-run] [--execute]

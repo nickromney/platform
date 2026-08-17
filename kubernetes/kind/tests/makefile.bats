@@ -1584,8 +1584,12 @@ EOF
   run bash -lc "grep -A6 'ifneq (\$(KIND_DRY_RUN_REQUESTED),)' '${REPO_ROOT}/kubernetes/kind/Makefile'"
 
   [ "${status}" -eq 0 ]
-  # Both dangerous goals covered, and the refusal is a make-level $(error).
-  [[ "${output}" == *"filter plan apply,\$(MAKECMDGOALS)"* ]]
+  # The goal set is filtered from KIND_DRY_RUN_UNSAFE_GOALS, not spelled inline.
+  # This assertion named `plan apply` literally until #199 widened the guard to
+  # six targets via that variable, and went red unnoticed because this file sits
+  # outside CI_BATS_TESTS. Which goals are covered is asserted by the test below;
+  # here we only check the guard is wired to the list and refuses at make level.
+  [[ "${output}" == *"filter \$(KIND_DRY_RUN_UNSAFE_GOALS),\$(MAKECMDGOALS)"* ]]
   [[ "${output}" == *"\$(error"* ]]
 }
 

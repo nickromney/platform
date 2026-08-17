@@ -56,11 +56,24 @@ EOF
 
   cat >"${stub_bin}/curl" <<'EOF'
 #!/usr/bin/env bash
-# 2s rather than 1s so the timing bands below cannot be crossed by load. With
-# 3 providers at concurrency 2: unbounded finishes near 2s, bounded near 4s,
-# serial near 6s. At 1s those landmarks sat 1s apart and a busy machine failed
-# the test for being busy rather than for being wrong.
+# Records observed concurrency instead of leaning on wall-clock. The previous
+# version asserted an elapsed band (>=4s and <6s) derived from 3 providers at
+# concurrency 2 with a 2s sleep. Load inflates every one of those landmarks, so
+# under `make test-ci BATS_JOBS=auto` the test failed for the machine being busy
+# rather than for the code being wrong -- and no widening of the band fixes that,
+# because loaded-bounded and idle-serial overlap.
+#
+# Each invocation registers a marker for its lifetime and logs how many markers
+# exist while it holds one. The peak of that log is the concurrency actually
+# reached, which is the property under test and is independent of how fast the
+# box happens to be.
+marker_dir="${FAKE_CURL_MARKER_DIR:?}"
+mkdir -p "${marker_dir}"
+marker="${marker_dir}/$$"
+: >"${marker}"
+ls -1 "${marker_dir}" | wc -l | tr -d ' ' >>"${FAKE_CURL_CONCURRENCY_LOG:?}"
 sleep 2
+rm -f "${marker}"
 case "$*" in
   *"/hashicorp/aws/versions"*) printf '%s\n' '{"versions":[{"version":"1.0.1"}]}' ;;
   *"/hashicorp/azurerm/versions"*) printf '%s\n' '{"versions":[{"version":"1.0.1"}]}' ;;
@@ -70,18 +83,25 @@ esac
 EOF
   chmod +x "${stub_bin}/curl"
 
-  run bash -lc "export STACK_DIR='${stack_dir}' CHECK_PROVIDER_VERSION_CACHE_DIR='${cache_dir}' PLATFORM_PARALLEL_JOBS=2 PATH='${stub_bin}:'\"\$PATH\"; start=\$(date +%s); '${SCRIPT}' --execute >/tmp/check-provider-version.out; elapsed=\$(( \$(date +%s) - start )); cat /tmp/check-provider-version.out; printf 'elapsed=%s\n' \"\${elapsed}\""
+  # Output goes to BATS_TEST_TMPDIR, not a fixed /tmp path. The old fixed path
+  # meant two concurrent runs of this file clobbered each other's output.
+  local out_file="${BATS_TEST_TMPDIR}/check-provider-version.out"
+  local marker_dir="${BATS_TEST_TMPDIR}/curl-markers"
+  local concurrency_log="${BATS_TEST_TMPDIR}/curl-concurrency"
+  : >"${concurrency_log}"
+
+  run bash -lc "export STACK_DIR='${stack_dir}' CHECK_PROVIDER_VERSION_CACHE_DIR='${cache_dir}' PLATFORM_PARALLEL_JOBS=2 FAKE_CURL_MARKER_DIR='${marker_dir}' FAKE_CURL_CONCURRENCY_LOG='${concurrency_log}' PATH='${stub_bin}:'\"\$PATH\"; '${SCRIPT}' --execute >'${out_file}'; cat '${out_file}'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" =~ hashicorp/aws ]]
   [[ "${output}" =~ hashicorp/azurerm ]]
   [[ "${output}" =~ hashicorp/random ]]
-  # Integer comparison, not a regex: `elapsed=1|elapsed=2` is unanchored, so it
-  # also matched elapsed=10 and elapsed=20. The lower bound is the real claim --
-  # unbounded concurrency would finish in ~2s -- and the upper bound rejects
-  # serial execution at ~6s.
-  elapsed="$(printf '%s\n' "${output}" | sed -n 's/^elapsed=//p')"
-  [ -n "${elapsed}" ]
-  [ "${elapsed}" -ge 4 ]
-  [ "${elapsed}" -lt 6 ]
+  # The property, stated directly: fetches ran concurrently (peak > 1) but were
+  # capped at PLATFORM_PARALLEL_JOBS (peak <= 2). Serial execution peaks at 1;
+  # unbounded execution peaks at 3, the provider count.
+  local peak
+  peak="$(sort -n "${concurrency_log}" | tail -n 1)"
+  [ -n "${peak}" ]
+  [ "${peak}" -gt 1 ]
+  [ "${peak}" -le 2 ]
 }

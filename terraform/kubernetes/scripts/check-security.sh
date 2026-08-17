@@ -23,7 +23,7 @@ require_cmd() { command -v "$1" >/dev/null 2>&1 || fail "$1 not found in PATH"; 
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--var-file PATH]... [--dry-run] [--execute]
 
 Runs read-only security posture diagnostics for the cluster and gateway.

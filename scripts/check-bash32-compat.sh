@@ -12,15 +12,21 @@ MATCH_FILE="$(mktemp "${TMPDIR:-/tmp}/bash32-compat-matches.XXXXXX")"
 trap 'rm -f "${FILES_TO_SCAN}" "${MATCH_FILE}"' EXIT
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+  cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--dry-run] [--path PATH]...
 
-Scan tracked shell scripts for Bash 4+ constructs that are incompatible with
-macOS's stock Bash 3.2.
+Scan tracked shell scripts and makefiles for Bash 4+ constructs that are
+incompatible with macOS's stock Bash 3.2.
 
-Without arguments, the scan covers every tracked `*.sh` file in the repo.
-When one or more `--path` values are supplied, only those files/directories are
-scanned. Positional paths remain supported as compatibility shims.
+Without arguments, the scan covers every tracked `*.sh`, `Makefile`, and `*.mk`
+file in the repo. When one or more `--path` values are supplied, only those
+files/directories are scanned. Positional paths remain supported as
+compatibility shims.
+
+Makefiles are in scope because `mk/common.mk` and `mk/go-app-core.mk` pin
+`SHELL := /bin/bash`, so every recipe in the files that include them is Bash
+under test -- 5.x on Arch, 3.2 on macOS. Scanning only `*.sh` left that blind
+spot open in exactly the class of bug this check exists to catch.
 
 Options:
   --path PATH  Scan a specific file or directory instead of all tracked scripts
@@ -81,7 +87,8 @@ append_scan_path() {
   local candidate="$1"
 
   if [[ -d "${candidate}" ]]; then
-    find "${candidate}" -type f -name '*.sh' >> "${FILES_TO_SCAN}"
+    find "${candidate}" -type f \
+      \( -name '*.sh' -o -name 'Makefile' -o -name '*.mk' \) >> "${FILES_TO_SCAN}"
     return 0
   fi
 
@@ -90,13 +97,14 @@ append_scan_path() {
 
 build_tracked_shell_script_list() {
   if command -v git >/dev/null 2>&1 && git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    git -C "${REPO_ROOT}" ls-files -- '*.sh' | sed "s|^|${REPO_ROOT}/|" > "${FILES_TO_SCAN}"
+    git -C "${REPO_ROOT}" ls-files -- '*.sh' 'Makefile' '*/Makefile' '*.mk' |
+      sed "s|^|${REPO_ROOT}/|" > "${FILES_TO_SCAN}"
     return 0
   fi
 
   find "${REPO_ROOT}" \
     \( -path '*/.git' -o -path '*/node_modules' -o -path '*/.run' -o -path '*/.terraform' -o -path '*/.venv' -o -path '*/venv' -o -path '*/dist' -o -path '*/build' \) -prune \
-    -o -type f -name '*.sh' -print > "${FILES_TO_SCAN}"
+    -o -type f \( -name '*.sh' -o -name 'Makefile' -o -name '*.mk' \) -print > "${FILES_TO_SCAN}"
 }
 
 shell_cli_init_standard_flags
@@ -132,7 +140,7 @@ if [[ "${#scan_paths[@]}" -gt 0 ]]; then
     "would scan ${#scan_paths[@]} explicit path(s) for Bash 3.2 compatibility"
 else
   shell_cli_maybe_execute_or_preview_summary usage \
-    "would scan all tracked *.sh files for Bash 3.2 compatibility"
+    "would scan all tracked *.sh, Makefile, and *.mk files for Bash 3.2 compatibility"
 fi
 
 if [[ "${#scan_paths[@]}" -gt 0 ]]; then
@@ -154,7 +162,7 @@ done < "${FILES_TO_SCAN}"
 if [[ "${#issues[@]}" -gt 0 ]]; then
   printf 'FAIL Bash 3.2 compatibility: incompatible constructs found in tracked shell scripts:\n' >&2
   printf '  %s\n' "${issues[@]}" >&2
-  printf 'Use only Bash 3.2-compatible features in tracked *.sh files.\n' >&2
+  printf 'Use only Bash 3.2-compatible features in tracked *.sh, Makefile, and *.mk files.\n' >&2
   exit 1
 fi
 
