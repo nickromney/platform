@@ -1,6 +1,9 @@
 #!/usr/bin/env bats
 
 setup() {
+  # The fake port-forward writes its line immediately, so a one-second poll
+  # spends most of a second per invocation confirming something already true.
+  export HUBBLE_RELAY_READY_POLL_SECONDS="0.05"
   local source_repo_root
 
   export REPO_ROOT
