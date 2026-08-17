@@ -117,7 +117,10 @@ EOF
     skip "timeout is required"
   fi
 
-  run env KUBECONFIG="${KIND_KUBECONFIG}" timeout 300 "${SCRIPT}" --execute
+  # This test only verifies the kind rows. CI has no live cluster, and the
+  # script's --ci mode avoids unrelated cluster and Docker probes that can
+  # consume the whole test timeout on a slow runner.
+  run env KUBECONFIG="${KIND_KUBECONFIG}" timeout 300 "${SCRIPT}" --ci --execute
 
   [ "${status}" -eq 0 ]
   [[ "${output}" =~ Kind\ versions ]]

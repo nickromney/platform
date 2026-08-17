@@ -9,7 +9,9 @@ setup() {
 }
 
 @test "lima help documents the stage-first workflow" {
-  run make -C "${REPO_ROOT}/kubernetes/lima" help
+  # GNU make prints the -C directory banner before it reads the Makefile, so
+  # MAKEFLAGS set inside the Makefile cannot suppress it for this invocation.
+  run make --no-print-directory -C "${REPO_ROOT}/kubernetes/lima" help
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"make 100 apply"* ]]
