@@ -1356,7 +1356,7 @@ start_shared_hubble_relay() {
       fail "shared Hubble relay port-forward exited before becoming ready"
     fi
 
-    sleep 1
+    sleep "${HUBBLE_RELAY_READY_POLL_SECONDS}"
   done
 
   [[ -s "${SHARED_HUBBLE_RELAY_LOG}" ]] && cat "${SHARED_HUBBLE_RELAY_LOG}" >&2
@@ -2634,6 +2634,12 @@ iterations="3"
 namespace_workers="1"
 sleep_between="0"
 progress_every="10"
+# How often to re-read the port-forward log while waiting for it to report a
+# port. The deadline above is 15s; this is only the polling granularity, so a
+# fast local forward is detected sooner and the tests do not pay a full second
+# per invocation to discover something that is already true. Overridable because
+# a fractional sleep is fine on macOS and Linux but not guaranteed by POSIX.
+HUBBLE_RELAY_READY_POLL_SECONDS="${HUBBLE_RELAY_READY_POLL_SECONDS:-1}"
 row_threshold="100"
 capture_mode="flows"
 world_egress_mode="observed"

@@ -8,6 +8,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/lib/shell-cli.sh"
 
 SHELLCHECK_BIN="${SHELLCHECK_BIN:-shellcheck}"
+TOOLCHAIN_VERSIONS_FILE="${TOOLCHAIN_VERSIONS_FILE:-${REPO_ROOT}/.devcontainer/toolchain-versions.sh}"
 INSTALL_HINTS_SCRIPT="${INSTALL_HINTS_SCRIPT:-${REPO_ROOT}/scripts/install-tool-hints.sh}"
 
 usage() {
@@ -72,7 +73,25 @@ if [[ "${#shell_files[@]}" -eq 0 ]]; then
   exit 0
 fi
 
-echo "OK   $("${SHELLCHECK_BIN}" --version | awk '/^version:/ { print "shellcheck " $2 }')"
+# A clean run means nothing without the version that produced it. shellcheck
+# 0.9.0 emits SC2317 where 0.11.0 does not: PR #201 was clean on every developer
+# machine and failed CI with 449 findings, because CI took shellcheck from the
+# runner image while every other tool in that job was pinned. Report the version,
+# and say so plainly when it is not the pinned one.
+running_version="$("${SHELLCHECK_BIN}" --version | awk '/^version:/ { print $2 }')"
+expected_version=""
+if [[ -r "${TOOLCHAIN_VERSIONS_FILE}" ]]; then
+  # shellcheck source=/dev/null
+  source "${TOOLCHAIN_VERSIONS_FILE}" 2>/dev/null || true
+  expected_version="${SHELLCHECK_VERSION#v}"
+fi
+
+echo "OK   shellcheck ${running_version}"
+if [[ -n "${expected_version}" && "${running_version}" != "${expected_version}" ]]; then
+  echo "WARN this is not the pinned shellcheck (${expected_version}); a clean run here" >&2
+  echo "     does not mean CI will be clean, and a finding here may not be real." >&2
+  echo "     Pin: SHELLCHECK_VERSION in ${TOOLCHAIN_VERSIONS_FILE#"${REPO_ROOT}/"}" >&2
+fi
 echo "INFO checking ${#shell_files[@]} tracked shell script(s)"
 
 failed=0

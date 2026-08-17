@@ -63,3 +63,34 @@ PY
 
   [ "${status}" -eq 0 ]
 }
+
+@test "CI pins every lint tool, including shellcheck" {
+  # shellcheck was the one lint tool with no pinned version anywhere: brew on
+  # macOS, apt in the devcontainer, and whatever ubuntu-latest shipped in CI.
+  # PR #201 passed locally on 0.11.0 and failed CI on 0.9.0 with 449 SC2317
+  # findings -- a check 0.9.0 emits and later versions do not. No local run could
+  # have reproduced it, because "clean" silently meant "clean on this version".
+  run grep -c 'SHELLCHECK_VERSION' "${REPO_ROOT}/.devcontainer/toolchain-versions.sh"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" -ge 1 ]
+
+  # Installed from the pin, not inherited from the runner image.
+  run grep -cE 'shellcheck-\$\{SHELLCHECK_VERSION\}\.linux' "${REPO_ROOT}/.github/workflows/ci.yml"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" -ge 1 ]
+}
+
+@test "no lint tool is installed in CI without a version" {
+  # Generalises the above. Every tool the lint job installs is pinned by an
+  # explicit version, a *_VERSION variable, or an @/== specifier. A bare
+  # `apt-get install <tool>` or a reliance on the image is what this catches.
+  run bash -lc "
+    grep -nE '^\s+(uv tool install|npm install --global) ' '${REPO_ROOT}/.github/workflows/ci.yml' |
+      grep -vE '(==|@)[0-9]' || true
+  "
+
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}

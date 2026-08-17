@@ -13,6 +13,16 @@ ARKADE_VERSION="${ARKADE_VERSION:-0.11.116}"
 BUN_VERSION="${BUN_VERSION:-bun-v1.3.14}"
 KYVERNO_VERSION="${KYVERNO_VERSION:-v1.18.2}"
 LEFTHOOK_VERSION="${LEFTHOOK_VERSION:-v2.1.10}"
+# The linter itself was the only lint tool here with no pinned version, in any
+# environment: brew on macOS, apt in the devcontainer, and whatever
+# ubuntu-latest happened to ship in CI. That is how PR #201 passed locally on
+# 0.11.0 and failed CI on 0.9.0 with 449 SC2317 findings -- a check 0.9.0 emits
+# and later versions do not.
+#
+# Note the wording above: a comment starting with the word "shellcheck" right
+# after the hash is parsed as a DIRECTIVE, not prose, and fails with SC1073.
+# This comment said exactly that and broke the file it documents.
+SHELLCHECK_VERSION="${SHELLCHECK_VERSION:-v0.11.0}"
 LIMA_VERSION="${LIMA_VERSION:-v2.2.0}"
 MKCERT_VERSION="${MKCERT_VERSION:-v1.4.4}"
 OPENTOFU_VERSION="${OPENTOFU_VERSION:-1.12.5}"

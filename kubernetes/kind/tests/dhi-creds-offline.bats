@@ -8,6 +8,12 @@ setup() {
   export DOCKER_CONFIG="${BATS_TEST_TMPDIR}/docker"
   export PLATFORM_DOCKER_CREDS_FILE="${BATS_TEST_TMPDIR}/platform/docker-creds.json"
   export PLATFORM_DOCKER_CREDENTIAL_HELPER_BIN_DIR="${TEST_BIN}"
+  # Pin the source helper instead of inheriting the OS default. #195 made
+  # dhi-creds-offline.sh choose `desktop` on Darwin and `secretservice` on Linux,
+  # but every test here stubs docker-credential-desktop -- so on Linux the script
+  # looked for a helper nothing had installed and failed, while passing on macOS.
+  # This is the OS-branch the script exposes the override for.
+  export PLATFORM_DHI_SOURCE_HELPER="desktop"
   mkdir -p "${TEST_BIN}" "${DOCKER_CONFIG}"
   export PATH="${TEST_BIN}:${PATH}"
 }

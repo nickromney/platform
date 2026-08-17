@@ -1,6 +1,11 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
+# Keep recursive $(MAKE) calls quiet under GNU make. The top-level `-C` banner is
+# emitted before this file is parsed, so callers that assert clean help output
+# must also pass `--no-print-directory` on the command line.
+MAKEFLAGS += --no-print-directory
+
 STACK_DIR := ../../terraform/kubernetes
 STACK_RUNTIME_SCOPE := lima
 STACK_RUNTIME_DIR := $(abspath $(STACK_DIR)/.run/$(STACK_RUNTIME_SCOPE))
