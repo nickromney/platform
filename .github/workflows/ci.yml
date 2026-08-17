@@ -87,11 +87,13 @@ jobs:
               go_arch="amd64"
               kyverno_arch="x86_64"
               uv_arch="x86_64"
+              shellcheck_arch="x86_64"
               ;;
             aarch64|arm64)
               go_arch="arm64"
               kyverno_arch="arm64"
               uv_arch="aarch64"
+              shellcheck_arch="aarch64"
               ;;
             *)
               printf 'unsupported architecture: %s\n' "$(uname -m)" >&2
@@ -139,6 +141,16 @@ jobs:
             "${tmp_dir}/yq_linux_${go_arch}" \
             /usr/local/bin/yq
 
+          # Pinned like every other tool here. Left to the runner image this was
+          # 0.9.0, which emits SC2317 ("Command appears to be unreachable") where
+          # 0.11.0 does not -- 449 findings that no local run could reproduce.
+          shellcheck_archive="shellcheck-${SHELLCHECK_VERSION}.linux.${shellcheck_arch}.tar.xz"
+          curl -fsSL \
+            "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/${shellcheck_archive}" \
+            | tar -xJ -C "${tmp_dir}" --strip-components=1 \
+              "shellcheck-${SHELLCHECK_VERSION}/shellcheck"
+          sudo install -m 0755 "${tmp_dir}/shellcheck" /usr/local/bin/shellcheck
+
           kyverno_archive="kyverno-cli_${KYVERNO_VERSION}_linux_${kyverno_arch}.tar.gz"
           curl -fsSL \
             "https://github.com/kyverno/kyverno/releases/download/${KYVERNO_VERSION}/${kyverno_archive}" \
@@ -174,6 +186,7 @@ jobs:
           kyverno version
           yamllint --version
           ruff --version
+          shellcheck --version | sed -n 's/^version: /shellcheck /p'
           markdownlint-cli2 --version
           biome --version
           deno --version

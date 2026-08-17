@@ -518,3 +518,25 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"OK   shellcheck"* ]]
 }
+
+@test "no empty .shellcheckrc, which would silently shadow a real one" {
+  # shellcheck walks up from the checked file's directory and the FIRST rc it
+  # finds wins -- there is no merging. So an empty .shellcheckrc at the repo root
+  # is not a no-op: it suppresses nothing itself AND masks any valid rc further
+  # up. Measured with 0.9.0 in a container: empty root rc + valid $HOME rc gives
+  # 388 findings, where the $HOME rc alone gives 0.
+  #
+  # This exists because a zero-byte .shellcheckrc was committed here by accident
+  # and would have been published had the push not failed first.
+  local rc="${REPO_ROOT}/.shellcheckrc"
+
+  if [ -e "${rc}" ]; then
+    [ -s "${rc}" ] || {
+      echo "${rc} is empty; it suppresses nothing and shadows any other rc" >&2
+      return 1
+    }
+    run grep -cE '^[[:space:]]*(disable|enable|source-path|external-sources|shell)=' "${rc}"
+    [ "${status}" -eq 0 ]
+    [ "${output}" -ge 1 ]
+  fi
+}
