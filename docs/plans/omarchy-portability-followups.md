@@ -2114,3 +2114,45 @@ Recorded so the next pass does not repeat them:
 - The lefthook escape hatch (`PLATFORM_SKIP_HOOKS=1`) prints a warning rather
   than skipping silently.
 - No other `make -n` caller in the repo targets a goal the lima guard refuses.
+
+## 21. The Local Make Is Not The CI Make
+
+`kubernetes/lima/tests/makefile.bats` asserted its help output names no `$HOME`,
+passed on every macOS run, and failed on CI. The cause is not the test:
+
+- GNU make turns on `-w` automatically when you use `-C`, so `make -C
+  kubernetes/lima help` prints `Entering directory '<abspath>'`.
+- Every GitHub runner checks out under `/home/runner/work/...`, so that abspath
+  contains `$HOME` and the assertion fails.
+- **Apple ships make 3.81, which does not emit those lines. Ubuntu ships 4.x,
+  which does.** No local run could reproduce it.
+
+Section 1 recorded exactly this failure for the *kind* help test in 2026-08-13
+and fixed it with `--no-print-directory`. lima was never given the same flag, so
+it broke the same way when it entered the gate. It now has it, guarded by
+`tests/makefile.bats` asserting both stack Makefiles set it.
+
+### Reproducing CI's make locally
+
+This is the general lesson, and it is cheap:
+
+```bash
+brew install make                                     # GNU make 4.x as `gmake`
+PATH="/opt/homebrew/opt/make/libexec/gnubin:$PATH" make test-ci
+```
+
+Run that way the whole suite is **1096/1096**, and it catches the `-w` class
+before a push rather than after. Worth doing before any change to a Makefile's
+output, because the difference is invisible otherwise -- three separate CI
+failures in this line of work came from a tool version differing between the
+workstation and the runner:
+
+| Tool | Workstation | CI | Symptom |
+| --- | --- | --- | --- |
+| shellcheck | 0.11.0 | 0.9.0 | 449 SC2317 findings (section 20 follow-up) |
+| stat | BSD | GNU | `stat -f` succeeds with the wrong answer instead of failing over |
+| make | 3.81 | 4.4 | `-C` prints a directory banner containing `$HOME` |
+
+shellcheck is now pinned. make and stat are host tools that cannot be, so the
+answer for those is to run the suite under the other implementation before
+pushing.

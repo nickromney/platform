@@ -1,6 +1,16 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
+# `-C` implies `-w` in GNU make, so `make -C kubernetes/lima help` prints
+# "Entering directory '<abspath>'" -- and the abspath contains $HOME for anyone
+# whose checkout lives under it, including every GitHub runner
+# (/home/runner/work/...). The help test asserts the output names no $HOME, so it
+# failed on CI while passing on every macOS box, because Apple's make is 3.81 and
+# does not emit those lines while GNU make 4.x does. kind gained this flag when
+# the same test broke there; lima was missed. See section 1 of
+# docs/plans/omarchy-portability-followups.md.
+MAKEFLAGS += --no-print-directory
+
 STACK_DIR := ../../terraform/kubernetes
 STACK_RUNTIME_SCOPE := lima
 STACK_RUNTIME_DIR := $(abspath $(STACK_DIR)/.run/$(STACK_RUNTIME_SCOPE))

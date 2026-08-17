@@ -770,3 +770,25 @@ EOF
   [ "${status}" -eq 0 ]
   [ "${output}" = $'release --dry-run 0.3.0\nrelease --dry-run 0.3.0\ntag --dry-run 0.3.0' ]
 }
+
+@test "stack Makefiles suppress make's directory banner" {
+  # `-C` implies `-w` in GNU make, so `make -C <stack> help` prints
+  # "Entering directory '<abspath>'". Both stack help tests assert their output
+  # names no $HOME, and every GitHub runner checks out under /home/runner -- so
+  # the banner fails those tests on CI while passing locally, because Apple ships
+  # make 3.81 (no banner) and Ubuntu ships 4.x (banner).
+  #
+  # kind gained this flag when the test broke there; lima was missed and broke
+  # the same way months later. Asserting it for both is cheaper than rediscovering
+  # it a third time. To reproduce locally: brew install make, then run with
+  # /opt/homebrew/opt/make/libexec/gnubin first on PATH.
+  local makefile
+  for makefile in kubernetes/kind/Makefile kubernetes/lima/Makefile; do
+    run grep -cE '^MAKEFLAGS \+= --no-print-directory$' "${REPO_ROOT}/${makefile}"
+    [ "${status}" -eq 0 ] || {
+      echo "${makefile} does not set MAKEFLAGS += --no-print-directory" >&2
+      return 1
+    }
+    [ "${output}" -ge 1 ]
+  done
+}
