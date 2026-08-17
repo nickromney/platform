@@ -12,7 +12,13 @@ setup() {
 
   [ "${status}" -eq 0 ]
   [ -f "${PLATFORM_DOCKER_CREDS_FILE}" ]
-  [ "$(stat -f '%Lp' "${PLATFORM_DOCKER_CREDS_FILE}" 2>/dev/null || stat -c '%a' "${PLATFORM_DOCKER_CREDS_FILE}")" = "600" ]
+  # GNU first, BSD second -- and the order is the whole point. The reverse reads
+  # like the `date -u -r ... || date -u -d ...` idiom used elsewhere here, but it
+  # is not equivalent: GNU `stat -f` means --file-system, so it SUCCEEDS and
+  # prints a filesystem dump instead of failing over. The `||` never fires and
+  # the comparison is against that dump. BSD `stat -c` really does fail
+  # ("illegal option -- c"), so this ordering fails over correctly on both.
+  [ "$(stat -c '%a' "${PLATFORM_DOCKER_CREDS_FILE}" 2>/dev/null || stat -f '%Lp' "${PLATFORM_DOCKER_CREDS_FILE}")" = "600" ]
 
   run bash -c "printf '%s' 'dhi.io' | '${SCRIPT}' get"
 
