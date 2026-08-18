@@ -1,7 +1,9 @@
 # tool	source	pin
 arkade	github:alexellis/arkade	ARKADE_VERSION
+biome	audit-only	BIOME_VERSION
 bun	github:oven-sh/bun	BUN_VERSION
 cilium	github:cilium/cilium-cli	ARKADE:cilium
+deno	github:denoland/deno	DENO_VERSION
 helm	github:helm/helm	ARKADE:helm
 hubble	github:cilium/hubble	ARKADE:hubble
 jq	github:jqlang/jq	ARKADE:jq
@@ -13,8 +15,10 @@ kubie	github:sbstp/kubie	ARKADE:kubie
 kyverno	github:kyverno/kyverno	KYVERNO_VERSION
 lefthook	github:evilmartians/lefthook	LEFTHOOK_VERSION
 lima	github:lima-vm/lima	LIMA_VERSION
+markdownlint-cli2	audit-only	MARKDOWNLINT_CLI2_VERSION
 mkcert	github:FiloSottile/mkcert	MKCERT_VERSION
 opentofu	github:opentofu/opentofu	OPENTOFU_VERSION
+ruff	github:astral-sh/ruff	RUFF_VERSION
 starship	github:starship/starship	STARSHIP_VERSION
 step	github:smallstep/cli	STEP_VERSION
 terragrunt	github:gruntwork-io/terragrunt	ARKADE:terragrunt

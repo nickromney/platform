@@ -30,6 +30,20 @@ STARSHIP_VERSION="${STARSHIP_VERSION:-v1.26.0}"
 STEP_VERSION="${STEP_VERSION:-v0.30.6}"
 VIM_SENSIBLE_REF="${VIM_SENSIBLE_REF:-0ce2d843d6f588bb0c8c7eec6449171615dc56d9}"
 
+# Host lint/format toolchain. These are resolved per platform by
+# scripts/install-tool-hints.sh (mise/brew/pacman/...), not by this
+# devcontainer's arkade sweep, so they need explicit pins to land the whole
+# support matrix (macOS, Ubuntu, Arch, and the cloud VM host) on the same
+# cooldown-cleared version rather than "@latest". ruff and deno resolve their
+# newest cooldown-eligible release through the github source in
+# toolchain-sources.tsv; biome and markdownlint-cli2 are audit-only there
+# because biome tags carry an "@biomejs/biome@" prefix and markdownlint-cli2
+# ships on npm, neither of which the github release resolver understands.
+RUFF_VERSION="${RUFF_VERSION:-0.16.2}"
+DENO_VERSION="${DENO_VERSION:-v2.9.5}"
+BIOME_VERSION="${BIOME_VERSION:-2.5.8}"
+MARKDOWNLINT_CLI2_VERSION="${MARKDOWNLINT_CLI2_VERSION:-0.23.2}"
+
 # shellcheck disable=SC2034 # sourced by install/check scripts that consume the version matrix
 DEVCONTAINER_ARKADE_TOOLS=(
   "cilium=v0.19.7"
