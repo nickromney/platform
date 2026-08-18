@@ -288,7 +288,7 @@ func (s *server) verifiedSelection(w http.ResponseWriter, r *http.Request) (work
 }
 
 func (s *server) previewResult(ctx context.Context, selection workflowSelection) (map[string]string, error) {
-	args := append([]string{filepath.Join(s.repoRoot, "scripts", "platform-workflow.sh")}, workflowArgs(s.options, selection, "preview", "--execute")...)
+	args := workflowCommand(s.repoRoot, s.options, selection, previewSubcommand, "--execute")
 	args = append(args, "--output", "json")
 	result := runCommand(ctx, s.repoRoot, args)
 	if result.err != nil {
@@ -464,6 +464,26 @@ func selectionFromForm(options optionsPayload, r *http.Request) workflowSelectio
 	return selection
 }
 
+// The workflow core takes a positional subcommand (options|preview|apply|
+// save-profile) and a separate --action flag (plan|status|check-health|...).
+// The two vocabularies overlap only on "apply", so an action used in the
+// subcommand position dies with "Unknown subcommand" for every other action.
+// Naming both positions keeps them from being interchanged again.
+const (
+	previewSubcommand = "preview"
+	runSubcommand     = "apply"
+)
+
+// workflowCommand builds the full argv for one workflow-core invocation. Both
+// the preview path and the run path go through here so that the subcommand is
+// chosen in exactly one place.
+func workflowCommand(repoRoot string, options optionsPayload, selection workflowSelection, subcommand, standardFlag string) []string {
+	return append(
+		[]string{filepath.Join(repoRoot, "scripts", "platform-workflow.sh")},
+		workflowArgs(options, selection, subcommand, standardFlag)...,
+	)
+}
+
 func workflowArgs(options optionsPayload, selection workflowSelection, subcommand, standardFlag string) []string {
 	args := []string{subcommand, standardFlag, "--variant", variantToTarget(options, selection.Variant), "--stage", selection.Stage, "--action", selection.Action}
 	for field, value := range selection.Presets {
@@ -560,7 +580,7 @@ func (s *jobStore) start(repoRoot string, selection workflowSelection, historyID
 	if selection.DryRun {
 		standardFlag = "--dry-run"
 	}
-	command := append([]string{filepath.Join(repoRoot, "scripts", "platform-workflow.sh")}, workflowArgs(loadOptionsMust(repoRoot), selection, selection.Action, standardFlag)...)
+	command := workflowCommand(repoRoot, loadOptionsMust(repoRoot), selection, runSubcommand, standardFlag)
 	job := &workflowJob{ID: id, Payload: selection, Command: command, StartedAt: time.Now()}
 	s.mu.Lock()
 	s.jobs[id] = job
