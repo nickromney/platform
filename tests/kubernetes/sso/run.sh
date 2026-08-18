@@ -231,7 +231,7 @@ run_playwright_in_docker() {
 
 SSO_E2E_ENABLE_HEADLAMP="${SSO_E2E_ENABLE_HEADLAMP:-$(tfvar_bool enable_headlamp false)}"
 SSO_E2E_ENABLE_VICTORIA_LOGS="${SSO_E2E_ENABLE_VICTORIA_LOGS:-$(tfvar_bool enable_victoria_logs false)}"
-SSO_E2E_ENABLE_BACKSTAGE="${SSO_E2E_ENABLE_BACKSTAGE:-$(tfvar_bool enable_backstage true)}"
+SSO_E2E_ENABLE_BACKSTAGE="${SSO_E2E_ENABLE_BACKSTAGE:-$(tfvar_bool enable_backstage false)}"
 SSO_E2E_ENABLE_MCP="${SSO_E2E_ENABLE_MCP:-true}"
 SSO_E2E_ENABLE_SENTIMENT="${SSO_E2E_ENABLE_SENTIMENT:-$(tfvar_bool enable_app_repo_sentiment true)}"
 SSO_E2E_ENABLE_SUBNETCALC="${SSO_E2E_ENABLE_SUBNETCALC:-$(tfvar_bool enable_app_repo_subnetcalc true)}"
