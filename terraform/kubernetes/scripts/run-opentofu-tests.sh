@@ -8,7 +8,53 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${DEFAULT_MODULE_DIR}/../.." && pwd)}"
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 MODULE_DIR="${TOFU_TEST_MODULE_DIR:-${STACK_DIR:-${DEFAULT_MODULE_DIR}}}"
-TEST_FILTER="${TOFU_TEST_FILTER:-}"
+# tofu/terraform `test -filter=` is repeatable, so this is an array. The
+# TOFU_TEST_FILTER env var stays single-valued for backward compatibility;
+# TOFU_TEST_FILTERS takes a space-separated list. Repeating --filter is what
+# lets the gate run a fast tier without inventing a second runner.
+TEST_FILTERS=()
+if [[ -n "${TOFU_TEST_FILTER:-}" ]]; then
+  TEST_FILTERS+=("${TOFU_TEST_FILTER}")
+fi
+
+# The gate tier. Full suite measured 2026-08-17 at 231s -- a third of the whole
+# bats gate again -- so `make test-ci` runs this subset and the full suite runs
+# on demand or when the Terraform module changes.
+#
+# Chosen for what they catch cheaply rather than for being the fastest files:
+#   validations  the 35 `check` blocks in variables.tf driven through
+#                expect_failures -- the module's input contract, and the only
+#                place it is enforced. 42.3s / 16 runs.
+#   smoke        the module still plans at all. 1.0s / 1 run.
+# Together 43s, +6% on the gate. Everything else is behavioural depth that an
+# unrelated edit is unlikely to break, and is covered by the full tier.
+#
+# Membership is asserted complete by tests/opentofu-tier.bats: every tracked
+# .tftest.hcl must be in this list or in FULL_ONLY_TIER, so a new test file
+# cannot land outside both.
+FAST_TIER=(
+  tests/validations.tftest.hcl
+  tests/smoke.tftest.hcl
+)
+# shellcheck disable=SC2034  # read by tests/opentofu-tier.bats, not by this script
+FULL_ONLY_TIER=(
+  tests/argocd_health_customizations.tftest.hcl
+  tests/bootstrap_app_of_apps.tftest.hcl
+  tests/direct_workload_apps.tftest.hcl
+  tests/gitops_features.tftest.hcl
+  tests/headlamp.tftest.hcl
+  tests/langfuse.tftest.hcl
+  tests/registry_secrets.tftest.hcl
+  tests/resource_bounds.tftest.hcl
+  tests/runtime_artifact_scope.tftest.hcl
+  tests/security.tftest.hcl
+  tests/sso_oidc.tftest.hcl
+  tests/toggles.tftest.hcl
+)
+if [[ -n "${TOFU_TEST_FILTERS:-}" ]]; then
+  # shellcheck disable=SC2206  # deliberate word-splitting: space-separated list
+  TEST_FILTERS+=(${TOFU_TEST_FILTERS})
+fi
 TIMEOUT_SECONDS="${TOFU_TEST_TIMEOUT_SECONDS:-180}"
 TERRAFORM_BINARY="${TOFU_TEST_BINARY:-${TERRAFORM_TEST_BINARY:-tofu}}"
 EXTRA_VALIDATION="${TERRAFORM_TEST_EXTRA_VALIDATION:-${TOFU_TEST_EXTRA_VALIDATION:-${TERRAFORM_TEST_1_15_VALIDATION:-auto}}}"
@@ -25,7 +71,8 @@ explicit init step and a hard wall-clock bound.
 
 Options:
   --module-dir PATH          Terraform/OpenTofu module directory (default: ${DEFAULT_MODULE_DIR})
-  --filter FILTER            Optional tofu test filter passed as -filter=FILTER
+  --filter FILTER            Optional tofu test filter passed as -filter=FILTER (repeatable)
+  --tier fast|full          Run the gate subset (fast) or every test file (full)
   --timeout-seconds SECONDS  Timeout for each tofu command (default: ${TIMEOUT_SECONDS})
   --binary NAME              Terraform-compatible CLI binary (default: ${TERRAFORM_BINARY})
   --extra-validation auto|on|off
@@ -63,7 +110,22 @@ parse_args() {
           shell_cli_missing_value "${script_name}" "$1"
           return 1
         fi
-        TEST_FILTER="$2"
+        TEST_FILTERS+=("$2")
+        shift 2
+        ;;
+      --tier)
+        if [[ $# -lt 2 ]]; then
+          shell_cli_missing_value "${script_name}" "$1"
+          return 1
+        fi
+        case "$2" in
+          fast) TEST_FILTERS+=("${FAST_TIER[@]}") ;;
+          full) : ;; # no filters == every test file
+          *)
+            printf 'unknown tier: %s (expected fast or full)\n' "$2" >&2
+            return 1
+            ;;
+        esac
         shift 2
         ;;
       --timeout-seconds)
@@ -152,8 +214,11 @@ preview() {
   local summary
 
   summary="would run ${TERRAFORM_BINARY} init -backend=false -input=false and bounded ${TERRAFORM_BINARY} test in ${MODULE_DIR}"
-  if [[ -n "${TEST_FILTER}" ]]; then
-    summary="${summary} -filter=${TEST_FILTER}"
+  if [[ "${#TEST_FILTERS[@]}" -gt 0 ]]; then
+    local filter
+    for filter in "${TEST_FILTERS[@]}"; do
+      summary="${summary} -filter=${filter}"
+    done
   fi
   if [[ "${EXTRA_VALIDATION}" != "off" ]]; then
     summary="${summary}; extra validation mode=${EXTRA_VALIDATION}"
@@ -327,8 +392,11 @@ run_opentofu_tests() {
   fi
 
   test_args=("${TERRAFORM_BINARY}" "-chdir=${MODULE_DIR}" test)
-  if [[ -n "${TEST_FILTER}" ]]; then
-    test_args+=("-filter=${TEST_FILTER}")
+  if [[ "${#TEST_FILTERS[@]}" -gt 0 ]]; then
+    local filter
+    for filter in "${TEST_FILTERS[@]}"; do
+      test_args+=("-filter=${filter}")
+    done
   fi
   json_log_arg="$(json_log_arg_for test)"
   if [[ -n "${json_log_arg}" ]]; then

@@ -11,6 +11,16 @@ AUDIT_SHELL_SCRIPTS_SCRIPT ?= scripts/audit-shell-scripts.sh
 LINT_SHELLCHECK_SCRIPT ?= scripts/lint-shellcheck.sh
 VALIDATE_CILIUM_POLICIES_SCRIPT ?= scripts/validate-cilium-policies.sh
 VALIDATE_KYVERNO_POLICIES_SCRIPT ?= scripts/validate-kyverno-policies.sh
+# The linters `make lint` runs, in order. This is the single source of truth:
+# the composite recipe is generated from it, so a linter cannot be dropped by
+# deleting one line and leaving the rest green. tests/lint-wiring.bats holds it
+# to the lint-* targets below and to the scripts/lint-*.sh files on disk.
+LINTERS := yaml markdown python bash32 shell shellcheck cilium kyverno
+# lint-*-live run the same validators in --mode live against a running cluster,
+# so they cannot be part of a composite that has to work on a laptop with
+# nothing up. Named here so the wiring gate can tell a deliberate exclusion from
+# a linter that quietly fell out of LINTERS.
+LINTERS_NOT_IN_COMPOSITE := cilium-live kyverno-live
 FMT_MARKDOWN_SCRIPT ?= scripts/fmt-markdown.sh
 FMT_HCL_SCRIPT ?= scripts/fmt-hcl.sh
 CHECK_VERSION_SCRIPT ?= scripts/check-repo-version.sh
@@ -186,6 +196,7 @@ CI_BATS_TESTS := \
 	tests/langfuse-demos.bats \
 	tests/lint-markdown.bats \
 	tests/lint-python.bats \
+	tests/lint-wiring.bats \
 	tests/lint-yaml.bats \
 	tests/local-idp-container-images.bats \
 	tests/local-idp-contracts.bats \
@@ -195,6 +206,7 @@ CI_BATS_TESTS := \
 	tests/makefile.bats \
 	tests/observability-log-quality.bats \
 	tests/opentofu-test-runner.bats \
+	tests/opentofu-tier.bats \
 	tests/operator-diagnostics.bats \
 	tests/parallel.bats \
 	tests/platform-inventory.bats \
@@ -380,14 +392,7 @@ hooks:
 	@echo "Skip one git command with: LEFTHOOK=0 git <command> or --no-verify"
 
 lint:
-	@$(MAKE) --no-print-directory lint-yaml
-	@$(MAKE) --no-print-directory lint-markdown
-	@$(MAKE) --no-print-directory lint-python
-	@$(MAKE) --no-print-directory lint-bash32
-	@$(MAKE) --no-print-directory lint-shell
-	@$(MAKE) --no-print-directory lint-shellcheck
-	@$(MAKE) --no-print-directory lint-cilium
-	@$(MAKE) --no-print-directory lint-kyverno
+	@$(foreach linter,$(LINTERS),$(MAKE) --no-print-directory lint-$(linter) &&) :
 
 fmt:
 	@$(MAKE) --no-print-directory fmt-markdown

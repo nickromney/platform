@@ -8,7 +8,12 @@ setup() {
   mkdir -p "${TEST_BIN}"
 }
 
-@test "lint-markdown skips cleanly when no markdownlint binary is installed" {
+# Changed 2026-08-17 from "skips cleanly" to "fails". The old contract meant
+# `make lint` was green on any host without markdownlint while all 94 tracked
+# Markdown files went unchecked, and the exit code could not tell you which had
+# happened. Its three siblings -- lint-yaml, lint-python, lint-shellcheck -- all
+# hard-fail on a missing tool; this is now the fourth.
+@test "lint-markdown fails when no markdownlint binary is installed" {
   cat >"${TEST_BIN}/git" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -28,8 +33,8 @@ EOF
     GIT_BIN=git \
     /bin/bash "${SCRIPT}" --execute
 
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"WARN markdownlint not found in PATH; skipping tracked Markdown lint"* ]]
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"FAIL markdownlint not found in PATH"* ]]
 }
 
 @test "lint-markdown uses the repo config with tracked markdown files" {

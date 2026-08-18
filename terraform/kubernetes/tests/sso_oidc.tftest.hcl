@@ -278,8 +278,8 @@ run "app_sso_cookies_are_environment_scoped" {
 
   assert {
     condition = alltrue([
-      length(kubectl_manifest.argocd_app_oauth2_proxy_sentiment) == 1,
-      length(kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc) == 1,
+      contains(keys(kubectl_manifest.argocd_app_oauth2_proxy_workload), "sentiment_dev"),
+      contains(keys(kubectl_manifest.argocd_app_oauth2_proxy_workload), "subnetcalc_dev"),
       length(kubectl_manifest.argocd_app_oauth2_proxy_idp) > 0,
     ])
     error_message = "Expected dev app oauth2-proxy Applications to render when dev apps and MCP are enabled"
@@ -287,12 +287,12 @@ run "app_sso_cookies_are_environment_scoped" {
 
   assert {
     condition = alltrue([
-      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_sentiment[0].yaml_body, "cookieName: kind-v2-sso-dev"),
-      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc[0].yaml_body, "cookieName: kind-v2-sso-dev"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_workload["sentiment_dev"].yaml_body, "cookieName: kind-v2-sso-dev"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_workload["subnetcalc_dev"].yaml_body, "cookieName: kind-v2-sso-dev"),
       strcontains(kubectl_manifest.argocd_app_oauth2_proxy_idp["chatgpt"].yaml_body, "cookieName: kind-v2-sso-dev"),
       strcontains(kubectl_manifest.argocd_app_oauth2_proxy_idp["chatgpt"].yaml_body, "skip-auth-regex: ^/(signed-out\\.html|style\\.css|app-shell\\.css|favicon\\.svg|favicon\\.ico)$"),
-      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_sentiment_uat[0].yaml_body, "cookieName: kind-v2-sso-uat"),
-      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat[0].yaml_body, "cookieName: kind-v2-sso-uat"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_workload["sentiment_uat"].yaml_body, "cookieName: kind-v2-sso-uat"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_workload["subnetcalc_uat"].yaml_body, "cookieName: kind-v2-sso-uat"),
       strcontains(kubectl_manifest.argocd_app_oauth2_proxy_idp["api"].yaml_body, "cookieName: kind-v2-sso-portal"),
       strcontains(kubectl_manifest.argocd_app_oauth2_proxy_idp["console"].yaml_body, "cookieName: kind-v2-sso-portal"),
     ])
@@ -323,23 +323,23 @@ run "sso_with_subnetcalc_apps" {
   }
 
   assert {
-    condition     = length(kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc) == 1
+    condition     = contains(keys(kubectl_manifest.argocd_app_oauth2_proxy_workload), "subnetcalc_dev")
     error_message = "Expected kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc to exist when enable_sso=true and enable_app_repo_subnetcalc=true"
   }
 
   assert {
-    condition     = length(kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat) == 1
+    condition     = contains(keys(kubectl_manifest.argocd_app_oauth2_proxy_workload), "subnetcalc_uat")
     error_message = "Expected kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat to exist when enable_sso=true and enable_app_repo_subnetcalc=true"
   }
 
   assert {
     condition = alltrue([
-      length(regexall("--allowed-group=app-subnetcalc-dev", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc[0].yaml_body)) > 0,
-      length(regexall("--allowed-group=platform-admins", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc[0].yaml_body)) > 0,
-      length(regexall("--allowed-group=app-subnetcalc-uat", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat[0].yaml_body)) > 0,
-      length(regexall("--allowed-group=platform-admins", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat[0].yaml_body)) > 0,
-      length(regexall("email-domain: \\\"(dev|uat)\\.test\\\"", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc[0].yaml_body)) == 0,
-      length(regexall("email-domain: \\\"(dev|uat)\\.test\\\"", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat[0].yaml_body)) == 0,
+      length(regexall("--allowed-group=app-subnetcalc-dev", kubectl_manifest.argocd_app_oauth2_proxy_workload["subnetcalc_dev"].yaml_body)) > 0,
+      length(regexall("--allowed-group=platform-admins", kubectl_manifest.argocd_app_oauth2_proxy_workload["subnetcalc_dev"].yaml_body)) > 0,
+      length(regexall("--allowed-group=app-subnetcalc-uat", kubectl_manifest.argocd_app_oauth2_proxy_workload["subnetcalc_uat"].yaml_body)) > 0,
+      length(regexall("--allowed-group=platform-admins", kubectl_manifest.argocd_app_oauth2_proxy_workload["subnetcalc_uat"].yaml_body)) > 0,
+      length(regexall("email-domain: \\\"(dev|uat)\\.test\\\"", kubectl_manifest.argocd_app_oauth2_proxy_workload["subnetcalc_dev"].yaml_body)) == 0,
+      length(regexall("email-domain: \\\"(dev|uat)\\.test\\\"", kubectl_manifest.argocd_app_oauth2_proxy_workload["subnetcalc_uat"].yaml_body)) == 0,
     ])
     error_message = "Expected subnetcalc oauth2-proxy to enforce app/environment groups plus platform-admins break-glass access instead of dev/uat email domains"
   }
