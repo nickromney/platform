@@ -3,12 +3,21 @@ resource "kubernetes_namespace_v1" "argo_rollouts" {
 
   metadata {
     name = "argo-rollouts"
+    annotations = {
+      "argocd.argoproj.io/sync-wave" = "86"
+    }
     labels = {
       "app.kubernetes.io/name"                             = "argo-rollouts"
       "app.kubernetes.io/managed-by"                       = "terraform"
       "platform.publiccloudexperiments.net/namespace-role" = "platform"
       "kyverno.io/isolate"                                 = "true"
     }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      metadata[0].annotations["argocd.argoproj.io/tracking-id"],
+    ]
   }
 
   depends_on = [

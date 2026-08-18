@@ -251,20 +251,13 @@ argocd_app_needs_hard_refresh() {
     return 1
   fi
 
-  local sync health comparison
-  sync=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "")
+  local health
   health=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.health.status}' 2>/dev/null || echo "")
-  comparison=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.conditions[?(@.type=="ComparisonError")].message}' 2>/dev/null || echo "")
 
-  if [[ -n "${comparison}" ]]; then
-    return 0
-  fi
-
+  # Only refresh when health is wrong. ComparisonError/Unknown sync on an
+  # otherwise Healthy app is usually a live git timeout; hard-refreshing
+  # every such app in parallel wedges Gitea SSH.
   if [[ "${health}" != "Healthy" ]]; then
-    return 0
-  fi
-
-  if [[ "${sync}" != "Synced" ]] && ! argocd_app_allows_outofsync_if_healthy "${ns}" "${app}"; then
     return 0
   fi
 
@@ -318,17 +311,15 @@ wait_for_argocd_apps_settled() {
         if (( SECONDS >= next_refresh )) && argocd_app_needs_hard_refresh "${ns}" "${app}"; then
           # Kind's control-plane restart can leave Argo app health/sync state stale
           # even after workloads are ready; a hard refresh converges the cache.
+          # Refresh one app per interval so Gitea SSH is not stampeded.
           argocd_refresh_app "${ns}" "${app}"
+          next_refresh=$((SECONDS + APP_REFRESH_INTERVAL_SECONDS))
         fi
       fi
     done <<< "${apps}"
 
     if [[ "${unsettled}" -eq 0 ]]; then
       return 0
-    fi
-
-    if (( SECONDS >= next_refresh )); then
-      next_refresh=$((SECONDS + APP_REFRESH_INTERVAL_SECONDS))
     fi
 
     sleep 5
@@ -381,7 +372,11 @@ check_argocd_app() {
   fi
 
   if ! argocd_app_is_settled "${ns}" "${app}"; then
-    wait_for_argocd_app_settled "${ns}" "${app}" 90 || true
+    local health_now
+    health_now=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.health.status}' 2>/dev/null || echo "")
+    if [[ "${health_now}" != "Healthy" ]]; then
+      wait_for_argocd_app_settled "${ns}" "${app}" 90 || true
+    fi
   fi
 
   local sync health
@@ -1279,6 +1274,7 @@ expect_bool_json() {
 launchpad_toggles_json() {
   jq -cn \
     --argjson sso "$(expect_bool_json "${EXPECT_SSO}")" \
+    --argjson backstage "$(expect_bool_json "${EXPECT_BACKSTAGE_EFFECTIVE}")" \
     --argjson headlamp "$(expect_bool_json "${EXPECT_HEADLAMP}")" \
     --argjson sentiment "$(expect_bool_json "${EXPECT_APP_REPO_SENTIMENT}")" \
     --argjson subnetcalc "$(expect_bool_json "${EXPECT_APP_REPO_SUBNET_CALC}")" \
@@ -1286,6 +1282,7 @@ launchpad_toggles_json() {
     --argjson langfuse_demos "$(expect_bool_json "${EXPECT_LANGFUSE_DEMOS}")" \
     '{
       ENABLE_SSO: $sso,
+      ENABLE_BACKSTAGE: $backstage,
       ENABLE_HEADLAMP: $headlamp,
       ENABLE_APP_REPO_SENTIMENT: $sentiment,
       ENABLE_APP_REPO_SUBNETCALC: $subnetcalc,
