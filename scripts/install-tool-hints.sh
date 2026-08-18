@@ -167,7 +167,8 @@ pinned_version_for_tool() {
   done
 
   case "${tool}" in
-    bun|kyverno|lefthook|lima|limactl|mkcert|starship|step) ;;
+    bun|kyverno|lefthook|lima|limactl|mkcert|starship|step|ruff|deno|biome) ;;
+    markdownlint-cli2) var_name="MARKDOWNLINT_CLI2_VERSION" ;;
     tofu) var_name="OPENTOFU_VERSION" ;;
     node|npm|npx) var_name="DEVCONTAINER_NODE_VERSION" ;;
     *) return 1 ;;
