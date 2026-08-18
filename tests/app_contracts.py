@@ -1173,16 +1173,29 @@ def keycloak_group_authorization_contract_violations(repo_root: Path) -> tuple[s
     sso_tf = (repo_root / "terraform" / "kubernetes" / "sso.tf").read_text(encoding="utf-8")
     violations: list[str] = []
 
+    # The workload app proxies are rendered once from a shared for_each template, so
+    # the per-environment group names live in the locals.tf app map rather than being
+    # repeated in sso.tf. Assert the group reaches a proxy, not that it was copied.
+    workload_groups = {
+        block_group
+        for block in _oauth2_proxy_workload_app_blocks(repo_root).values()
+        for block_group in _terraform_quoted_attribute_values(block, "group")
+    }
     for group in app_environment_group_names():
         if group not in locals_tf:
             violations.append(f"locals.tf missing app environment group {group}")
-        if group not in sso_tf:
-            violations.append(f"sso.tf missing app environment group {group}")
-        if f"--allowed-group={group}" not in sso_tf:
-            violations.append(f"sso.tf should allow app environment group {group}")
+        if group not in workload_groups:
+            violations.append(f"locals.tf should allow app environment group {group} on a workload proxy")
 
-    if "--allowed-group=${local.sso_admin_group}" not in sso_tf:
-        violations.append("workload app proxies should allow local.sso_admin_group")
+    workload_template = _oauth2_proxy_workload_template(repo_root)
+    if workload_template is None:
+        violations.append(f"sso.tf missing {_OAUTH2_PROXY_WORKLOAD_RESOURCE_HEADER}")
+    else:
+        if "--allowed-group=${each.value.group}" not in workload_template:
+            violations.append("workload app proxies should allow each.value.group")
+        if "--allowed-group=${local.sso_admin_group}" not in workload_template:
+            violations.append("workload app proxies should allow local.sso_admin_group")
+
     if "allowed-group: ${each.value.group}" not in sso_tf:
         violations.append("IDP proxy route policies should allow each.value.group")
     if re.search(r'email-domain: "(dev|uat)\.test"', sso_tf):
@@ -5432,6 +5445,52 @@ def subnetcalc_runtime_config_response_contract_violations(repo_root: Path) -> t
     return tuple(violations)
 
 
+_OAUTH2_PROXY_WORKLOAD_RESOURCE_HEADER = 'resource "kubectl_manifest" "argocd_app_oauth2_proxy_workload" {'
+_OAUTH2_PROXY_WORKLOAD_APP_LOCALS = (
+    "sso_sentiment_proxy_apps",
+    "sso_subnetcalc_proxy_apps",
+)
+
+
+def _terraform_quoted_attribute_values(body: str, key: str) -> tuple[str, ...]:
+    return tuple(re.findall(rf'^\s*{re.escape(key)}\s*=\s*"([^"]*)"', body, re.MULTILINE))
+
+
+def _terraform_conditional_map_local(locals_tf: str, name: str) -> str | None:
+    """Return the body of a `name = <cond> ? { ... } : {}` local, or None."""
+    start = locals_tf.find(f"\n  {name} = ")
+    if start == -1:
+        return None
+    end = locals_tf.find("\n  } : {}\n", start)
+    return None if end == -1 else locals_tf[start:end]
+
+
+def _oauth2_proxy_workload_template(repo_root: Path) -> str | None:
+    """Return the body of the single for_each resource that renders workload app proxies."""
+    sso_tf = (repo_root / "terraform" / "kubernetes" / "sso.tf").read_text(encoding="utf-8")
+    start = sso_tf.find(_OAUTH2_PROXY_WORKLOAD_RESOURCE_HEADER)
+    if start == -1:
+        return None
+    end = sso_tf.find("\n}\n", start)
+    return None if end == -1 else sso_tf[start:end]
+
+
+def _oauth2_proxy_workload_app_blocks(repo_root: Path) -> dict[str, str]:
+    """Map each workload oauth2-proxy Application name to its locals.tf for_each entry."""
+    locals_tf = (repo_root / "terraform" / "kubernetes" / "locals.tf").read_text(encoding="utf-8")
+    blocks: dict[str, str] = {}
+    for local_name in _OAUTH2_PROXY_WORKLOAD_APP_LOCALS:
+        region = _terraform_conditional_map_local(locals_tf, local_name)
+        if region is None:
+            continue
+        for entry in re.split(r"\n    \w+ = \{\n", region)[1:]:
+            entry = entry.split("\n    }")[0]
+            names = _terraform_quoted_attribute_values(entry, "name")
+            if names:
+                blocks[names[0]] = entry
+    return blocks
+
+
 def _oauth2_proxy_token_refresh_names() -> tuple[str, ...]:
     return (
         "oauth2-proxy-sentiment-dev",
@@ -5452,22 +5511,98 @@ def _oauth2_proxy_token_refresh_args() -> tuple[str, ...]:
     )
 
 
+def _oauth2_proxy_workload_app_surfaces() -> dict[str, dict[str, str]]:
+    """Per-app surface each workload proxy Application must be configured with.
+
+    These used to be guaranteed by four copy-pasted kubectl_manifest resources. The
+    Applications are now rendered from one for_each template over the locals.tf app
+    map, so the per-app surface is pinned here instead of the copy count.
+    """
+    return {
+        "oauth2-proxy-sentiment-dev": {
+            "public_url": "local.sentiment_dev_public_url",
+            "upstream": '"http://sentiment-router.dev.svc.cluster.local:8080"',
+            "upstream_timeout_arg": '"\\n          - --upstream-timeout=180s"',
+            "group": '"app-sentiment-dev"',
+            "cookie_name": "local.dev_sso_cookie_name",
+            "cookie_domain": "local.dev_cookie_domain",
+            "whitelist_domain": "local.dev_whitelist_domains",
+        },
+        "oauth2-proxy-sentiment-uat": {
+            "public_url": "local.sentiment_uat_public_url",
+            "upstream": '"http://sentiment-router.uat.svc.cluster.local:8080"',
+            "upstream_timeout_arg": '"\\n          - --upstream-timeout=180s"',
+            "group": '"app-sentiment-uat"',
+            "cookie_name": "local.uat_sso_cookie_name",
+            "cookie_domain": "local.uat_cookie_domain",
+            "whitelist_domain": "local.uat_whitelist_domains",
+        },
+        "oauth2-proxy-subnetcalc-dev": {
+            "public_url": "local.subnetcalc_dev_public_url",
+            "upstream": '"http://subnetcalc-router.dev.svc.cluster.local:8080"',
+            "group": '"app-subnetcalc-dev"',
+            "cookie_name": "local.dev_sso_cookie_name",
+            "cookie_domain": "local.dev_cookie_domain",
+            "whitelist_domain": "local.dev_whitelist_domains",
+        },
+        "oauth2-proxy-subnetcalc-uat": {
+            "public_url": "local.subnetcalc_uat_public_url",
+            "upstream": '"http://subnetcalc-router.uat.svc.cluster.local:8080"',
+            "group": '"app-subnetcalc-uat"',
+            "cookie_name": "local.uat_sso_cookie_name",
+            "cookie_domain": "local.uat_cookie_domain",
+            "whitelist_domain": "local.uat_whitelist_domains",
+        },
+    }
+
+
+def _oauth2_proxy_workload_template_fragments() -> tuple[str, ...]:
+    """Fields the shared template must interpolate so each app keeps its own surface."""
+    return (
+        "name: ${each.value.name}",
+        "releaseName: ${each.value.name}",
+        "cookieName: ${each.value.cookie_name}",
+        "--redirect-url=${each.value.public_url}/oauth2/callback",
+        '--upstream=${each.value.upstream}${try(each.value.upstream_timeout_arg, "")}',
+        "--allowed-group=${each.value.group}",
+        "--allowed-group=${local.sso_admin_group}",
+        "--cookie-domain=${each.value.cookie_domain}",
+        "--whitelist-domain=${each.value.whitelist_domain}",
+    )
+
+
 def oauth2_proxy_token_refresh_contract_violations(repo_root: Path) -> tuple[str, ...]:
-    sso_tf = (repo_root / "terraform" / "kubernetes" / "sso.tf").read_text(encoding="utf-8")
+    locals_tf = (repo_root / "terraform" / "kubernetes" / "locals.tf").read_text(encoding="utf-8")
     violations: list[str] = []
 
-    for name in _oauth2_proxy_token_refresh_names():
-        marker = f"name: {name}"
-        if marker not in sso_tf:
-            violations.append(f"{name} missing from terraform/kubernetes/sso.tf")
-            continue
+    template = _oauth2_proxy_workload_template(repo_root)
+    if template is None:
+        return (f"terraform/kubernetes/sso.tf missing {_OAUTH2_PROXY_WORKLOAD_RESOURCE_HEADER}",)
 
-        start = sso_tf.index(marker)
-        end = sso_tf.index("syncPolicy:", start)
-        block = sso_tf[start:end]
-        for expected in _oauth2_proxy_token_refresh_args():
-            if expected not in block:
-                violations.append(f"{name} missing {expected}")
+    if "for_each" not in template or "local.sso_workload_proxy_apps" not in template:
+        violations.append("workload oauth2-proxy Applications should render local.sso_workload_proxy_apps")
+    for local_name in _OAUTH2_PROXY_WORKLOAD_APP_LOCALS:
+        if f"local.{local_name}," not in locals_tf:
+            violations.append(f"locals.tf should merge local.{local_name} into sso_workload_proxy_apps")
+
+    # The shared template carries the settings every workload proxy must have.
+    for expected in (*_oauth2_proxy_token_refresh_args(), *_oauth2_proxy_workload_template_fragments()):
+        if expected not in template:
+            violations.append(f"shared workload oauth2-proxy template missing {expected}")
+
+    # Every app/environment surface must still resolve to its own Application.
+    blocks = _oauth2_proxy_workload_app_blocks(repo_root)
+    for name, expected_attributes in _oauth2_proxy_workload_app_surfaces().items():
+        block = blocks.get(name)
+        if block is None:
+            violations.append(f"{name} missing from terraform/kubernetes/locals.tf workload proxy apps")
+            continue
+        for key, expected_value in expected_attributes.items():
+            actual = _terraform_attribute_value(block, key)
+            if actual != expected_value:
+                violations.append(f"{name} should set {key} = {expected_value}, got {actual}")
+        if "upstream_timeout_arg" not in expected_attributes and _terraform_attribute_value(block, "upstream_timeout_arg") is not None:
+            violations.append(f"{name} should not set upstream_timeout_arg")
 
     return tuple(violations)
 
@@ -5549,11 +5684,20 @@ def oauth2_proxy_backend_logout_contract_violations(repo_root: Path) -> tuple[st
         if forbidden in sso_tf:
             violations.append(f"terraform/kubernetes/sso.tf should not use {forbidden}")
 
-    backend_logout_arg_count = sso_tf.count("${local.oauth2_proxy_backend_logout_arg}")
-    if backend_logout_arg_count != 4:
-        violations.append(
-            f"terraform/kubernetes/sso.tf should render backend logout arg 4 times, got {backend_logout_arg_count}"
-        )
+    # The workload app proxies used to be four copy-pasted resources, so this used to
+    # count four renderings of the list-form arg. They now share one for_each template:
+    # assert every workload proxy still gets the arg, not how many copies exist.
+    workload_template = _oauth2_proxy_workload_template(repo_root)
+    if workload_template is None:
+        violations.append(f"terraform/kubernetes/sso.tf missing {_OAUTH2_PROXY_WORKLOAD_RESOURCE_HEADER}")
+    elif "${local.oauth2_proxy_backend_logout_arg}" not in workload_template:
+        violations.append("workload oauth2-proxy Applications should render local.oauth2_proxy_backend_logout_arg")
+
+    workload_apps = _oauth2_proxy_workload_app_blocks(repo_root)
+    for name in _oauth2_proxy_token_refresh_names():
+        if name not in workload_apps:
+            violations.append(f"{name} should be a workload oauth2-proxy app that renders the backend logout arg")
+
     if '${try(each.value.backend_logout_arg, "")}' not in sso_tf:
         violations.append("terraform/kubernetes/sso.tf should tolerate empty backend logout args")
 

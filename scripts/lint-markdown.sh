@@ -10,6 +10,7 @@ source "${SCRIPT_DIR}/lib/shell-cli.sh"
 MARKDOWNLINT_CONFIG_FILE="${MARKDOWNLINT_CONFIG_FILE:-${REPO_ROOT}/.markdownlint}"
 MARKDOWNLINT_BIN="${MARKDOWNLINT_BIN:-}"
 GIT_BIN="${GIT_BIN:-git}"
+INSTALL_HINTS_SCRIPT="${INSTALL_HINTS_SCRIPT:-${REPO_ROOT}/scripts/install-tool-hints.sh}"
 
 usage() {
   cat <<EOF
@@ -131,9 +132,18 @@ if [[ "${#markdown_files[@]}" -eq 0 ]]; then
   exit 0
 fi
 
+# Hard failure, matching lint-yaml.sh, lint-python.sh and lint-shellcheck.sh.
+# This used to WARN and exit 0, which meant `make lint` reported green on any
+# host without markdownlint while every tracked Markdown file went unchecked --
+# the same shape of silent gap that #200 fixed for shellcheck, one level down.
 if ! markdownlint_bin="$(select_markdownlint_bin)"; then
-  echo "WARN markdownlint not found in PATH; skipping tracked Markdown lint" >&2
-  exit 0
+  echo "FAIL markdownlint not found in PATH" >&2
+  if [[ -x "${INSTALL_HINTS_SCRIPT}" ]]; then
+    echo "" >&2
+    echo "Install hints:" >&2
+    "${INSTALL_HINTS_SCRIPT}" --execute --plain markdownlint-cli2 | sed 's/^/  /' >&2
+  fi
+  exit 1
 fi
 
 [[ -f "${MARKDOWNLINT_CONFIG_FILE}" ]] || fail "missing markdownlint config: ${MARKDOWNLINT_CONFIG_FILE}"

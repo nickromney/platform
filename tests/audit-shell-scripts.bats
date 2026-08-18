@@ -493,7 +493,15 @@ EOF
   # Asserts both halves: the target exists and lint depends on it. Asserting only
   # that the target exists would pass while nothing called it, which is the
   # defect being guarded.
-  run grep -cE '^\s*@\$\(MAKE\) --no-print-directory lint-shellcheck$' "${REPO_ROOT}/Makefile"
+  #
+  # 2026-08-17: this guard used to grep for the literal
+  # `@$(MAKE) --no-print-directory lint-shellcheck` line, which was the only such
+  # guard -- the other seven linters could be deleted from `make lint` in silence.
+  # The composite is now generated from LINTERS in the Makefile and
+  # tests/lint-wiring.bats holds that list to the lint-* targets and to the lint
+  # scripts on disk, so the "is it wired in" half is guarded for every linter,
+  # not just this one. What remains here is the part specific to shellcheck.
+  run grep -cE '^LINTERS := .*\bshellcheck\b' "${REPO_ROOT}/Makefile"
 
   [ "${status}" -eq 0 ]
   [ "${output}" -ge 1 ]

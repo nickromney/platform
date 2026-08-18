@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architecture review — platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 4 4; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .hatch {
+        background-image: repeating-linear-gradient(45deg, #fca5a5 0 6px, transparent 6px 12px);
+      }
+      .mermaid { display: flex; justify-content: center; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans antialiased">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-14">
+
+      <!-- ══════════════ HEADER ══════════════ -->
+      <header class="space-y-5">
+        <div class="flex items-baseline justify-between flex-wrap gap-3">
+          <h1 class="text-3xl font-semibold tracking-tight">Architecture review — <span class="font-mono text-2xl">platform</span></h1>
+          <p class="text-sm text-slate-500 font-mono">2026-08-17 · 5d21791 · chore/20260817-claude</p>
+        </div>
+        <p class="text-slate-700 max-w-3xl">
+          Scoped to what PRs #195–#202 changed and what they changed <em>around</em>. Every claim below was
+          re-verified against the tree; where a claim failed verification it is marked
+          <span class="font-semibold text-rose-700">rejected</span> and kept, because a ruled-out lead is worth as much as a finding.
+        </p>
+        <div class="flex flex-wrap gap-2 text-xs">
+          <span class="px-2 py-1 rounded bg-slate-900 text-white font-medium">thick dark box = deep module</span>
+          <span class="px-2 py-1 rounded bg-white border border-slate-300">solid box = module</span>
+          <span class="px-2 py-1 rounded bg-white border border-slate-300 border-dashed">dashed = seam</span>
+          <span class="px-2 py-1 rounded bg-rose-50 text-rose-700 border border-rose-200">red = leak / invisible</span>
+        </div>
+      </header>
+
+      <!-- ══════════════ BROKEN NOW ══════════════ -->
+      <section class="space-y-5">
+        <h2 class="text-xl font-semibold tracking-tight border-b border-slate-300 pb-2">Broken right now</h2>
+        <p class="text-slate-700 text-sm max-w-3xl">Not architecture candidates — defects the architecture permitted. All three were reproduced, not inferred.</p>
+
+        <div class="grid md:grid-cols-3 gap-4">
+          <div class="rounded-lg border-2 border-rose-300 bg-rose-50 p-4 space-y-2">
+            <div class="text-xs font-semibold text-rose-700 uppercase tracking-wide">Reproduced</div>
+            <div class="font-mono text-sm font-semibold">make -C kubernetes/lima status</div>
+            <p class="text-sm text-slate-700">Hard bash syntax error — an <code class="font-mono text-xs bg-white px-1 rounded">if …; then else … fi</code> with an empty <code class="font-mono text-xs bg-white px-1 rounded">then</code>. Dead since #163.</p>
+            <p class="text-xs text-slate-600">Survived: target-surface audit, shellcheck, 148-file gate. <strong>1 of 328</strong> recipes repo-wide.</p>
+          </div>
+          <div class="rounded-lg border-2 border-rose-300 bg-rose-50 p-4 space-y-2">
+            <div class="text-xs font-semibold text-rose-700 uppercase tracking-wide">Reproduced</div>
+            <div class="font-mono text-sm font-semibold">kubernetes/tests/*.bats</div>
+            <p class="text-sm text-slate-700">4 test files run <em>nowhere</em>. Not gated, not backlogged — invisible to the guard that exists to catch exactly this.</p>
+            <p class="text-xs text-slate-600">All 4 pass. <strong>7 tests, ~2s.</strong> Free to adopt.</p>
+          </div>
+          <div class="rounded-lg border-2 border-rose-300 bg-rose-50 p-4 space-y-2">
+            <div class="text-xs font-semibold text-rose-700 uppercase tracking-wide">Confirmed in source</div>
+            <div class="font-mono text-sm font-semibold">browser workflow UI</div>
+            <p class="text-sm text-slate-700">Passes the <em>action</em> where the workflow core expects a <em>subcommand</em>. The two vocabularies share exactly one token.</p>
+            <p class="text-xs text-slate-600">Every non-<code class="font-mono">apply</code> action dies on <code class="font-mono">Unknown subcommand</code>.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════ CANDIDATES ══════════════ -->
+      <section id="candidates" class="space-y-10">
+        <h2 class="text-xl font-semibold tracking-tight border-b border-slate-300 pb-2">Deepening candidates</h2>
+
+        <!-- ─── C1 ─── -->
+        <article class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 shadow-sm">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <h3 class="text-lg font-semibold">1 · Make the gate enumerate, not enumerate-by-glob</h3>
+            <div class="flex gap-2 shrink-0">
+              <span class="px-2 py-1 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">Strong</span>
+              <span class="px-2 py-1 rounded text-xs font-medium bg-slate-100 text-slate-700">in-process</span>
+            </div>
+          </div>
+
+          <div class="font-mono text-sm text-slate-600 space-y-0.5">
+            <div>tests/ci-test-gate.bats:112 · Makefile:65–227 · scripts/run-bats-suite.sh:166–170</div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 p-4 space-y-3">
+              <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Before — membership by glob</div>
+              <svg viewBox="0 0 300 190" class="w-full">
+                <rect x="10" y="10" width="280" height="60" rx="6" fill="#f1f5f9" stroke="#94a3b8"/>
+                <text x="20" y="30" font-size="11" font-family="monospace" fill="#0f172a">git ls-files</text>
+                <text x="20" y="46" font-size="10" font-family="monospace" fill="#334155">'tests/*.bats'</text>
+                <text x="20" y="60" font-size="10" font-family="monospace" fill="#334155">'kubernetes/*/tests/*.bats'</text>
+                <text x="215" y="44" font-size="20" font-weight="700" fill="#0f172a">156</text>
+
+                <rect x="10" y="95" width="130" height="38" rx="6" fill="#fff" stroke="#94a3b8"/>
+                <text x="20" y="112" font-size="10" font-family="monospace">tests/</text>
+                <text x="20" y="126" font-size="10" font-family="monospace">kubernetes/*/tests/</text>
+
+                <rect x="160" y="95" width="130" height="38" rx="6" class="hatch" stroke="#dc2626" stroke-width="2"/>
+                <text x="170" y="112" font-size="10" font-family="monospace" fill="#7f1d1d">kubernetes/tests/</text>
+                <text x="170" y="126" font-size="11" font-weight="700" fill="#7f1d1d">4 files · invisible</text>
+
+                <text x="10" y="160" font-size="10" fill="#7f1d1d">not gated · not backlogged · run nowhere</text>
+                <text x="10" y="176" font-size="10" fill="#475569">160 tracked − 156 seen = 4</text>
+              </svg>
+            </div>
+
+            <div class="rounded-lg border-2 border-slate-900 p-4 space-y-3 bg-slate-50">
+              <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">After — total enumeration</div>
+              <svg viewBox="0 0 300 190" class="w-full">
+                <rect x="10" y="10" width="280" height="60" rx="6" fill="#0f172a"/>
+                <text x="20" y="32" font-size="11" font-family="monospace" fill="#e2e8f0">git ls-files '*.bats'</text>
+                <text x="20" y="52" font-size="10" font-family="monospace" fill="#94a3b8">minus explicit, reasoned exclusions</text>
+                <text x="215" y="44" font-size="20" font-weight="700" fill="#34d399">160</text>
+
+                <rect x="10" y="95" width="280" height="38" rx="6" fill="#fff" stroke="#0f172a" stroke-width="2"/>
+                <text x="20" y="118" font-size="11" font-family="monospace">every .bats, by construction</text>
+
+                <text x="10" y="160" font-size="10" fill="#065f46">a new directory cannot hide</text>
+                <text x="10" y="176" font-size="10" fill="#475569">exclusions must carry a reason, and shrink</text>
+              </svg>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-5 text-sm">
+            <div>
+              <div class="font-semibold text-slate-800 mb-1">Problem</div>
+              <p class="text-slate-700">The guard added to stop the gate silently shrinking has the same blind spot it was written to fix, one directory level up.</p>
+            </div>
+            <div>
+              <div class="font-semibold text-slate-800 mb-1">Solution</div>
+              <p class="text-slate-700">Enumerate all tracked <code class="font-mono text-xs">.bats</code> and subtract a named exclusion list, so membership is total by construction rather than by pattern.</p>
+            </div>
+          </div>
+
+          <div class="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900">
+            The file's own comment at <span class="font-mono text-xs">:33</span> records the previous instance of this bug verbatim. The fix widened the glob by one level and stopped — a point fix where a seam was needed.
+          </div>
+
+          <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 list-disc list-inside">
+            <li>Closes a class, not a case</li>
+            <li>4 green tests adopted free</li>
+            <li>Exclusions become visible debt</li>
+            <li>Same trick fits the linter list</li>
+          </ul>
+        </article>
+
+        <!-- ─── C2 ─── -->
+        <article class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 shadow-sm">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <h3 class="text-lg font-semibold">2 · Give the two guided surfaces one workflow core</h3>
+            <div class="flex gap-2 shrink-0">
+              <span class="px-2 py-1 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">Strong</span>
+              <span class="px-2 py-1 rounded text-xs font-medium bg-slate-100 text-slate-700">ports &amp; adapters</span>
+            </div>
+          </div>
+
+          <div class="font-mono text-sm text-slate-600">
+            tools/platform-tui/internal/tui/workflow_selection.go · tools/platform-workflow-ui/cmd/platform-workflow-ui/main.go · scripts/platform-workflow.sh
+          </div>
+
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <pre class="mermaid">
+flowchart TB
+  subgraph BEFORE["BEFORE — no shared module"]
+    direction TB
+    T["terminal TUI<br/><small>1442 loc · 27 tests</small>"]
+    U["browser workflow UI<br/><small>746 loc · 0 Go tests</small>"]
+    WS["workflow core<br/>platform-workflow.sh"]
+    T -->|"args built here"| WS
+    U -->|"args built again"| WS
+    T -.->|"deep module trapped<br/>in internal/"| DM["WorkflowSelection"]
+    U -->|"passes ACTION as<br/>SUBCOMMAND"| BUG(["Unknown subcommand 'plan'"])
+  end
+  classDef bug fill:#fee2e2,stroke:#dc2626,stroke-width:2px;
+  classDef deep fill:#0f172a,color:#fff,stroke:#0f172a,stroke-width:2px;
+  class BUG bug
+  class DM deep
+            </pre>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-rose-200 bg-rose-50 p-4">
+              <div class="text-xs font-semibold uppercase tracking-wide text-rose-700 mb-2">The two vocabularies</div>
+              <table class="w-full text-xs font-mono">
+                <tr class="border-b border-rose-200"><td class="py-1 font-sans font-semibold">core accepts</td><td class="py-1">options · preview · apply · save-profile</td></tr>
+                <tr class="border-b border-rose-200"><td class="py-1 font-sans font-semibold">UI sends</td><td class="py-1">plan · status · show-urls · check-health · … · apply</td></tr>
+                <tr><td class="py-1 font-sans font-semibold text-rose-800">overlap</td><td class="py-1 font-bold text-rose-800">apply — and only apply</td></tr>
+              </table>
+            </div>
+            <div class="rounded-lg border-2 border-slate-900 bg-slate-50 p-4">
+              <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">After — one exported module</div>
+              <div class="space-y-1.5 font-mono text-xs">
+                <div class="bg-slate-900 text-emerald-300 rounded px-2 py-1">workflowcore.Selection</div>
+                <div class="pl-3 text-slate-700">.Args(Subcommand) []string</div>
+                <div class="pl-3 text-slate-700">.Preview(ctx) (Preview, error)</div>
+                <div class="pl-3 text-slate-700">.Run(ctx) (&lt;-chan Line, error)</div>
+                <div class="pt-2 text-slate-600 font-sans">Subcommand as an enum makes the bug <em>unrepresentable</em>.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-5 text-sm">
+            <div>
+              <div class="font-semibold text-slate-800 mb-1">Problem</div>
+              <p class="text-slate-700">Two surfaces over one core share zero code. The one deep module sits in <code class="font-mono text-xs">internal/</code> of a different Go module, so it is structurally unimportable. Every divergence is a bug.</p>
+            </div>
+            <div>
+              <div class="font-semibold text-slate-800 mb-1">Solution</div>
+              <p class="text-slate-700">Extract an exported <code class="font-mono text-xs">workflowcore</code>. Both surfaces bind to it; the TUI's 27 tests become the acceptance suite for both.</p>
+            </div>
+          </div>
+
+          <div class="rounded-lg bg-slate-100 border border-slate-300 p-3 text-sm text-slate-800">
+            <span class="font-semibold">Why nobody noticed:</span> the UI has <strong>0 Go tests</strong>, and its one bats file
+            <span class="font-mono text-xs">tests/platform-workflow-ui.bats</span> — which asserts the correct architecture and would fail today — is one of the 8 files in the acknowledged gate backlog. The test that catches this is switched off.
+          </div>
+
+          <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 list-disc list-inside">
+            <li>Fixes 4 bugs as a side effect</li>
+            <li>~500 duplicated lines → ~250</li>
+            <li>Surfaces stop drifting silently</li>
+            <li>746 untested lines become testable</li>
+          </ul>
+        </article>
+
+        <!-- ─── C3 ─── -->
+        <article class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 shadow-sm">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <h3 class="text-lg font-semibold">3 · Give “an app” one home in Terraform</h3>
+            <div class="flex gap-2 shrink-0">
+              <span class="px-2 py-1 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">Strong</span>
+              <span class="px-2 py-1 rounded text-xs font-medium bg-slate-100 text-slate-700">in-process</span>
+            </div>
+          </div>
+
+          <div class="font-mono text-sm text-slate-600">terraform/kubernetes/{locals,variables,sso,gitops,namespaces,workload-apps}.tf + 44 more</div>
+
+          <div class="grid md:grid-cols-5 gap-3 text-center">
+            <div class="rounded-lg border border-slate-200 p-3"><div class="text-2xl font-bold">0</div><div class="text-xs text-slate-600">module blocks</div></div>
+            <div class="rounded-lg border border-slate-200 p-3"><div class="text-2xl font-bold">12,702</div><div class="text-xs text-slate-600">lines, 27 files</div></div>
+            <div class="rounded-lg border border-slate-200 p-3"><div class="text-2xl font-bold">1,282</div><div class="text-xs text-slate-600">locals.tf lines</div></div>
+            <div class="rounded-lg border border-slate-200 p-3"><div class="text-2xl font-bold">157→8</div><div class="text-xs text-slate-600">vars → outputs</div></div>
+            <div class="rounded-lg border-2 border-rose-300 bg-rose-50 p-3"><div class="text-2xl font-bold text-rose-700">~80</div><div class="text-xs text-rose-700">edit sites per app</div></div>
+          </div>
+
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <pre class="mermaid">
+flowchart LR
+  L["locals.tf<br/><small>218 keys · 12 concerns</small>"]
+  A["sso.tf"] --> L
+  B["gitops.tf"] --> L
+  C["cluster.tf"] --> L
+  D["observability.tf"] --> L
+  E["+ 20 more .tf"] --> L
+  classDef drawer fill:#fee2e2,stroke:#dc2626,stroke-width:2px;
+  class L drawer
+            </pre>
+            <p class="text-xs text-slate-600 text-center mt-2">24 of 27 <span class="font-mono">.tf</span> files reach into one file. No interface, so nothing can be deep behind it.</p>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-5 text-sm">
+            <div>
+              <div class="font-semibold text-slate-800 mb-1">Problem</div>
+              <p class="text-slate-700">“subnetcalc is an app with a dev and a uat environment” has no single home. It is spelled out across ~50 files in 5 languages. The glossary says 5 locations; there are at least 9.</p>
+            </div>
+            <div>
+              <div class="font-semibold text-slate-800 mb-1">Solution</div>
+              <p class="text-slate-700">One <code class="font-mono text-xs">module "workload_app"</code> taking app id, environments, images and policy; hiding sync/readiness contracts, TLS keys, proxy Applications, namespace predicates and host derivation. Called twice.</p>
+            </div>
+          </div>
+
+          <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 list-disc list-inside">
+            <li>~80 edit sites → one block</li>
+            <li>The app concept gains locality</li>
+            <li>Catalog JSON becomes generated</li>
+            <li>Enables candidates 4 and 5</li>
+          </ul>
+        </article>
+
+        <!-- ─── C4 ─── -->
+        <article class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 shadow-sm">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <h3 class="text-lg font-semibold">4 · Fold 4 pasted proxy Applications into the <code class="font-mono text-base">for_each</code> one line below them</h3>
+            <div class="flex gap-2 shrink-0">
+              <span class="px-2 py-1 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">Strong</span>
+              <span class="px-2 py-1 rounded text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">cheapest win</span>
+            </div>
+          </div>
+
+          <div class="font-mono text-sm text-slate-600">terraform/kubernetes/sso.tf:1790–2248 → sso.tf:2249</div>
+
+          <div class="rounded-lg border border-slate-200 p-4 bg-slate-50">
+            <svg viewBox="0 0 620 150" class="w-full">
+              <text x="0" y="12" font-size="10" font-family="monospace" fill="#64748b">sso.tf</text>
+              <rect x="0" y="20" width="300" height="18" fill="#fecaca" stroke="#dc2626"/><text x="6" y="33" font-size="10" font-family="monospace">1790 oauth2_proxy_sentiment · 114 lines</text>
+              <rect x="0" y="40" width="300" height="18" fill="#fecaca" stroke="#dc2626"/><text x="6" y="53" font-size="10" font-family="monospace">1905 …_sentiment_uat · 114</text>
+              <rect x="0" y="60" width="300" height="18" fill="#fecaca" stroke="#dc2626"/><text x="6" y="73" font-size="10" font-family="monospace">2020 …_subnetcalc · 114</text>
+              <rect x="0" y="80" width="300" height="18" fill="#fecaca" stroke="#dc2626"/><text x="6" y="93" font-size="10" font-family="monospace">2134 …_subnetcalc_uat · 114</text>
+              <rect x="0" y="102" width="300" height="26" fill="#0f172a"/><text x="6" y="119" font-size="10" font-family="monospace" fill="#34d399">2249 for_each over 8 other proxies ✓</text>
+
+              <path d="M310 70 L360 70" stroke="#0f172a" stroke-width="2" marker-end="url(#ah)"/>
+              <defs><marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#0f172a"/></marker></defs>
+
+              <rect x="370" y="60" width="250" height="40" fill="#0f172a"/><text x="378" y="78" font-size="10" font-family="monospace" fill="#34d399">for_each over 12 proxies</text>
+              <text x="378" y="92" font-size="10" font-family="monospace" fill="#94a3b8">4 map entries replace 456 lines</text>
+              <text x="370" y="126" font-size="10" fill="#065f46">the deep form already exists, 1 line away</text>
+            </svg>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-5 text-sm">
+            <div>
+              <div class="font-semibold text-slate-800 mb-1">Problem</div>
+              <p class="text-slate-700">Four near-identical 114-line blocks (dev vs uat differ by 8 lines; sentiment vs subnetcalc by 6) sit immediately above a working data-driven <code class="font-mono text-xs">for_each</code> doing the same job for 8 other proxies.</p>
+            </div>
+            <div>
+              <div class="font-semibold text-slate-800 mb-1">Solution</div>
+              <p class="text-slate-700">Move the four into the existing map. Mechanical, no new abstraction invented.</p>
+            </div>
+          </div>
+
+          <div class="rounded-lg bg-rose-50 border-2 border-rose-300 p-3 text-sm text-rose-900">
+            <span class="font-semibold">CORRECTION — this recommendation was wrong as originally written.</span>
+            Folding these into the adjacent <span class="font-mono text-xs">for_each</span> would have <strong>silently dropped break-glass admin access</strong>.
+            That resource renders <span class="font-mono text-xs">extraArgs</span> as a YAML <em>map</em> (<span class="font-mono text-xs">allowed-group: ${…}</span>, sso.tf:1427), and a map key holds one value —
+            but each of these four grants <em>two</em> groups: the app group and <span class="font-mono text-xs">local.sso_admin_group</span>. It also lacks
+            <span class="font-mono text-xs">--cookie-expire</span>/<span class="font-mono text-xs">--cookie-refresh</span>/<span class="font-mono text-xs">--upstream-timeout</span> and flips
+            <span class="font-mono text-xs">force_conflicts</span>/<span class="font-mono text-xs">server_side_apply</span>.
+            <br/><br/>
+            <span class="font-semibold">What was done instead:</span> extend the <em>pattern</em>, not the resource — a sibling
+            <span class="font-mono text-xs">argocd_app_oauth2_proxy_workload</span> keeping list-form args. Net <strong>−286 lines</strong>; <span class="font-mono text-xs">tofu validate</span> clean; 72/72 OpenTofu runs pass;
+            plan-level equivalence proven across all 119 resources, all 17 attributes byte-identical on each of the four.
+          </div>
+
+          <div class="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900">
+            <span class="font-semibold">The blocker was real, and instructive:</span>
+            <span class="font-mono text-xs">tests/app_contracts.py</span> asserted a logout arg rendered exactly 4 times — a test that <em>required</em> the duplication.
+            Rather than delete it, three contracts were rewritten to assert per-app <em>values</em> (upstream, cookie domain, group, timeout) and exercised against 12 injected faults, all caught —
+            including ones the count check could not see, such as subnetcalc silently acquiring sentiment's <span class="font-mono text-xs">--upstream-timeout</span>.
+          </div>
+
+          <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 list-disc list-inside">
+            <li>~456 lines deleted</li>
+            <li>No new concept introduced</li>
+            <li>Pattern already proven in-file</li>
+            <li>Exposes the grep-based contract layer</li>
+          </ul>
+        </article>
+
+        <!-- ─── C5 ─── -->
+        <article class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 shadow-sm">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <h3 class="text-lg font-semibold">5 · Stop defining every Argo CD Application twice</h3>
+            <div class="flex gap-2 shrink-0">
+              <span class="px-2 py-1 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">Strong</span>
+              <span class="px-2 py-1 rounded text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200">already drifted</span>
+            </div>
+          </div>
+
+          <div class="font-mono text-sm text-slate-600">terraform/kubernetes/*.tf heredocs ↔ terraform/kubernetes/apps/argocd-apps/*.yaml</div>
+
+          <div class="rounded-lg border border-slate-200 p-4 bg-white">
+            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-3">Measured drift — Grafana dashboards</div>
+            <div class="space-y-2">
+              <div class="flex items-center gap-3">
+                <span class="font-mono text-xs w-64 shrink-0">observability.tf</span>
+                <div class="h-6 bg-slate-400 rounded" style="width:38%"></div>
+                <span class="font-mono text-sm font-bold">96 panels</span>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="font-mono text-xs w-64 shrink-0">95-grafana.application.yaml</span>
+                <div class="h-6 bg-rose-500 rounded" style="width:61%"></div>
+                <span class="font-mono text-sm font-bold text-rose-700">155 panels</span>
+              </div>
+            </div>
+            <p class="text-xs text-slate-600 mt-3">59 dashboard panels exist on only one of the two supported paths. Which panels you get depends on a boolean.</p>
+          </div>
+
+          <div class="rounded-lg bg-rose-50 border-2 border-rose-300 p-4 text-sm text-rose-900 space-y-2">
+            <div class="font-semibold text-base">WITHDRAWN — the premise is wrong. Do not do this.</div>
+            <p>
+              Investigated 2026-08-17. These are not two definitions of the same thing; they are
+              <strong>two different chart-sourcing architectures</strong>, and collapsing them would break offline operation.
+            </p>
+            <table class="w-full text-xs font-mono mt-2">
+              <thead class="text-left border-b border-rose-300"><tr><th class="py-1">path</th><th>source</th><th>revision</th></tr></thead>
+              <tbody>
+                <tr class="border-b border-rose-200"><td class="py-1">.tf heredoc</td><td>policies_repo_url_cluster + apps/vendor/charts/…</td><td>main</td></tr>
+                <tr><td class="py-1">argocd-apps YAML</td><td>ghcr.io · charts.jetstack.io · argoproj.github.io</td><td>pinned (v1.21.1, 2.41.0, …)</td></tr>
+              </tbody>
+            </table>
+            <p>
+              The <span class="font-mono text-xs">.tf</span> path consumes charts <em>vendored into the in-cluster Gitea</em> by
+              <span class="font-mono text-xs">sync-gitea-policies.sh</span> — which is what makes the <span class="font-mono text-xs">airplane</span> preset work, and what
+              #182 hardened with reset-surviving vendoring retries. The YAML path pulls from upstream at sync time.
+              <strong>All 30 apps present in both differ, by design.</strong>
+            </p>
+          </div>
+
+          <div class="rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-amber-900 space-y-1">
+            <div class="font-semibold">What IS real drift, and is worth a separate look</div>
+            <p>Sync-wave disagreements between the two paths, which are ordering bugs rather than architecture:</p>
+            <table class="w-full text-xs font-mono mt-1">
+              <tbody>
+                <tr><td class="py-0.5">argo-rollouts</td><td>tf 86</td><td>yaml 87</td></tr>
+                <tr><td class="py-0.5">cert-manager-config</td><td>tf 5</td><td>yaml 10</td></tr>
+                <tr><td class="py-0.5">nginx-gateway-fabric</td><td>tf −4</td><td>yaml −10</td></tr>
+                <tr><td class="py-0.5">platform-gateway-routes</td><td>tf 20</td><td>yaml 50</td></tr>
+              </tbody>
+            </table>
+            <p class="pt-1">
+              <span class="font-mono text-xs">platform-gateway-routes</span> also points at different paths
+              (<span class="font-mono text-xs">${var.platform_gateway_routes_path}</span> vs <span class="font-mono text-xs">apps/platform-gateway-routes-sso</span>).
+              Deciding which wave is correct changes deployment ordering on a live cluster, so it was not guessed at here.
+            </p>
+          </div>
+
+          <div class="text-sm text-slate-700">
+            <span class="font-semibold">Lesson, shared with candidate 4:</span> both recommendations mistook a deliberate
+            architectural difference for copy-paste. Two things that look alike at the text level can be load-bearing in
+            different modes — air-gapped vs upstream, list-form vs map-form <span class="font-mono text-xs">extraArgs</span>.
+            Measure what differs before proposing a merge.
+          </div>
+        </article>
+
+        <!-- ─── C6 ─── -->
+        <article class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 shadow-sm">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <h3 class="text-lg font-semibold">6 · Drive <code class="font-mono text-base">make lint</code> from a list, not eight hand-wired targets</h3>
+            <div class="flex gap-2 shrink-0">
+              <span class="px-2 py-1 rounded text-xs font-semibold bg-amber-100 text-amber-800">Worth exploring</span>
+            </div>
+          </div>
+
+          <div class="font-mono text-sm text-slate-600">Makefile:377–421 · scripts/lint-*.sh · tests/audit-shell-scripts.bats:496</div>
+
+          <div class="rounded-lg border border-slate-200 p-4 bg-slate-50">
+            <div class="grid grid-cols-8 gap-1.5 text-center text-[10px] font-mono">
+              <div class="p-2 rounded bg-rose-100 border border-rose-300">yaml</div>
+              <div class="p-2 rounded bg-rose-100 border border-rose-300">markdown</div>
+              <div class="p-2 rounded bg-rose-100 border border-rose-300">python</div>
+              <div class="p-2 rounded bg-rose-100 border border-rose-300">bash32</div>
+              <div class="p-2 rounded bg-rose-100 border border-rose-300">shell</div>
+              <div class="p-2 rounded bg-emerald-200 border-2 border-emerald-600 font-bold">shellcheck</div>
+              <div class="p-2 rounded bg-rose-100 border border-rose-300">cilium</div>
+              <div class="p-2 rounded bg-rose-100 border border-rose-300">kyverno</div>
+            </div>
+            <p class="text-xs text-slate-600 mt-3 text-center">
+              Green = has a guard asserting it is wired into <code class="font-mono">lint</code>. Red = delete its line from the Makefile and <code class="font-mono">make lint</code>, <code class="font-mono">make test-ci</code> and CI all stay green.
+            </p>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-5 text-sm">
+            <div>
+              <div class="font-semibold text-slate-800 mb-1">Problem</div>
+              <p class="text-slate-700">#200 fixed “<code class="font-mono text-xs">make lint</code> never ran shellcheck” and left a guard — a grep for one literal line. The identical defect can recur for the other seven. Separately, <code class="font-mono text-xs">lint-markdown.sh</code> warns and passes when its tool is missing while three siblings fail.</p>
+            </div>
+            <div>
+              <div class="font-semibold text-slate-800 mb-1">Solution</div>
+              <p class="text-slate-700">A <code class="font-mono text-xs">LINTERS :=</code> list driving a <code class="font-mono text-xs">lint-%:</code> pattern rule, plus one test asserting the list equals <code class="font-mono text-xs">scripts/lint-*.sh</code> on disk. Same trick as candidate 1.</p>
+            </div>
+          </div>
+
+          <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 list-disc list-inside">
+            <li>7 unguarded sites → 1 checked list</li>
+            <li>One tool-missing policy, not two</li>
+            <li>Adding a linter: 6 sites → 2</li>
+          </ul>
+        </article>
+
+        <!-- ─── C7 ─── -->
+        <article class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 shadow-sm">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <h3 class="text-lg font-semibold">7 · Widen the shell standard past the flag surface</h3>
+            <div class="flex gap-2 shrink-0">
+              <span class="px-2 py-1 rounded text-xs font-semibold bg-amber-100 text-amber-800">Worth exploring</span>
+            </div>
+          </div>
+
+          <div class="font-mono text-sm text-slate-600">scripts/lib/ · scripts/audit-shell-scripts.sh:455 · terraform/kubernetes/scripts/*.sh</div>
+
+          <div class="grid sm:grid-cols-4 gap-3 text-center">
+            <div class="rounded-lg border border-rose-200 bg-rose-50 p-3"><div class="text-xl font-bold text-rose-700">52</div><div class="text-xs text-slate-700"><code class="font-mono">fail()</code> definitions<br/><span class="text-rose-700">one doesn't exit</span></div></div>
+            <div class="rounded-lg border border-rose-200 bg-rose-50 p-3"><div class="text-xl font-bold text-rose-700">8</div><div class="text-xs text-slate-700">tfvar parsers<br/><span class="text-rose-700">3 arg orders</span></div></div>
+            <div class="rounded-lg border border-rose-200 bg-rose-50 p-3"><div class="text-xl font-bold text-rose-700">506</div><div class="text-xs text-slate-700">raw kubectl calls<br/><span class="text-rose-700">1 retry wrapper, unreachable</span></div></div>
+            <div class="rounded-lg border border-rose-200 bg-rose-50 p-3"><div class="text-xl font-bold text-rose-700">7</div><div class="text-xs text-slate-700">wait/poll idioms<br/><span class="text-rose-700">no <code class="font-mono">wait_until</code></span></div></div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-5 text-sm">
+            <div>
+              <div class="font-semibold text-slate-800 mb-1">Problem</div>
+              <p class="text-slate-700">The entrypoint standard governs four flags. Everything the scripts actually <em>do</em> sits outside it. The auditor's exemption mechanism is the executable bit, so <code class="font-mono text-xs">chmod -x</code> silently opts a script out — four Terraform-invoked entrypoints are currently invisible that way.</p>
+            </div>
+            <div>
+              <div class="font-semibold text-slate-800 mb-1">Solution</div>
+              <p class="text-slate-700">Library modules for status output, <code class="font-mono text-xs">require_cmd</code>, tracked-file listing, <code class="font-mono text-xs">wait_until</code>, and a kubectl wrapper carrying the retry classifier that already exists but only inside the kind node. Classify libraries explicitly, not by file mode.</p>
+            </div>
+          </div>
+
+          <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 list-disc list-inside">
+            <li>Retires ~90 duplicate definitions</li>
+            <li>Gives the big scripts a test seam</li>
+            <li>Unblocks replacing 274 grep-assertions</li>
+          </ul>
+        </article>
+      </section>
+
+      <!-- ══════════════ REJECTED ══════════════ -->
+      <section class="space-y-4">
+        <h2 class="text-xl font-semibold tracking-tight border-b border-slate-300 pb-2">Tested and rejected</h2>
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="rounded-lg border-2 border-slate-300 bg-white p-4 space-y-2">
+            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Hypothesis · rejected by experiment</div>
+            <p class="text-sm font-semibold">The <code class="font-mono">apps-makefile</code> flake is the leaked test fixture</p>
+            <p class="text-sm text-slate-700">
+              <span class="font-mono text-xs">tests/make-target-surfaces.bats</span> writes a deliberately-broken app Makefile into the real
+              <span class="font-mono text-xs">apps/</span> tree, at exactly the depth the repo-wide app enumerator globs. It runs immediately before
+              <span class="font-mono text-xs">apps-makefile.bats</span> in the serial batch. A plausible mechanical cause for your one open unknown.
+            </p>
+            <p class="text-sm font-semibold text-rose-700">Reproduced both fixture variants by hand: 17/17 pass, 0 failures.</p>
+            <p class="text-xs text-slate-600">The flake stands unexplained — but this candidate is now eliminated with evidence rather than left as a plausible lead. <code class="font-mono">BATS_JOBS</code> stays <code class="font-mono">off</code>.</p>
+          </div>
+          <div class="rounded-lg border-2 border-slate-300 bg-white p-4 space-y-2">
+            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Claim · not reproduced</div>
+            <p class="text-sm font-semibold">Committed <code class="font-mono">__pycache__</code> from the pre-Go FastAPI UI</p>
+            <p class="text-sm text-slate-700">Reported as dead bytecode committed after the Go rewrite. <span class="font-semibold">0 files tracked</span> — they exist on disk but are untracked and ignored.</p>
+            <p class="text-xs text-slate-600">Not a finding. Recorded so it isn't re-raised.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════ PERF PLACEHOLDER ══════════════ -->
+      <section id="perf" class="space-y-5">
+        <h2 class="text-xl font-semibold tracking-tight border-b border-slate-300 pb-2">Gate hotspots — measured</h2>
+
+        <div class="grid sm:grid-cols-4 gap-3 text-center">
+          <div class="rounded-lg border border-slate-200 bg-white p-3"><div class="text-2xl font-bold">739s</div><div class="text-xs text-slate-600">serial wall clock</div></div>
+          <div class="rounded-lg border border-slate-200 bg-white p-3"><div class="text-2xl font-bold">1,097</div><div class="text-xs text-slate-600">tests, 148 files</div></div>
+          <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3"><div class="text-2xl font-bold text-emerald-700">0</div><div class="text-xs text-slate-600">failures</div></div>
+          <div class="rounded-lg border-2 border-rose-300 bg-rose-50 p-3"><div class="text-2xl font-bold text-rose-700">59%</div><div class="text-xs text-slate-700">in the top 10 files</div></div>
+        </div>
+
+        <div class="rounded-lg border border-slate-200 bg-white overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100 text-xs uppercase tracking-wide text-slate-600">
+              <tr><th class="text-left px-3 py-2">#</th><th class="text-left px-3 py-2">File</th><th class="text-right px-3 py-2">Wall</th><th class="text-right px-3 py-2">Tests</th><th class="text-right px-3 py-2">s/test</th><th class="text-left px-3 py-2">Category</th></tr>
+            </thead>
+            <tbody class="font-mono text-xs">
+              <tr class="border-t border-slate-200 bg-rose-50">
+                <td class="px-3 py-2 font-bold">1</td><td class="px-3 py-2">kind/tests/hubble-observe-cilium-policies</td>
+                <td class="px-3 py-2 text-right font-bold text-rose-700">128.8s</td><td class="px-3 py-2 text-right">19</td><td class="px-3 py-2 text-right">6.78</td>
+                <td class="px-3 py-2 font-sans">self-inflicted sleep — 13 sleep sites in its own 47 stubs</td>
+              </tr>
+              <tr class="border-t border-slate-200"><td class="px-3 py-2">2</td><td class="px-3 py-2">kind/tests/sync-gitea-policies</td><td class="px-3 py-2 text-right">45.2s</td><td class="px-3 py-2 text-right">47</td><td class="px-3 py-2 text-right">0.96</td><td class="px-3 py-2 font-sans">golden-render, broadly earned</td></tr>
+              <tr class="border-t border-slate-200 bg-amber-50"><td class="px-3 py-2">3</td><td class="px-3 py-2">tests/local-idp-contracts</td><td class="px-3 py-2 text-right font-bold">45.0s</td><td class="px-3 py-2 text-right">9</td><td class="px-3 py-2 text-right">5.00</td><td class="px-3 py-2 font-sans">expensive <em>and</em> weak — see below</td></tr>
+              <tr class="border-t border-slate-200"><td class="px-3 py-2">4</td><td class="px-3 py-2">kind/tests/makefile</td><td class="px-3 py-2 text-right">38.0s</td><td class="px-3 py-2 text-right">84</td><td class="px-3 py-2 text-right">0.45</td><td class="px-3 py-2 font-sans">real <code>make</code> against the real tree</td></tr>
+              <tr class="border-t border-slate-200"><td class="px-3 py-2">5</td><td class="px-3 py-2">kind/tests/check-docker-registry-auth</td><td class="px-3 py-2 text-right">36.1s</td><td class="px-3 py-2 text-right">6</td><td class="px-3 py-2 text-right">6.02</td><td class="px-3 py-2 font-sans">sleep — 32s predicted statically, 36.1s measured</td></tr>
+              <tr class="border-t border-slate-200"><td class="px-3 py-2">6</td><td class="px-3 py-2">lima/tests/ssh-agent</td><td class="px-3 py-2 text-right">32.4s</td><td class="px-3 py-2 text-right">4</td><td class="px-3 py-2 text-right">8.09</td><td class="px-3 py-2 font-sans">sleep — worst s/test in the suite</td></tr>
+              <tr class="border-t border-slate-200 bg-amber-50"><td class="px-3 py-2">7</td><td class="px-3 py-2">tests/audit-shell-scripts</td><td class="px-3 py-2 text-right font-bold">31.5s</td><td class="px-3 py-2 text-right">24</td><td class="px-3 py-2 text-right">1.31</td><td class="px-3 py-2 font-sans"><strong>19.4s is a duplicated <code>make lint-shellcheck</code></strong></td></tr>
+              <tr class="border-t border-slate-200"><td class="px-3 py-2">8</td><td class="px-3 py-2">tests/makefile</td><td class="px-3 py-2 text-right">28.1s</td><td class="px-3 py-2 text-right">28</td><td class="px-3 py-2 text-right">1.00</td><td class="px-3 py-2 font-sans">real <code>make</code>; also clobbers the worktree snapshot</td></tr>
+              <tr class="border-t border-slate-200"><td class="px-3 py-2">9</td><td class="px-3 py-2">kind/tests/preload-images</td><td class="px-3 py-2 text-right">25.8s</td><td class="px-3 py-2 text-right">8</td><td class="px-3 py-2 text-right">3.23</td><td class="px-3 py-2 font-sans">stub-heavy</td></tr>
+              <tr class="border-t border-slate-200"><td class="px-3 py-2">10</td><td class="px-3 py-2">kind/tests/check-memory-preflight</td><td class="px-3 py-2 text-right">25.1s</td><td class="px-3 py-2 text-right">12</td><td class="px-3 py-2 text-right">2.09</td><td class="px-3 py-2 font-sans">sleep</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid md:grid-cols-3 gap-4 text-sm">
+          <div class="rounded-lg border-2 border-rose-300 bg-rose-50 p-4 space-y-1">
+            <div class="font-semibold text-rose-800">One file is 17.4% of the gate</div>
+            <p class="text-slate-700"><span class="font-mono text-xs">hubble-observe-cilium-policies</span> spends 128.8s on 19 tests. It writes 47 fake binaries and then sleeps inside them 13 times. It is asserting the shape of text its own stubs produced.</p>
+          </div>
+          <div class="rounded-lg border-2 border-amber-300 bg-amber-50 p-4 space-y-1">
+            <div class="font-semibold text-amber-900">A lint concern living in the test suite</div>
+            <p class="text-slate-700"><span class="font-mono text-xs">audit-shell-scripts.bats:516</span> runs <span class="font-mono text-xs">make lint-shellcheck</span> — 19.4s, 207 files. <code>make lint</code> already did it. Every gate run pays twice.</p>
+          </div>
+          <div class="rounded-lg border-2 border-amber-300 bg-amber-50 p-4 space-y-1">
+            <div class="font-semibold text-amber-900">45s to check three JSON keys</div>
+            <p class="text-slate-700"><span class="font-mono text-xs">local-idp-contracts.bats</span> is the 3rd most expensive file — and its “contract schemas exist” test only asserts each of 9 schemas has <span class="font-mono text-xs">$schema</span>, <span class="font-mono text-xs">title</span>, <span class="font-mono text-xs">type</span>. Only 1 of the 9 is validated against real data.</p>
+          </div>
+        </div>
+
+        <div class="rounded-lg bg-slate-100 border border-slate-300 p-4 text-sm space-y-2">
+          <div class="font-semibold text-slate-800">Nine declared contracts, one enforced — from both ends</div>
+          <p class="text-slate-700">
+            <span class="font-mono text-xs">schemas/idp/</span> holds 9 JSON Schemas describing the portal API's wire contract. Only
+            <span class="font-mono text-xs">catalog.schema.json</span> is ever validated against real data. And the four scripts that
+            <em>produce</em> those payloads — <span class="font-mono text-xs">idp-catalog.sh</span>, <span class="font-mono text-xs">idp-catalog-read-model.sh</span>,
+            <span class="font-mono text-xs">idp-environment.sh</span>, <span class="font-mono text-xs">idp-secrets.sh</span> — are among the
+            <strong>34 of 209 shell scripts named by no test at all</strong>. The contract is unenforced on the producing side and the describing side simultaneously.
+          </p>
+        </div>
+
+        <div class="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-4 text-sm space-y-3">
+          <div class="font-semibold text-emerald-900">Validated on a quiet host — and load-sensitivity turns out to be a classifier</div>
+          <p class="text-slate-700">
+            The first pass ran with <span class="font-mono text-xs">mediaanalysisd</span> taking ~2 cores. Once the host went quiet the
+            top 6 were re-measured. The ranking is unchanged, but <em>which</em> files moved is the interesting part:
+          </p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs font-mono">
+              <thead class="text-slate-600 border-b border-emerald-300">
+                <tr><th class="text-left py-1">file</th><th class="text-right py-1">contended</th><th class="text-right py-1">quiet</th><th class="text-right py-1">drift</th><th class="text-left py-1 pl-3 font-sans">reading</th></tr>
+              </thead>
+              <tbody>
+                <tr class="border-b border-emerald-200"><td class="py-1">hubble-observe-cilium-policies</td><td class="text-right">128.8s</td><td class="text-right">128.2s</td><td class="text-right font-bold">−0.5%</td><td class="pl-3 font-sans text-rose-700">waiting, not working</td></tr>
+                <tr class="border-b border-emerald-200"><td class="py-1">check-docker-registry-auth</td><td class="text-right">36.1s</td><td class="text-right">36.0s</td><td class="text-right font-bold">−0.3%</td><td class="pl-3 font-sans text-rose-700">waiting</td></tr>
+                <tr class="border-b border-emerald-200"><td class="py-1">ssh-agent</td><td class="text-right">32.4s</td><td class="text-right">32.4s</td><td class="text-right font-bold">+0.0%</td><td class="pl-3 font-sans text-rose-700">waiting</td></tr>
+                <tr class="border-b border-emerald-200"><td class="py-1">local-idp-contracts</td><td class="text-right">45.0s</td><td class="text-right">44.9s</td><td class="text-right font-bold">−0.2%</td><td class="pl-3 font-sans text-rose-700">waiting</td></tr>
+                <tr class="border-b border-emerald-200"><td class="py-1">sync-gitea-policies</td><td class="text-right">45.2s</td><td class="text-right">39.8s</td><td class="text-right font-bold text-emerald-800">−11.9%</td><td class="pl-3 font-sans text-emerald-800">genuinely computing</td></tr>
+                <tr><td class="py-1">kind makefile</td><td class="text-right">38.0s</td><td class="text-right">35.6s</td><td class="text-right font-bold text-emerald-800">−6.3%</td><td class="pl-3 font-sans text-emerald-800">genuinely computing</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="text-slate-700">
+            A file whose wall clock does not move when you take two cores away is not doing work — it is sleeping. That splits the
+            top 6 cleanly: four files are pure wait, two do real work. <strong>The four wait-bound files are 242s of the 739s gate — 33% —
+            and recoverable without making anything faster</strong>, only by removing sleeps the tests wrote themselves.
+          </p>
+          <p class="text-slate-700 text-xs">
+            Corollary for <span class="font-mono">BATS_JOBS=auto</span>: wait-bound files parallelise almost perfectly, since they consume no CPU.
+            The blockers were never these — they were the timing-assertion files and the real-tree writers.
+          </p>
+        </div>
+
+        <details class="rounded-lg border border-slate-200 bg-white p-4 text-sm">
+          <summary class="cursor-pointer font-semibold text-slate-800">Fingerprint &amp; method — including what was not clean</summary>
+          <div class="mt-3 space-y-2 text-slate-700 font-mono text-xs">
+            <div>Apple M4 · 10 cores (4P + 6E) · 16 GB · macOS 26.6 arm64</div>
+            <div>bats 1.14.0 · bash 5.3.15 · GNU Make 3.81 (macOS stock, unpinned) · git 5d21791</div>
+            <div>docker: down · kind clusters: none · lima: Stopped — no repo workload running</div>
+            <div class="text-amber-700">pass 1 contamination: mediaanalysisd ~201% CPU, unrelated VM ~72% — not killed (host not mine to quiet)</div>
+            <div class="text-emerald-700">pass 2: host quiet (load 1.62, mediaanalysisd gone) — top 6 re-measured, ranking unchanged</div>
+            <div class="font-sans text-slate-600 pt-2">
+              Method: each of the 148 <span class="font-mono">CI_BATS_TESTS</span> files run in isolation, sequentially, once —
+              the same isolation method the #199 triage used. <strong>Ranking-grade, not regression-grade:</strong> sound for attributing
+              cost between files, but not a baseline to diff future runs against; that needs ≥20 runs. The contamination caveat on
+              pass 1 was resolved rather than assumed away — the quiet-host recheck confirmed every top-6 position and, unexpectedly,
+              produced the wait-vs-work classifier above. 0 failures in both passes.
+              Verified afterwards: worktree clean, no git tags created, no debris.
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <!-- ══════════════ TOP RECOMMENDATION ══════════════ -->
+      <section id="top-recommendation" class="rounded-xl deep text-white p-8 space-y-4">
+        <h2 class="text-xl font-semibold tracking-tight">Top recommendation</h2>
+        <p class="text-lg font-medium text-emerald-300">Candidate 1 — make the gate enumerate.</p>
+        <p class="text-slate-200 max-w-3xl text-sm leading-relaxed">
+          Not because it is the biggest — candidates 3 and 5 are far larger — but because it is the one that
+          changes how every other finding gets caught. PRs #195–#202 were disciplined ratchet work, and each one
+          left a guard behind. But every guard is a <em>point</em> guard: assert this file is listed, assert this
+          target is wired. That is negative leverage — each new invariant costs a new test, and each guard is
+          written only after its own defect escapes.
+        </p>
+        <p class="text-slate-200 max-w-3xl text-sm leading-relaxed">
+          The four invisible test files prove the pattern: the guard against silent shrinkage shipped with the
+          same blind spot, one level up, that it was written to close. Total enumeration minus a named exclusion
+          list converts an open-ended class of misses into a visible, shrinking list. Then apply the identical
+          shape to the linter targets (candidate 6) and to the serial-containment list.
+        </p>
+        <p class="text-slate-400 text-sm">
+          Cheapest real win if you want code deleted instead: candidate 4 — 456 lines, no new concept, pattern already proven one line below.
+        </p>
+      </section>
+
+      <footer class="text-xs text-slate-500 pt-6 border-t border-slate-200">
+        Generated from five parallel Explore passes over the Make/build surface, shell layer, test-and-gate layer,
+        Terraform layer, and Go tooling — each finding re-verified against the working tree before inclusion.
+      </footer>
+    </main>
+  </body>
+</html>

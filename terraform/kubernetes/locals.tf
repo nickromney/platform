@@ -261,6 +261,52 @@ locals {
       skip_auth_regex    = "^/(signed-out\\.html|app-shell\\.css|favicon\\.svg|favicon\\.ico)$"
     }
   } : {}
+  sso_sentiment_proxy_apps = local.enable_sentiment_workloads_effective ? {
+    sentiment_dev = {
+      name                 = "oauth2-proxy-sentiment-dev"
+      public_url           = local.sentiment_dev_public_url
+      upstream             = "http://sentiment-router.dev.svc.cluster.local:8080"
+      upstream_timeout_arg = "\n          - --upstream-timeout=180s"
+      group                = "app-sentiment-dev"
+      cookie_name          = local.dev_sso_cookie_name
+      cookie_domain        = local.dev_cookie_domain
+      whitelist_domain     = local.dev_whitelist_domains
+    }
+    sentiment_uat = {
+      name                 = "oauth2-proxy-sentiment-uat"
+      public_url           = local.sentiment_uat_public_url
+      upstream             = "http://sentiment-router.uat.svc.cluster.local:8080"
+      upstream_timeout_arg = "\n          - --upstream-timeout=180s"
+      group                = "app-sentiment-uat"
+      cookie_name          = local.uat_sso_cookie_name
+      cookie_domain        = local.uat_cookie_domain
+      whitelist_domain     = local.uat_whitelist_domains
+    }
+  } : {}
+  sso_subnetcalc_proxy_apps = local.enable_subnetcalc_workloads_effective ? {
+    subnetcalc_dev = {
+      name             = "oauth2-proxy-subnetcalc-dev"
+      public_url       = local.subnetcalc_dev_public_url
+      upstream         = "http://subnetcalc-router.dev.svc.cluster.local:8080"
+      group            = "app-subnetcalc-dev"
+      cookie_name      = local.dev_sso_cookie_name
+      cookie_domain    = local.dev_cookie_domain
+      whitelist_domain = local.dev_whitelist_domains
+    }
+    subnetcalc_uat = {
+      name             = "oauth2-proxy-subnetcalc-uat"
+      public_url       = local.subnetcalc_uat_public_url
+      upstream         = "http://subnetcalc-router.uat.svc.cluster.local:8080"
+      group            = "app-subnetcalc-uat"
+      cookie_name      = local.uat_sso_cookie_name
+      cookie_domain    = local.uat_cookie_domain
+      whitelist_domain = local.uat_whitelist_domains
+    }
+  } : {}
+  sso_workload_proxy_apps = merge(
+    local.sso_sentiment_proxy_apps,
+    local.sso_subnetcalc_proxy_apps,
+  )
   sso_oauth2_proxy_redirect_uris = distinct(concat(
     [
       "${local.argocd_public_url}/oauth2/callback",
