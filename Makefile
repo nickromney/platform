@@ -128,6 +128,10 @@ CI_BATS_TESTS := \
 	kubernetes/lima/tests/makefile.bats \
 	kubernetes/lima/tests/manage-kubeconfig.bats \
 	kubernetes/lima/tests/ssh-agent.bats \
+	kubernetes/tests/host-gateway-proxy.bats \
+	kubernetes/tests/k3s-bootstrap-lib.bats \
+	kubernetes/tests/k3s-registries-lib.bats \
+	kubernetes/tests/sync-local-image-cache.bats \
 	tests/apim-simulator-makefile.bats \
 	tests/app-healthcheck-commands.bats \
 	tests/app-layout-consistency.bats \
@@ -151,6 +155,7 @@ CI_BATS_TESTS := \
 	tests/fmt-hcl.bats \
 	tests/fmt-markdown.bats \
 	tests/git-hooks.bats \
+	tests/go-tests.bats \
 	tests/host-access-contracts.bats \
 	tests/host-port-listeners.bats \
 	tests/http-fetch.bats \

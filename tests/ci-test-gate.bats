@@ -64,6 +64,27 @@ setup() {
 # aks-ai-foundry-experiment gates its two live tests behind
 # KIND_AKS_AI_FOUNDRY_LIVE=1, so they skip by default. All three run in about a
 # second. The kubernetes/*/tests backlog is now empty.
+#
+# 2026-08-17, third pass -- and the same defect a third time. The second pass
+# widened the enumeration glob by exactly one directory level, from
+# `tests/*.bats` to `tests/*.bats` plus `kubernetes/*/tests/*.bats`. That still
+# could not see `kubernetes/tests/*.bats`, which is one level SHORTER than the
+# second pattern and does not match the first: four files (host-gateway-proxy,
+# k3s-bootstrap-lib, k3s-registries-lib, sync-local-image-cache) were neither
+# gated nor backlogged, and nothing in the repo ran them. All four were green
+# and cost ~2s together.
+#
+# The lesson is that a glob pair is not a completeness check -- it encodes a
+# guess about where tests live, and every widening is one more guess. This now
+# enumerates `git ls-files '*.bats'` with no path shape at all, so the only way
+# to be outside the gate is to be named in CI_GATE_BACKLOG above. A new
+# directory cannot hide.
+#
+# The extraction regex had the same shape problem and would have MIS-PARSED the
+# fix: `grep -oE '(tests|kubernetes/[a-z0-9-]+/tests)/...'` matches the inner
+# `tests/...` of `kubernetes/tests/foo.bats` and yields the wrong path, so the
+# guard would have reported a file missing that was in fact listed. Tokenising
+# the Makefile block and filtering on `.bats` drops the assumption entirely.
 CI_GATE_BACKLOG="tests/backstage-compose.bats
 tests/backstage-portal.bats
 tests/devcontainer-makefile.bats
@@ -91,13 +112,14 @@ is_backlogged() {
   printf '%s\n' "${CI_GATE_BACKLOG}" | grep -qxF "$1"
 }
 
-@test "no new tests/*.bats file escapes CI_BATS_TESTS" {
+@test "no tracked .bats file anywhere escapes CI_BATS_TESTS" {
   local listed missing=""
 
   listed="$(
     cd "${REPO_ROOT}" &&
       awk '/^CI_BATS_TESTS :=/,/[^\\]$/' Makefile |
-      grep -oE '(tests|kubernetes/[a-z0-9-]+/tests)/[A-Za-z0-9._-]+\.bats' |
+      tr -s ' \t\\' '\n' |
+      grep -E '\.bats$' |
       sort -u
   )"
 
@@ -109,7 +131,7 @@ is_backlogged() {
     if ! printf '%s\n' "${listed}" | grep -qxF "${file}"; then
       missing="${missing}${file}"$'\n'
     fi
-  done < <(cd "${REPO_ROOT}" && git ls-files 'tests/*.bats' 'kubernetes/*/tests/*.bats')
+  done < <(cd "${REPO_ROOT}" && git ls-files '*.bats')
 
   if [ -n "${missing}" ]; then
     printf 'not in CI_BATS_TESTS:\n%s\n' "${missing}" >&2
@@ -128,7 +150,8 @@ is_backlogged() {
   done < <(
     cd "${REPO_ROOT}" &&
       awk '/^CI_BATS_TESTS :=/,/[^\\]$/' Makefile |
-      grep -oE '(tests|kubernetes/[a-z0-9-]+/tests)/[A-Za-z0-9._-]+\.bats' |
+      tr -s ' \t\\' '\n' |
+      grep -E '\.bats$' |
       sort -u
   )
 

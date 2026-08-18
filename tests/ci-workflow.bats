@@ -16,6 +16,7 @@ text = path.read_text(encoding="utf-8")
 
 expected = {
     "actions/checkout": ("3d3c42e5aac5ba805825da76410c181273ba90b1", "v7.0.1"),
+    "actions/setup-go": ("b7ad1dad31e06c5925ef5d2fc7ad053ef454303e", "v7.0.0"),
     "actions/setup-node": ("820762786026740c76f36085b0efc47a31fe5020", "v7.0.0"),
 }
 
@@ -59,6 +60,42 @@ for full_ref, selector in uses:
     seen.add(repo)
 
 assert seen == set(expected), seen
+PY
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "CI Go version matches the go directive every module declares" {
+  # tests/go-tests.bats runs all 17 module suites in CI, so CI's toolchain has
+  # to be the one the modules ask for. Deriving the expectation from go.mod
+  # rather than restating "1.26" here keeps a Go bump from needing two edits and
+  # silently passing with one.
+  run uv run --isolated python - "${REPO_ROOT}" <<'PY'
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+gomods = subprocess.run(
+    ["git", "ls-files", "*go.mod"], cwd=root, capture_output=True, text=True, check=True
+).stdout.split()
+assert gomods, "no go.mod files tracked"
+
+directives = set()
+for rel in gomods:
+    for line in (root / rel).read_text(encoding="utf-8").splitlines():
+        m = re.fullmatch(r"go\s+(\d+\.\d+(?:\.\d+)?)", line.strip())
+        if m:
+            directives.add(m.group(1))
+
+assert len(directives) == 1, f"modules disagree on the go directive: {sorted(directives)}"
+declared = directives.pop()
+
+ci = (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+m = re.search(r"uses:\s*actions/setup-go@[0-9a-f]{40}[^\n]*\n\s*with:\s*\n\s*go-version:\s*\"?([0-9.]+)\"?", ci)
+assert m, "ci.yml does not pin a go-version for actions/setup-go"
+assert m.group(1) == declared, (m.group(1), declared)
 PY
 
   [ "${status}" -eq 0 ]

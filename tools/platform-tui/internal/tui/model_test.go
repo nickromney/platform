@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -314,6 +316,66 @@ func TestViewHasSingleHeaderAndFooterHints(t *testing.T) {
 	}
 }
 
+// fallbackWorkflowOptions() hardcodes the variant, stage, action and app
+// catalogue that the workflow contract also declares. When the core is
+// unreachable the TUI serves that copy, so drift shows up as a silently stale
+// menu rather than an error. Unlike the bundle test above, this one compares
+// two independent sources and can actually fail.
+func TestFallbackWorkflowOptionsMatchesContract(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "kubernetes", "workflow", "options.json"))
+	if err != nil {
+		t.Fatalf("read workflow contract: %v", err)
+	}
+
+	var contract struct {
+		Variants []struct {
+			ID string `json:"id"`
+		} `json:"variants"`
+		Stages []struct {
+			ID string `json:"id"`
+		} `json:"stages"`
+		Actions []string `json:"actions"`
+		Apps    []string `json:"apps"`
+	}
+	if err := json.Unmarshal(data, &contract); err != nil {
+		t.Fatalf("parse workflow contract: %v", err)
+	}
+
+	fb := fallbackWorkflowOptions()
+
+	var fbStages []string
+	for _, s := range fb.Stages {
+		fbStages = append(fbStages, s.ID)
+	}
+	var contractStages []string
+	for _, s := range contract.Stages {
+		contractStages = append(contractStages, s.ID)
+	}
+	if !reflect.DeepEqual(fbStages, contractStages) {
+		t.Errorf("fallback stage ladder has drifted from the contract:\n  fallback: %v\n  contract: %v", fbStages, contractStages)
+	}
+
+	var fbVariants []string
+	for _, v := range fb.Variants {
+		fbVariants = append(fbVariants, v.ID)
+	}
+	var contractVariants []string
+	for _, v := range contract.Variants {
+		contractVariants = append(contractVariants, v.ID)
+	}
+	if !reflect.DeepEqual(fbVariants, contractVariants) {
+		t.Errorf("fallback variants have drifted from the contract:\n  fallback: %v\n  contract: %v", fbVariants, contractVariants)
+	}
+
+	if len(contract.Apps) > 0 && !reflect.DeepEqual(fb.Apps, contract.Apps) {
+		t.Errorf("fallback apps have drifted from the contract:\n  fallback: %v\n  contract: %v", fb.Apps, contract.Apps)
+	}
+}
+
 func TestPresetBundleAddsWorkflowArgs(t *testing.T) {
 	m := New(Config{})
 	m = choose(m, t, "kind")
@@ -324,69 +386,95 @@ func TestPresetBundleAddsWorkflowArgs(t *testing.T) {
 	m = choose(m, t, "sentiment enabled (default: enabled)")
 	m = choose(m, t, "subnetcalc enabled (default: enabled)")
 
+	idpDemo := guidedSurfaceProfiles(t)["IDP demo"]
+	if idpDemo == nil {
+		t.Fatal(`contract has no "IDP demo" guided surface profile`)
+	}
+	resourceProfile := idpDemo["resource_profile"]
+
 	got := m.workflowArgs("preview")
-	for _, want := range []string{
-		"--preset",
-		"resource-profile=local-idp-12gb",
-		"image-distribution=local-cache",
-		"network-profile=cilium",
-	} {
-		if !contains(got, want) {
-			t.Fatalf("preview args missing %q: %#v", want, got)
+	want := []string{"--preset"}
+	for key, value := range idpDemo {
+		want = append(want, strings.ReplaceAll(key, "_", "-")+"="+value)
+	}
+	for _, w := range want {
+		if !contains(got, w) {
+			t.Fatalf("preview args missing %q: %#v", w, got)
 		}
 	}
-	if !containsString(m.breadcrumb(), "resource=local-idp-12gb") {
-		t.Fatalf("expected preset breadcrumb, got %q", m.breadcrumb())
+	if !containsString(m.breadcrumb(), "resource="+resourceProfile) {
+		t.Fatalf("expected preset breadcrumb with resource=%s, got %q", resourceProfile, m.breadcrumb())
 	}
 }
 
-func TestPresetBundlesMatchBrowserSetupProfiles(t *testing.T) {
-	tests := []struct {
-		label string
-		want  []string
-	}{
-		{
-			label: "Minimal local",
-			want: []string{
-				"resource-profile=minimal",
-				"image-distribution=pull",
-				"network-profile=cilium",
-				"app-set=no-reference-apps",
-			},
-		},
-		{
-			label: "IDP demo",
-			want: []string{
-				"resource-profile=local-idp-12gb",
-				"image-distribution=local-cache",
-				"network-profile=cilium",
-			},
-		},
-		{
-			label: "Airplane",
-			want: []string{
-				"resource-profile=airplane",
-				"image-distribution=airplane",
-				"network-profile=cilium",
-			},
-		},
+// guidedSurfaceProfiles reads the preset bundles from the workflow contract
+// rather than restating them here. The previous version of this test hardcoded
+// both sides of a parity check, so when the IDP demo bundle moved from
+// local-idp-12gb to local-idp-16gb (#135 added the 16GB profile) the test went
+// stale and stayed red -- invisible, because nothing in the gate runs the Go
+// tests under tools/. Deriving the expectation from the contract means the next
+// bundle change updates this test automatically or fails loudly.
+func guidedSurfaceProfiles(t *testing.T) map[string]map[string]string {
+	t.Helper()
+
+	// internal/tui -> internal -> platform-tui -> tools -> repo
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "kubernetes", "workflow", "options.json"))
+	if err != nil {
+		t.Fatalf("read workflow contract: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.label, func(t *testing.T) {
+	var contract struct {
+		GuidedSurfaceProfiles []struct {
+			Label   string            `json:"label"`
+			Presets map[string]string `json:"presets"`
+		} `json:"guided_surface_profiles"`
+	}
+	if err := json.Unmarshal(data, &contract); err != nil {
+		t.Fatalf("parse workflow contract: %v", err)
+	}
+
+	out := map[string]map[string]string{}
+	for _, p := range contract.GuidedSurfaceProfiles {
+		if len(p.Presets) == 0 {
+			continue // stage-defaults carries no overlay
+		}
+		out[p.Label] = p.Presets
+	}
+	if len(out) == 0 {
+		t.Fatal("no guided surface profiles with presets found in the contract")
+	}
+	return out
+}
+
+// NOTE ON WHAT THIS DOES NOT DO. The model loads the same contract this test
+// reads, so this cannot detect contract drift -- both sides move together.
+// Verified by drifting options.json and watching it still pass. What it does
+// assert is that selecting a bundle in the TUI actually applies that bundle's
+// presets to the outgoing args, which is real behaviour and was worth keeping
+// from the test this replaced. The drift check that CAN fail is
+// TestFallbackWorkflowOptionsMatchesContract below.
+func TestPresetBundleSelectionAppliesContractPresets(t *testing.T) {
+	for label, presets := range guidedSurfaceProfiles(t) {
+		t.Run(label, func(t *testing.T) {
 			m := New(Config{})
 			m = choose(m, t, "kind")
 			m = choose(m, t, "900 sso")
 			m = choose(m, t, "Preset bundle")
-			m = choose(m, t, tt.label)
+			m = choose(m, t, label)
 			m = choose(m, t, "plan")
 			m = choose(m, t, appDefaultLabel("sentiment", m.appDefault("sentiment")))
 			m = choose(m, t, appDefaultLabel("subnetcalc", m.appDefault("subnetcalc")))
 
 			got := m.workflowArgs("preview")
-			for _, want := range tt.want {
+			for key, value := range presets {
+				// contract uses snake_case keys; the CLI flag uses kebab-case
+				want := strings.ReplaceAll(key, "_", "-") + "=" + value
 				if !contains(got, want) {
-					t.Fatalf("%s args missing %q: %#v", tt.label, want, got)
+					t.Fatalf("%s: args missing %q (contract says %s=%s): %#v", label, want, key, value, got)
 				}
 			}
 		})

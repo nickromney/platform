@@ -531,6 +531,7 @@ status:
 	@set -euo pipefail; \
 	echo "=== Lima VM status ==="; \
 	if command -v limactl >/dev/null 2>&1; then \
+		limactl list 2>/dev/null | awk -v prefix="$(LIMA_INSTANCE_PREFIX)-" 'NR==1 || index($$1, prefix) == 1 { print }'; \
 	else \
 		echo "limactl not found in PATH"; \
 	fi; \

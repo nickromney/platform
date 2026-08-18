@@ -51,6 +51,16 @@ jobs:
         with:
           node-version: 22
 
+      # tests/go-tests.bats runs every tracked Go module's suite -- ~9.5k lines
+      # of tests that no CI job executed before. Pinned rather than taken from
+      # the runner image, for the reason #202 pinned shellcheck. The version
+      # tracks the `go` directive shared by all 17 go.mod files; tests/
+      # ci-workflow.bats asserts the two stay equal.
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version: "1.26"
+
       - name: Install lint and Bats tools
         run: |
           set -euo pipefail
