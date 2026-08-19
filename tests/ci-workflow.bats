@@ -131,3 +131,42 @@ PY
   [ "${status}" -eq 0 ]
   [ -z "${output}" ]
 }
+
+@test "CI Go setup points the cache at the nested go.mod files" {
+  # Every go.mod lives under apps/ or tools/; setup-go looks in the workspace
+  # root and, finding none, logs "Dependencies file is not found" and disables
+  # the module and build caches entirely. The symptom is silent -- a warning,
+  # not a failure -- so this asserts the fix rather than the absence of a log.
+  run grep -cE '^\s+cache-dependency-path: "\*\*/go\.mod"' "${REPO_ROOT}/.github/workflows/ci.yml"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" -ge 1 ]
+
+  # The setting is worthless if a go.mod ever lands in the root, because
+  # setup-go would find that one and cache only it.
+  run bash -lc "cd '${REPO_ROOT}' && git ls-files 'go.mod'"
+
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "CI installs base tools only when the runner image lacks them" {
+  # `apt-get update` has taken over six minutes on this job when the Azure
+  # mirror Ign:s and the run falls back to archive.ubuntu.com. ubuntu-latest
+  # ships all of these already, so the update must be conditional.
+  run bash -lc "
+    awk '/^          declare -A base_tools=\(/,/^          fi\$/' '${REPO_ROOT}/.github/workflows/ci.yml' |
+      grep -c 'apt-get update'
+  "
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" -eq 1 ]
+
+  # An unconditional `apt-get update` outside that guard is the regression.
+  run bash -lc "
+    grep -nE '^          (sudo )?apt-get update' '${REPO_ROOT}/.github/workflows/ci.yml' || true
+  "
+
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}

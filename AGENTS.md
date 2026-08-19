@@ -1,5 +1,45 @@
 Use the repo-local `use-platform` skill at `skills/use-platform/SKILL.md` first if your agent supports installable skills. Then run `make` at the root; it is informational and points to focused Makefiles. Choose a subtree with `make -C apps help`, `make -C docker/compose help`, `make -C kubernetes/kind help`, or `make -C kubernetes/lima help`, then read the nearest subtree `README.md`.
 
+## Run the gate yourself before you commit
+
+Git hooks run through lefthook (`make hooks` installs them from `lefthook.yml`),
+and they fire on `git commit` and `git push` — not while you are working. An
+agent that discovers them at commit time has already built on top of whatever
+they would have caught.
+
+Run the gate yourself, before committing:
+
+```bash
+make lint && make test-ci
+```
+
+What the hooks actually cover, so you know what they do **not**:
+
+- **pre-commit** lints only *staged* files — shellcheck on `*.sh`, yamllint on
+  `*.{yaml,yml}`, duplicate keys in `kubernetes/kind/**/*.tfvars`. Nothing
+  repo-wide, and no tests at all.
+- **pre-push** runs `make lint && make test-host-portable`, about 90 seconds.
+  That Bats subset is **8 files**; `make test-ci` runs **156**. A clean push is
+  therefore not evidence that CI will pass, and this is deliberate: git opens
+  the SSH connection before pre-push runs, so a ~12-minute gate outlives it and
+  the push dies with "Connection closed by remote host". See the comment in
+  `scripts/hooks/run-local-ci.sh`.
+
+`PLATFORM_LOCAL_CI_FULL=1` makes pre-push run the full suite, at the cost of
+that timeout. Running `make test-ci` yourself beforehand is better: you get the
+result without racing the SSH connection.
+
+Two things `make test-ci` does not check, so run them too when touching Go:
+
+```bash
+gofmt -l tools/ apps/
+cd <module> && go test -race ./...
+```
+
+Also note `make lint`'s shell audit only sees **tracked** files, so `git add`
+new scripts before trusting a clean run. New `*.bats` and `go.mod` files are
+picked up automatically once tracked — both are discovered with `git ls-files`.
+
 ## Cursor Cloud specific instructions
 
 For cloud agents on the ephemeral Cursor Cloud VM (Ubuntu 24.04, Firecracker guest

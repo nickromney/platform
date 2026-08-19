@@ -56,26 +56,51 @@ jobs:
       # the runner image, for the reason #202 pinned shellcheck. The version
       # tracks the `go` directive shared by all 17 go.mod files; tests/
       # ci-workflow.bats asserts the two stay equal.
+      # cache-dependency-path is required, not optional: every go.mod in this
+      # repo is nested under apps/ or tools/, and setup-go looks for one in the
+      # workspace root. Without it the step logs "Dependencies file is not
+      # found" and silently disables the module and build caches, so every run
+      # re-downloads and re-builds all 18 modules.
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
         with:
           go-version: "1.26"
+          cache-dependency-path: "**/go.mod"
 
       - name: Install lint and Bats tools
         run: |
           set -euo pipefail
 
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            ca-certificates \
-            curl \
-            git \
-            gzip \
-            make \
-            ripgrep \
-            tar \
-            unzip
-          sudo rm -rf /var/lib/apt/lists/*
+          # ubuntu-latest already ships every one of these. `apt-get update`
+          # alone has taken over six minutes on this job when the Azure mirror
+          # Ign:s and the run falls back to archive.ubuntu.com, so pay that cost
+          # only when something is genuinely absent. Package names differ from
+          # command names (ripgrep/rg), hence the map.
+          declare -A base_tools=(
+            [curl]=curl
+            [git]=git
+            [gzip]=gzip
+            [make]=make
+            [rg]=ripgrep
+            [tar]=tar
+            [unzip]=unzip
+          )
+          missing_packages=()
+          for command_name in "${!base_tools[@]}"; do
+            command -v "${command_name}" >/dev/null 2>&1 ||
+              missing_packages+=("${base_tools[${command_name}]}")
+          done
+          [[ -s /etc/ssl/certs/ca-certificates.crt ]] ||
+            missing_packages+=(ca-certificates)
+
+          if ((${#missing_packages[@]})); then
+            printf 'installing missing base tools: %s\n' "${missing_packages[*]}"
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends "${missing_packages[@]}"
+            sudo rm -rf /var/lib/apt/lists/*
+          else
+            echo "OK   base tools already present on the runner image; skipping apt"
+          fi
 
           source .devcontainer/toolchain-versions.sh
 
