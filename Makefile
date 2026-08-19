@@ -44,6 +44,7 @@ WORKFLOW_UI_PORT ?= 8443
 WORKFLOW_UI_HTTP ?= h2
 CI_UV_CACHE_DIR ?= $(CURDIR)/.run/uv-cache
 CHECK_WORKTREE_UNCHANGED ?= scripts/check-worktree-unchanged.sh
+CI_RECEIPT_SCRIPT ?= scripts/ci-receipt.sh
 RUN_BATS_SUITE ?= scripts/run-bats-suite.sh
 # Serial by default, on the evidence rather than by preference.
 #
@@ -204,6 +205,7 @@ test-ci:
 	UV_CACHE_DIR="$(CI_UV_CACHE_DIR)" BATS_BIN="$(BATS_BIN)" BATS_JOBS="$(BATS_JOBS)" \
 		"$(RUN_BATS_SUITE)" --execute -- $(CI_BATS_TESTS) || rc=$$?; \
 	if ! "$(CHECK_WORKTREE_UNCHANGED)" --execute --verify "$(CI_WORKTREE_SNAPSHOT)"; then rc=1; fi; \
+	if [ "$$rc" -eq 0 ]; then "$(CI_RECEIPT_SCRIPT)" --execute --action stamp; fi; \
 	exit $$rc
 
 status:

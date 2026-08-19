@@ -20,14 +20,18 @@ expected = {
     "actions/setup-node": ("820762786026740c76f36085b0efc47a31fe5020", "v7.0.0"),
 }
 
-# CI has to actually run on changes. This previously asserted the opposite, and
-# a dispatch-only workflow is exactly what let failing tests survive on main
-# unnoticed; see docs/plans/omarchy-portability-followups.md. The push trigger
-# matters alongside pull_request because those tests were failing on main.
+# The push-to-main trigger is the load-bearing one and must not be removed. A
+# dispatch-only workflow is what let failing tests survive on main unnoticed;
+# see docs/plans/omarchy-portability-followups.md.
+#
+# pull_request was dropped deliberately (ADR 0011): the full gate now runs
+# locally, gated by the make test-ci receipt that pre-push verifies. That is a
+# compensating control, not an absence of one -- the companion test below
+# asserts the hook still enforces it, so this cannot decay back into
+# dispatch-only with nothing watching.
 assert re.search(
     r"^on:\n"
     r"  workflow_dispatch:\n"
-    r"  pull_request:\n"
     r"  push:\n"
     r"    branches:\n"
     r"      - main\n"
@@ -35,6 +39,7 @@ assert re.search(
     text,
     re.MULTILINE,
 )
+assert "pull_request:" not in text, "re-adding pull_request needs a deliberate decision; see ADR 0011"
 assert re.search(r"^permissions:\n  contents: read\n", text, re.MULTILINE)
 assert "runs-on: ubuntu-latest" in text
 assert "run: make lint" in text
@@ -169,4 +174,117 @@ PY
 
   [ "${status}" -eq 0 ]
   [ -z "${output}" ]
+}
+
+@test "dropping pull_request leaves the local receipt gate enforcing the full suite" {
+  # ci.yml no longer runs on pull_request, so the full suite's only routine
+  # enforcement is local. These three facts are what make that safe; if any one
+  # of them goes, the gate is gone and nothing else reports it.
+
+  # 1. make test-ci stamps a receipt, and only when the run passed.
+  run grep -Fn 'if [ "$$rc" -eq 0 ]; then "$(CI_RECEIPT_SCRIPT)" --execute --action stamp; fi' "${REPO_ROOT}/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  # 2. The pre-push hook verifies that receipt against the tree being pushed.
+  run grep -Fn 'scripts/ci-receipt.sh" --execute --action verify' "${REPO_ROOT}/scripts/hooks/run-local-ci.sh"
+
+  [ "${status}" -eq 0 ]
+
+  # 3. lefthook actually wires that script into pre-push.
+  run grep -Fn 'scripts/hooks/run-local-ci.sh --execute' "${REPO_ROOT}/lefthook.yml"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "the gate receipt survives committing but not editing" {
+  # Both halves matter and they pull against each other.
+  #
+  # Sensitive to edits, or a receipt keeps passing while uncommitted work piles
+  # up underneath it, which is how "I ran the tests" becomes untrue.
+  #
+  # Invariant across `git commit`, or the normal sequence -- run the gate,
+  # commit, push -- invalidates itself at the commit and demands a second
+  # twelve-minute run for a tree already verified. A fingerprint built from HEAD
+  # or from `git diff HEAD` fails this half, which is why it hashes content.
+  #
+  # Exercised against a throwaway repo rather than this one, so the assertions
+  # can commit freely.
+  script="${REPO_ROOT}/scripts/ci-receipt.sh"
+  work="${BATS_TEST_TMPDIR}/repo"
+  mkdir -p "${work}"
+
+  (
+    cd "${work}"
+    git init -q
+    git config user.email test@example.com
+    git config user.name Test
+    # The developer's global config may sign commits through an external agent
+    # (1Password here), which is not reachable from a Bats sandbox.
+    git config commit.gpgsign false
+    git config tag.gpgsign false
+    printf 'one\n' >tracked.txt
+    git add tracked.txt
+    git commit -qm initial
+  )
+
+  # A gate run against this tree, then real work committed on top of it.
+  REPO_ROOT="${work}" run "${script}" --execute --action stamp
+  [ "${status}" -eq 0 ]
+
+  printf 'two\n' >"${work}/tracked.txt"
+  printf 'new\n' >"${work}/untracked.txt"
+
+  # Edits are not yet covered by the receipt.
+  REPO_ROOT="${work}" run "${script}" --execute --action verify
+  [ "${status}" -ne 0 ]
+
+  # Re-run the gate, then commit exactly what it verified.
+  REPO_ROOT="${work}" run "${script}" --execute --action stamp
+  [ "${status}" -eq 0 ]
+
+  (
+    cd "${work}"
+    git add -A
+    git commit -qm "work"
+  )
+
+  # The commit changed HEAD but no file content, so the receipt still holds.
+  REPO_ROOT="${work}" run "${script}" --execute --action verify
+  [ "${status}" -eq 0 ]
+
+  # A post-commit edit invalidates it again.
+  printf 'three\n' >"${work}/tracked.txt"
+  REPO_ROOT="${work}" run "${script}" --execute --action verify
+  [ "${status}" -ne 0 ]
+}
+
+@test "the gate receipt leaves the real index alone" {
+  # The fingerprint stages the working tree to hash it. Doing that in the real
+  # index would silently rewrite what the user had staged.
+  before="$(git -C "${REPO_ROOT}" status --porcelain -unormal)"
+
+  run bash -lc "cd '${REPO_ROOT}' && ./scripts/ci-receipt.sh --execute --action fingerprint"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" =~ ^[0-9a-f]{40}$ ]]
+
+  grep -Fq 'GIT_INDEX_FILE' "${REPO_ROOT}/scripts/ci-receipt.sh"
+
+  [ "$(git -C "${REPO_ROOT}" status --porcelain -unormal)" = "${before}" ]
+}
+
+@test "the macOS job does not inherit untrusted Homebrew taps" {
+  # The runner image taps aws/tap, and Homebrew prints a long trust notice for
+  # every untrusted tap on every invocation. Dropped rather than silenced with
+  # HOMEBREW_NO_REQUIRE_TAP_TRUST, which Homebrew documents as deprecated.
+  run grep -Fn 'brew untap "${tap}"' "${REPO_ROOT}/.github/workflows/ci.yml"
+
+  [ "${status}" -eq 0 ]
+
+  # Matches the variable being *set*, not the comment naming it -- the
+  # self-reference trap tests/python-wrapper-policy.bats records.
+  run grep -nE 'HOMEBREW_NO_REQUIRE_TAP_TRUST[[:space:]]*[:=]' "${REPO_ROOT}/.github/workflows/ci.yml"
+
+  [ "${status}" -ne 0 ]
 }
