@@ -1227,41 +1227,18 @@ resource "null_resource" "check_kind_cluster_health_after_oidc" {
     kind_target_tfvars_sha = try(filesha256(var.kind_target_tfvars_file), "absent")
     operator_overrides_sha = try(filesha256(var.kind_operator_overrides_file), "absent")
     recovery_resource_id   = null_resource.recover_kind_cluster_after_oidc_restart[0].id
+    after_oidc_script_sha  = filesha256("${local.stack_dir}/scripts/check-cluster-health-after-oidc.sh")
   }
 
   provisioner "local-exec" {
-    command     = <<__EOT__
-set -euo pipefail
-export KUBECONFIG="${local.kubeconfig_path_expanded}"
-KIND_STAGE_TFVARS_FILE="${var.kind_stage_tfvars_file}"
-KIND_TARGET_TFVARS_FILE="${var.kind_target_tfvars_file}"
-KIND_OPERATOR_OVERRIDES_FILE="${var.kind_operator_overrides_file}"
-PLATFORM_TFVARS_FILE="$${PLATFORM_TFVARS:-}"
-check_args=()
-if [[ -n "$${KIND_STAGE_TFVARS_FILE}" && -f "$${KIND_STAGE_TFVARS_FILE}" ]]; then
-  check_args+=(--var-file "$${KIND_STAGE_TFVARS_FILE}")
-fi
-if [[ -n "$${KIND_TARGET_TFVARS_FILE}" && -f "$${KIND_TARGET_TFVARS_FILE}" ]]; then
-  check_args+=(--var-file "$${KIND_TARGET_TFVARS_FILE}")
-fi
-if [[ -n "$${PLATFORM_TFVARS_FILE}" && -f "$${PLATFORM_TFVARS_FILE}" ]]; then
-  check_args+=(--var-file "$${PLATFORM_TFVARS_FILE}")
-fi
-if [[ -f "$${KIND_OPERATOR_OVERRIDES_FILE}" ]]; then
-  check_args+=(--var-file "$${KIND_OPERATOR_OVERRIDES_FILE}")
-fi
-for attempt in 1 2; do
-  if "${local.stack_dir}/scripts/check-cluster-health.sh" --execute "$${check_args[@]}"; then
-    exit 0
-  fi
-  if [[ "$${attempt}" -lt 2 ]]; then
-    echo "Post-OIDC cluster health check failed; retrying once in 60s..." >&2
-    sleep 60
-  fi
-done
-exit 1
-__EOT__
+    command     = "bash \"${local.stack_dir}/scripts/check-cluster-health-after-oidc.sh\" --execute"
     interpreter = ["/bin/bash", "-c"]
+    environment = {
+      KUBECONFIG                     = local.kubeconfig_path_expanded
+      KIND_STAGE_TFVARS_FILE         = var.kind_stage_tfvars_file
+      KIND_TARGET_TFVARS_FILE        = var.kind_target_tfvars_file
+      KIND_OPERATOR_OVERRIDES_FILE   = var.kind_operator_overrides_file
+    }
   }
 
   depends_on = [

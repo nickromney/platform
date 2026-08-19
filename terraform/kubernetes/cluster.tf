@@ -237,51 +237,18 @@ resource "null_resource" "kind_restart_containerd_on_registry_config_change" {
       for registry, file in local_file.containerd_hosts_upstream_registry_mirrors :
       registry => file.content
     }))
+    script_sha = filesha256("${local.stack_dir}/scripts/restart-kind-containerd.sh")
   }
 
   provisioner "local-exec" {
-    command = <<-EOT
-      set -eu
-      # macOS does not ship GNU timeout(1). Prefer timeout, then gtimeout, then
-      # perl alarm — the same fallback k3s_bootstrap_run_with_timeout uses.
-      run_with_timeout() {
-        _seconds="$1"
-        shift
-        if command -v timeout >/dev/null 2>&1; then
-          command timeout "$_seconds" "$@"
-          return $?
-        fi
-        if command -v gtimeout >/dev/null 2>&1; then
-          gtimeout "$_seconds" "$@"
-          return $?
-        fi
-        perl -e 'alarm shift; exec @ARGV' "$_seconds" "$@"
-      }
-      kind get nodes --name "${var.cluster_name}" | while IFS= read -r node; do
-        [ -n "$${node}" ] || continue
-        echo "Restarting containerd on $${node}..."
-        run_with_timeout 60 docker exec "$${node}" sh -lc 'set -eu; systemctl restart containerd; systemctl is-active containerd >/dev/null'
-      done
-      if [ "$${KIND_DISABLE_DEFAULT_CNI}" = "true" ]; then
-        echo "Default CNI disabled; waiting for kind nodes to register before CNI install..."
-        run_with_timeout 120 sh -eu -c '
-          while :; do
-            node_count="$(kubectl get nodes --no-headers 2>/dev/null | wc -l | tr -d " ")"
-            if [ "$${node_count}" -ge "$${EXPECTED_KIND_NODE_COUNT}" ]; then
-              exit 0
-            fi
-            sleep 2
-          done
-        '
-      else
-        echo "Waiting for nodes to become Ready..."
-        run_with_timeout ${local.platform_wait_seconds.node_ready_wrap} kubectl wait --for=condition=Ready nodes --all --timeout=${local.platform_wait_seconds.node_ready}s >/dev/null
-      fi
-    EOT
+    command = "bash \"${local.stack_dir}/scripts/restart-kind-containerd.sh\" --execute"
     environment = {
-      EXPECTED_KIND_NODE_COUNT = tostring(var.worker_count + 1)
-      KIND_DISABLE_DEFAULT_CNI = tostring(local.kind_disable_default_cni)
-      KUBECONFIG               = local.kubeconfig_path_expanded
+      CLUSTER_NAME               = var.cluster_name
+      EXPECTED_KIND_NODE_COUNT   = tostring(var.worker_count + 1)
+      KIND_DISABLE_DEFAULT_CNI   = tostring(local.kind_disable_default_cni)
+      KUBECONFIG                 = local.kubeconfig_path_expanded
+      NODE_READY_WRAP_SECONDS    = tostring(local.platform_wait_seconds.node_ready_wrap)
+      NODE_READY_TIMEOUT_SECONDS = tostring(local.platform_wait_seconds.node_ready)
     }
   }
 

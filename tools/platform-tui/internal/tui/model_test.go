@@ -141,6 +141,62 @@ func TestEscBacksOutOneScreen(t *testing.T) {
 	}
 }
 
+func TestStatusPreviewRunsStatusScript(t *testing.T) {
+	dir := t.TempDir()
+	statusScript := filepath.Join(dir, "status.sh")
+	workflowScript := filepath.Join(dir, "workflow.sh")
+	writeExecutable(t, statusScript, `#!/usr/bin/env bash
+set -euo pipefail
+printf 'status-ok %s\n' "$*"
+`)
+	writeExecutable(t, workflowScript, `#!/usr/bin/env bash
+set -euo pipefail
+printf 'workflow-should-not-run %s\n' "$*" >&2
+exit 1
+`)
+
+	m := New(Config{WorkflowScript: workflowScript, StatusScript: statusScript})
+	m = choose(m, t, "Status")
+	if m.screen != screenPreview {
+		t.Fatalf("expected status preview screen, got %v", m.screen)
+	}
+	if m.previewCommand != "make status" {
+		t.Fatalf("expected make status preview, got %q", m.previewCommand)
+	}
+
+	next, cmd := selectLabel(m, t, "Execute")
+	m = next
+	if cmd == nil {
+		t.Fatalf("expected status execute command")
+	}
+	m = drainRun(m, cmd, t)
+
+	view := m.View()
+	if !containsString(view, "status-ok --execute --output text") {
+		t.Fatalf("expected status script output, got %q", view)
+	}
+	if containsString(view, "workflow-should-not-run") {
+		t.Fatalf("status execute invoked the workflow script: %q", view)
+	}
+}
+
+func TestStatusPreviewEscReturnsToTarget(t *testing.T) {
+	m := New(Config{})
+	m = choose(m, t, "Status")
+	if m.screen != screenPreview {
+		t.Fatalf("expected status preview screen, got %v", m.screen)
+	}
+
+	next, _ := m.Update(key("esc"))
+	m = next.(Model)
+	if m.screen != screenTarget {
+		t.Fatalf("expected esc from status preview to return to target screen, got %v", m.screen)
+	}
+	if m.statusOnly {
+		t.Fatalf("expected statusOnly to clear after backing out of status preview")
+	}
+}
+
 func TestResetBuildsCommandWithoutStageOrAppToggles(t *testing.T) {
 	m := New(Config{})
 	m = choose(m, t, "kind")

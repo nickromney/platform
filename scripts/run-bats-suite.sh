@@ -8,6 +8,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/lib/shell-cli.sh"
 
 BATS_BIN="${BATS_BIN:-bats}"
+RUN_BATS_SHARDS="${RUN_BATS_SHARDS:-${REPO_ROOT}/scripts/run-bats-shards.sh}"
 # bats resolves the binary itself via BATS_PARALLEL_BINARY_NAME/--parallel-binary-name,
 # so pointing this at an alternative has to tell bats too -- otherwise the check
 # here passes and bats still goes looking for "parallel". GNU parallel is the only
@@ -25,7 +26,7 @@ MAX_AUTO_JOBS="${BATS_MAX_AUTO_JOBS:-8}"
 # shellcheck disable=SC2329 # invoked by name through the shell_cli_* helpers
 usage() {
   cat <<EOF
-Usage: ${0##*/} [--jobs auto|off|N] [--dry-run] [--execute] -- <bats file>...
+Usage: ${0##*/} [--jobs auto|off|N] [--shards N] [--tests-dir DIR] [--plan] [--dry-run] [--execute] -- <bats file>...
 
 Run a Bats suite, in parallel when GNU parallel is available.
 
@@ -42,8 +43,14 @@ runs ZERO tests. It does exit 1, so it cannot pass silently, but the failure
 reads as "Executed 0 instead of expected N" rather than "install parallel", and
 that is worth naming before the run instead of after it.
 
+--shards N splits one tests directory into balanced --filter shards (used by
+kind test-bats). --plan prints that shard plan without running.
+
 Options:
-  --jobs VALUE  auto (default), off/1 for serial, or an explicit job count
+  --jobs VALUE       auto (default), off/1 for serial, or an explicit job count
+  --shards N         shard a --tests-dir instead of running the file list
+  --tests-dir DIR    directory of .bats files for --shards
+  --plan             print the shard plan only
 $(shell_cli_standard_options)
 EOF
 }
@@ -78,6 +85,9 @@ print_parallel_hint() {
 
 shell_cli_init_standard_flags
 bats_files=()
+SHARDS=""
+TESTS_DIR=""
+PLAN_ONLY=0
 while [[ $# -gt 0 ]]; do
   if shell_cli_handle_standard_flag usage "$1"; then
     shift
@@ -89,6 +99,20 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--jobs"; exit 1; }
       JOBS="$2"
       shift 2
+      ;;
+    --shards)
+      [[ $# -ge 2 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--shards"; exit 1; }
+      SHARDS="$2"
+      shift 2
+      ;;
+    --tests-dir)
+      [[ $# -ge 2 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--tests-dir"; exit 1; }
+      TESTS_DIR="$2"
+      shift 2
+      ;;
+    --plan)
+      PLAN_ONLY=1
+      shift
       ;;
     --)
       shift
@@ -108,11 +132,21 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -n "${SHARDS}" ]]; then
+  shard_args=(--shards "${SHARDS}")
+  [[ -n "${TESTS_DIR}" ]] && shard_args+=(--tests-dir "${TESTS_DIR}")
+  [[ "${PLAN_ONLY}" -eq 1 ]] && shard_args+=(--plan)
+  shell_cli_maybe_execute_or_preview_summary usage \
+    "would shard Bats tests with ${SHARDS} shard(s)"
+  exec "${RUN_BATS_SHARDS}" "${shard_args[@]}"
+fi
+
 shell_cli_maybe_execute_or_preview_summary usage \
   "would run ${#bats_files[@]} Bats file(s) with --jobs ${JOBS}"
 
 [[ "${#bats_files[@]}" -gt 0 ]] || fail "no Bats files given"
 command -v "${BATS_BIN}" >/dev/null 2>&1 || fail "${BATS_BIN} not found in PATH"
+export BATS_LIB_PATH="${REPO_ROOT}/tests${BATS_LIB_PATH:+:${BATS_LIB_PATH}}"
 
 resolved_jobs=1
 case "${JOBS}" in

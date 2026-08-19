@@ -181,7 +181,10 @@ cleanup() {
 shell_cli_init_standard_flags
 scan_repo_path="${SONAR_SCAN_REPO}"
 scanner_exclusions=()
-include_default_exclusions="${SONAR_NO_DEFAULT_EXCLUSIONS:-0}"
+include_default_exclusions="0"
+if ! is_true "${SONAR_NO_DEFAULT_EXCLUSIONS}"; then
+  include_default_exclusions="1"
+fi
 scannerwork_dir=""
 scannerwork_preexisting=0
 created_token=0
@@ -288,7 +291,7 @@ if [[ -n "${SONAR_EXCLUSIONS}" ]]; then
   scanner_exclusions+=("${SONAR_EXCLUSIONS}")
 fi
 
-if [[ "${has_project_config}" -eq 0 && "$(is_true "${include_default_exclusions}")" ]]; then
+if [[ "${has_project_config}" -eq 0 ]] && is_true "${include_default_exclusions}"; then
   scanner_exclusions+=("${DEFAULT_EXCLUSIONS[@]}")
 fi
 

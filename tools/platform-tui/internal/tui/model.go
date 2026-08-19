@@ -1,12 +1,11 @@
 package tui
 
 import (
-	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +15,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	workflowcore "github.com/nickromney/platform/tools/platform-workflow-core"
 )
 
 type Config struct {
@@ -163,6 +163,7 @@ type Model struct {
 	customNodeImage          string
 
 	previewCommand string
+	statusOnly     bool
 	status         string
 	errText        string
 	loadingPreview bool
@@ -432,10 +433,14 @@ func (m Model) selectCurrent() (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "status":
 			m.variant = ""
+			m.action = ""
+			m.statusOnly = true
 			m.screen = screenPreview
+			m.cursor = 0
 			m.previewCommand = "make status"
 			return m, nil
 		default:
+			m.statusOnly = false
 			m.variant = item.Value
 			m.screen = screenStage
 			m.cursor = 0
@@ -531,7 +536,10 @@ func (m Model) back() Model {
 			m.screen = screenSentiment
 		}
 	case screenPreview:
-		if m.action == "reset" || m.action == "state-reset" {
+		if m.statusOnly {
+			m.statusOnly = false
+			m.screen = screenTarget
+		} else if m.action == "reset" || m.action == "state-reset" {
 			m.screen = screenStage
 		} else if !m.hasAppToggles() || !m.actionSupportsAppToggles(m.action) {
 			m.screen = screenAction
@@ -895,67 +903,25 @@ func (m Model) loadPreviewCmd() tea.Cmd {
 }
 
 func (m Model) runWorkflowCmd(ch chan tea.Msg) tea.Cmd {
-	args := m.workflowArgs("apply")
-	return startRunCmd(m.cfg, args, ch)
+	if m.statusOnly {
+		return startRunCmd(m.cfg.RepoRoot, m.cfg.StatusScript, []string{"--execute", "--output", "text"}, ch)
+	}
+	return startRunCmd(m.cfg.RepoRoot, m.cfg.WorkflowScript, m.workflowArgs("apply"), ch)
 }
 
-func startRunCmd(cfg Config, args []string, ch chan tea.Msg) tea.Cmd {
+func startRunCmd(cwd, script string, args []string, ch chan tea.Msg) tea.Cmd {
 	return func() tea.Msg {
 		go func() {
 			defer close(ch)
-			var captured bytes.Buffer
 
-			send := func(text string) {
-				text = strings.TrimRight(text, "\r\n")
-				if text == "" {
-					return
-				}
-				captured.WriteString(text)
-				captured.WriteByte('\n')
+			_, err := workflowcore.Run(context.Background(), cwd, script, args, func(text string) {
 				ch <- runOutputMsg{Text: text}
-			}
-
-			cmd := exec.Command(cfg.WorkflowScript, args...)
-			if cfg.RepoRoot != "" {
-				cmd.Dir = cfg.RepoRoot
-			}
-
-			stdout, err := cmd.StdoutPipe()
+			})
 			if err != nil {
 				ch <- runFinishedMsg{Err: err}
 				return
 			}
-			stderr, err := cmd.StderrPipe()
-			if err != nil {
-				ch <- runFinishedMsg{Err: err}
-				return
-			}
-			if err := cmd.Start(); err != nil {
-				ch <- runFinishedMsg{Err: err}
-				return
-			}
-
-			done := make(chan struct{}, 2)
-			stream := func(r io.Reader) {
-				defer func() { done <- struct{}{} }()
-				scanner := bufio.NewScanner(r)
-				for scanner.Scan() {
-					send(scanner.Text())
-				}
-				if err := scanner.Err(); err != nil {
-					send(err.Error())
-				}
-			}
-			go stream(stdout)
-			go stream(stderr)
-			<-done
-			<-done
-
-			if err := cmd.Wait(); err != nil {
-				ch <- runFinishedMsg{Err: commandErr(err, captured.Bytes())}
-				return
-			}
-			ch <- runFinishedMsg{Output: strings.TrimSpace(captured.String())}
+			ch <- runFinishedMsg{}
 		}()
 		msg, ok := <-ch
 		if !ok {
@@ -1139,6 +1105,9 @@ func (m Model) inlineHint() string {
 		return "App overrides are offered only from stage 700 onward, after app repositories exist."
 	case screenPreview:
 		if item.Value == "run" {
+			if m.statusOnly {
+				return "Shows root runtime status without changing any stack."
+			}
 			return "Executes the exact command shown above through scripts/platform-workflow.sh --execute."
 		}
 		if strings.HasPrefix(item.Value, "next:") {

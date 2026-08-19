@@ -6,9 +6,9 @@ setup() {
   export HUBBLE_RELAY_READY_POLL_SECONDS="0.05"
   local source_repo_root
 
-  export REPO_ROOT
-  source_repo_root="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
-  REPO_ROOT="${source_repo_root}"
+  source "$(git -C "$(dirname "${BATS_TEST_FILENAME}")" rev-parse --show-toplevel)/tests/test_helper.bash"
+  setup_repo_root
+  source_repo_root="${REPO_ROOT}"
   export SCRIPT_UNDER_TEST="${source_repo_root}/terraform/kubernetes/scripts/hubble-observe-cilium-policies.sh"
   export TEST_ROOT="${BATS_TEST_TMPDIR}/audit-sandbox"
   export SCRIPT_DIR="${TEST_ROOT}/terraform/kubernetes/scripts"

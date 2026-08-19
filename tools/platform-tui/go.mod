@@ -2,7 +2,12 @@ module github.com/nickromney/platform/tools/platform-tui
 
 go 1.26
 
-require github.com/charmbracelet/bubbletea v1.3.10
+require (
+	github.com/charmbracelet/bubbletea v1.3.10
+	github.com/nickromney/platform/tools/platform-workflow-core v0.0.0
+)
+
+replace github.com/nickromney/platform/tools/platform-workflow-core => ../platform-workflow-core
 
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect

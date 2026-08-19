@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
 
 setup() {
-  export REPO_ROOT
-  REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
+  source "$(git -C "$(dirname "${BATS_TEST_FILENAME}")" rev-parse --show-toplevel)/tests/test_helper.bash"
+  setup_repo_root
   export HOST_ACCESS_RENDERER="${REPO_ROOT}/kubernetes/host-access/render-contracts.sh"
   export VARIANTS_DIR="${REPO_ROOT}/kubernetes/variants"
 }

@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
 
 setup() {
-  export REPO_ROOT
-  REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
+  source "$(git -C "$(dirname "${BATS_TEST_FILENAME}")" rev-parse --show-toplevel)/tests/test_helper.bash"
+  setup_repo_root
   export RENDER_OPTIONS="${REPO_ROOT}/kubernetes/workflow/render-options.sh"
   export VARIANTS_DIR="${REPO_ROOT}/kubernetes/variants"
 }
@@ -117,4 +117,157 @@ setup() {
   '
 
   [ "${status}" -eq 0 ]
+}
+
+@test "kind and lima resolve tfvars through one shared order" {
+  terragrunt_mk="${REPO_ROOT}/mk/k8s-terragrunt.mk"
+  kind_mk="${REPO_ROOT}/kubernetes/kind/Makefile"
+  lima_mk="${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  python3 - "${terragrunt_mk}" <<'PY'
+import pathlib
+import re
+import sys
+
+text = pathlib.Path(sys.argv[1]).read_text()
+
+def assignment(name):
+    match = re.search(
+        rf"^{re.escape(name)} = ((?:.*\\\n)*.*)$",
+        text,
+        re.M,
+    )
+    if not match:
+        raise SystemExit(f"missing {name} assignment")
+    return re.sub(r"\\\n\s*", " ", match.group(1)).strip()
+
+common = assignment("stack_tfvar_common")
+guarded = assignment("stack_tfvar_args")
+full = assignment("stack_tfvar_args_full")
+
+expected_common = [
+    '--optional-file "$(target_var_file)"',
+    "$(stack_tfvar_profile)",
+    '--optional-file "$${PLATFORM_BASE_TFVARS:-}"',
+    '--optional-file "$${PLATFORM_TFVARS:-}"',
+    "$(stack_tfvar_operator)",
+]
+positions = []
+cursor = 0
+for token in expected_common:
+    at = common.find(token, cursor)
+    if at < 0:
+        raise SystemExit(f"stack_tfvar_common missing {token!r} after {cursor}: {common}")
+    positions.append(at)
+    cursor = at + len(token)
+
+stage_guard = '$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)")'
+if not guarded.startswith(stage_guard):
+    raise SystemExit(f"stack_tfvar_args must start with the STAGE_SPECIFIED guard: {guarded}")
+if "$(stack_tfvar_common)" not in guarded:
+    raise SystemExit(f"stack_tfvar_args must reuse stack_tfvar_common: {guarded}")
+
+if not full.startswith('--optional-file "$(stage_var_file)"'):
+    raise SystemExit(f"stack_tfvar_args_full must always include the stage file: {full}")
+if "$(stack_tfvar_common)" not in full:
+    raise SystemExit(f"stack_tfvar_args_full must reuse stack_tfvar_common: {full}")
+PY
+
+  grep -Fq 'stack_tfvar_profile = $(kind_profile_tfvar_arg)' "${kind_mk}"
+  grep -Fq 'stack_tfvar_operator = --optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)"' "${kind_mk}"
+  ! grep -q 'stack_tfvar_profile' "${lima_mk}"
+  ! grep -q 'stack_tfvar_operator' "${lima_mk}"
+
+  python3 - "${kind_mk}" "${lima_mk}" <<'PY'
+import pathlib
+import re
+import sys
+
+def blocks(path):
+    text = pathlib.Path(path).read_text()
+    found = []
+    for match in re.finditer(r'"\$\(BUILD_TFVAR_ARGS\)"', text):
+        start = match.start()
+        line_start = text.rfind("\n", 0, start) + 1
+        end = start
+        while True:
+            line_end = text.find("\n", end)
+            if line_end < 0:
+                chunk = text[line_start:]
+                break
+            line = text[end:line_end]
+            end = line_end + 1
+            if not line.rstrip().endswith("\\"):
+                chunk = text[line_start:line_end]
+                break
+        found.append(chunk)
+    return found
+
+for path, expected in ((sys.argv[1], 11), (sys.argv[2], 12)):
+    found = blocks(path)
+    if len(found) != expected:
+        raise SystemExit(f"{path}: expected {expected} BUILD_TFVAR_ARGS sites, found {len(found)}")
+    for block in found:
+        uses_guarded = "$(stack_tfvar_args)" in block and "$(stack_tfvar_args_full)" not in block
+        uses_full = "$(stack_tfvar_args_full)" in block
+        if uses_guarded == uses_full:
+            raise SystemExit(f"{path}: BUILD_TFVAR_ARGS site must use exactly one shared list:\n{block}")
+        if "--optional-file" in block:
+            raise SystemExit(f"{path}: BUILD_TFVAR_ARGS site restates --optional-file:\n{block}")
+PY
+
+  run make -n -C "${REPO_ROOT}/kubernetes/kind" check-health STAGE=900
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'build-tfvar-args.sh" --execute --format repeated --flag --var-file '* ]]
+  [[ "${output}" == *'/stages/900-'* ]]
+  [[ "${output}" == *'/targets/kind.tfvars"'* ]]
+  [[ "${output}" == *'--optional-file "${PLATFORM_BASE_TFVARS:-}" --optional-file "${PLATFORM_TFVARS:-}"'* ]]
+  [[ "${output}" == *'operator-overrides.tfvars"'* ]]
+
+  run make -n -C "${REPO_ROOT}/kubernetes/lima" check-health STAGE=900
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'build-tfvar-args.sh" --execute --format repeated --flag --var-file '* ]]
+  [[ "${output}" == *'/stages/900-'* ]]
+  [[ "${output}" == *'/targets/lima.tfvars"'* ]]
+  [[ "${output}" == *'--optional-file "${PLATFORM_BASE_TFVARS:-}" --optional-file "${PLATFORM_TFVARS:-}"'* ]]
+  [[ "${output}" != *'operator-overrides.tfvars"'* ]]
+}
+
+@test "kind and lima share the state-reset lifecycle" {
+  lifecycle_mk="${REPO_ROOT}/mk/k8s-variant-lifecycle.mk"
+  kind_mk="${REPO_ROOT}/kubernetes/kind/Makefile"
+  lima_mk="${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  grep -Fq 'include ../../mk/k8s-variant-lifecycle.mk' "${kind_mk}"
+  grep -Fq 'include ../../mk/k8s-variant-lifecycle.mk' "${lima_mk}"
+  grep -Fq 'lock_file="$(STATE_LOCK_FILE)"' "${lifecycle_mk}"
+  ! grep -q 'lock_file="$(STATE_LOCK_FILE)"' "${kind_mk}"
+  ! grep -q 'lock_file="$(STATE_LOCK_FILE)"' "${lima_mk}"
+}
+
+@test "kind and lima share check-kubeconfig lint and gitea-sync" {
+  lifecycle_mk="${REPO_ROOT}/mk/k8s-variant-lifecycle.mk"
+  kind_mk="${REPO_ROOT}/kubernetes/kind/Makefile"
+  lima_mk="${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  grep -Fq '$(check_kubeconfig_body)' "${kind_mk}"
+  grep -Fq '$(check_kubeconfig_body)' "${lima_mk}"
+  grep -Fq 'define check_kubeconfig_body' "${lifecycle_mk}"
+  ! grep -q 'kubie lint' "${kind_mk}"
+  ! grep -q 'kubie lint' "${lima_mk}"
+
+  grep -Fq 'GITEA_SYNC_KUBECONFIG_TARGET = ensure-kind-kubeconfig' "${kind_mk}"
+  grep -Fq 'GITEA_SYNC_ASSERT_TARGET = assert-kind-active' "${kind_mk}"
+  grep -Fq 'GITEA_LOCAL_ACCESS_MODE_DEFAULT = nodeport' "${kind_mk}"
+  grep -Fq 'GITEA_SYNC_KUBECONFIG_TARGET = check-kubeconfig' "${lima_mk}"
+  grep -Fq 'GITEA_SYNC_ASSERT_TARGET = assert-lima-active' "${lima_mk}"
+  grep -Fq 'GITEA_LOCAL_ACCESS_MODE_DEFAULT = port-forward' "${lima_mk}"
+  ! grep -q '^gitea-sync:' "${kind_mk}"
+  ! grep -q '^gitea-sync:' "${lima_mk}"
+  grep -q '^gitea-sync:' "${lifecycle_mk}"
+
+  grep -Fq 'CONFLICTING_CLUSTER_CHECK = check-lima-stopped' "${kind_mk}"
+  grep -Fq 'CONFLICTING_CLUSTER_CHECK = check-kind-stopped' "${lima_mk}"
+  ! grep -q '^check-conflicting-clusters-stopped:' "${kind_mk}"
+  ! grep -q '^check-conflicting-clusters-stopped:' "${lima_mk}"
 }

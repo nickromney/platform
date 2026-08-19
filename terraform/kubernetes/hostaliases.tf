@@ -60,26 +60,18 @@ __YAML__
 resource "null_resource" "wait_headlamp_deployment" {
   count = var.enable_sso && var.enable_headlamp ? 1 : 0
 
+  triggers = {
+    script_sha = filesha256("${local.stack_dir}/scripts/wait-for-namespaced-deployment.sh")
+  }
+
   provisioner "local-exec" {
-    command     = <<-EOT
-      set -euo pipefail
-
-      ns="${kubernetes_namespace_v1.headlamp[0].metadata[0].name}"
-      for i in {1..300}; do
-        if kubectl -n "${kubernetes_namespace_v1.headlamp[0].metadata[0].name}" get deploy headlamp >/dev/null 2>&1; then
-          kubectl -n "${kubernetes_namespace_v1.headlamp[0].metadata[0].name}" rollout status deploy/headlamp --timeout=${local.platform_wait_seconds.rollout_long}s
-          exit 0
-        fi
-        sleep 2
-      done
-
-      echo "Timed out waiting for deployment/headlamp in namespace ${kubernetes_namespace_v1.headlamp[0].metadata[0].name}" >&2
-      kubectl -n "${kubernetes_namespace_v1.headlamp[0].metadata[0].name}" get all || true
-      exit 1
-    EOT
+    command     = "bash \"${local.stack_dir}/scripts/wait-for-namespaced-deployment.sh\" --execute"
     interpreter = ["/bin/bash", "-c"]
     environment = {
-      KUBECONFIG = local.kubeconfig_path_expanded
+      KUBECONFIG              = local.kubeconfig_path_expanded
+      NAMESPACE               = kubernetes_namespace_v1.headlamp[0].metadata[0].name
+      DEPLOYMENT              = "headlamp"
+      ROLLOUT_TIMEOUT_SECONDS = tostring(local.platform_wait_seconds.rollout_long)
     }
   }
 
@@ -94,25 +86,18 @@ resource "null_resource" "wait_headlamp_deployment" {
 resource "null_resource" "wait_langfuse_web_deployment" {
   count = var.enable_sso && local.sso_provider_is_keycloak && var.enable_langfuse ? 1 : 0
 
+  triggers = {
+    script_sha = filesha256("${local.stack_dir}/scripts/wait-for-namespaced-deployment.sh")
+  }
+
   provisioner "local-exec" {
-    command     = <<-EOT
-      set -euo pipefail
-
-      for i in {1..300}; do
-        if kubectl -n "${kubernetes_namespace_v1.langfuse[0].metadata[0].name}" get deploy langfuse-web >/dev/null 2>&1; then
-          kubectl -n "${kubernetes_namespace_v1.langfuse[0].metadata[0].name}" rollout status deploy/langfuse-web --timeout=${local.platform_wait_seconds.rollout_long}s
-          exit 0
-        fi
-        sleep 2
-      done
-
-      echo "Timed out waiting for deployment/langfuse-web in namespace ${kubernetes_namespace_v1.langfuse[0].metadata[0].name}" >&2
-      kubectl -n "${kubernetes_namespace_v1.langfuse[0].metadata[0].name}" get all || true
-      exit 1
-    EOT
+    command     = "bash \"${local.stack_dir}/scripts/wait-for-namespaced-deployment.sh\" --execute"
     interpreter = ["/bin/bash", "-c"]
     environment = {
-      KUBECONFIG = local.kubeconfig_path_expanded
+      KUBECONFIG              = local.kubeconfig_path_expanded
+      NAMESPACE               = kubernetes_namespace_v1.langfuse[0].metadata[0].name
+      DEPLOYMENT              = "langfuse-web"
+      ROLLOUT_TIMEOUT_SECONDS = tostring(local.platform_wait_seconds.rollout_long)
     }
   }
 

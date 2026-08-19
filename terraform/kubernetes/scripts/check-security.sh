@@ -6,6 +6,8 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/operator-facts.sh"
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -66,32 +68,7 @@ for i in "${!TFVARS_FILES[@]}"; do
   fi
 done
 
-tfvar_get() {
-  local key="$1"
-  local file=""
-  local value=""
-  local i=0
-
-  for (( i=${#TFVARS_FILES[@]}-1; i>=0; i-- )); do
-    file="${TFVARS_FILES[$i]}"
-    [[ -z "${file}" || ! -f "${file}" ]] && continue
-    value="$(
-      grep -E "^[[:space:]]*${key}[[:space:]]*=" "${file}" 2>/dev/null | tail -n 1 | \
-        sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs || true
-    )"
-    if [[ -n "${value}" ]]; then
-      printf '%s\n' "${value}"
-      return 0
-    fi
-  done
-
-  echo ""
-}
-
-tfvar_bool() {
-  local v; v=$(tfvar_get "$1")
-  case "$v" in true|false) echo "$v" ;; *) echo "" ;; esac
-}
+operator_facts_load
 
 admin_host() {
   local app="$1"

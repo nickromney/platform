@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
 
 setup() {
-  export REPO_ROOT
-  REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
+  source "$(git -C "$(dirname "${BATS_TEST_FILENAME}")" rev-parse --show-toplevel)/tests/test_helper.bash"
+  setup_repo_root
   export AUDIT_SOURCE="${REPO_ROOT}/scripts/audit-shell-scripts.sh"
   export SHELL_CLI_SOURCE="${REPO_ROOT}/scripts/lib/shell-cli.sh"
   export SHELL_CLI_POSIX_SOURCE="${REPO_ROOT}/scripts/lib/shell-cli-posix.sh"

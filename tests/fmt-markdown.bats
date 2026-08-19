@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
 
 setup() {
-  export REPO_ROOT
-  REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
+  source "$(git -C "$(dirname "${BATS_TEST_FILENAME}")" rev-parse --show-toplevel)/tests/test_helper.bash"
+  setup_repo_root
   export SCRIPT="${REPO_ROOT}/scripts/fmt-markdown.sh"
   export TEST_BIN="${BATS_TEST_TMPDIR}/bin"
   mkdir -p "${TEST_BIN}"

@@ -107,7 +107,7 @@ shell_cli_maybe_execute_or_preview_summary usage "would serve platform workflow 
 
 if [[ "${PORT}" =~ ^[0-9]+$ && "${PORT}" -lt 1024 && "${EUID}" -ne 0 ]]; then
   echo "Port ${PORT} requires elevated privileges on this host." >&2
-  echo "Use WORKFLOW_UI_PORT=8443, or run an explicit privileged bind/proxy if you really need :${PORT}." >&2
+  echo "Use --port 8443, or run an explicit privileged bind/proxy if you really need :${PORT}." >&2
   exit 1
 fi
 

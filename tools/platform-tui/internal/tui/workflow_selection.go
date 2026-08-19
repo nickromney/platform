@@ -1,6 +1,8 @@
 package tui
 
-import "strings"
+import (
+	workflowcore "github.com/nickromney/platform/tools/platform-workflow-core"
+)
 
 type WorkflowSelection struct {
 	Options                  workflowOptions
@@ -18,75 +20,71 @@ type WorkflowSelection struct {
 	CustomNodeImage          string
 }
 
-func (s WorkflowSelection) WorkflowArgs(subcommand string) []string {
-	args := []string{subcommand, "--execute"}
-	if subcommand == "preview" {
-		args = append(args, "--output", "json")
+func (s WorkflowSelection) coreOptions() workflowcore.Options {
+	options := workflowcore.Options{
+		Apps: append([]string(nil), s.Options.Apps...),
+		UIRules: workflowcore.UIRules{
+			AppToggleStages:  append([]string(nil), s.Options.UIRules.AppToggleStages...),
+			AppToggleActions: append([]string(nil), s.Options.UIRules.AppToggleActions...),
+		},
 	}
-	args = append(args, "--variant", s.Variant, "--stage", s.Stage, "--action", s.Action)
-	if s.PresetResourceProfile != "" {
-		args = append(args, "--preset", "resource-profile="+s.PresetResourceProfile)
+	for _, stage := range s.Options.Stages {
+		options.Stages = append(options.Stages, workflowcore.StageOption{ID: stage.ID, AppToggles: stage.AppToggles})
 	}
-	if s.PresetImageDistribution != "" {
-		args = append(args, "--preset", "image-distribution="+s.PresetImageDistribution)
+	for _, action := range s.Options.ActionMetadata {
+		options.ActionMetadata = append(options.ActionMetadata, workflowcore.ActionOption{
+			ID:                 action.ID,
+			UsesAutoApprove:    action.UsesAutoApprove,
+			SupportsAppToggles: action.SupportsAppToggles,
+		})
 	}
-	if s.PresetNetworkProfile != "" {
-		args = append(args, "--preset", "network-profile="+s.PresetNetworkProfile)
+	for _, preset := range s.Options.Presets {
+		options.Presets = append(options.Presets, workflowcore.PresetOption{Group: preset.Group, ID: preset.ID, Overlay: preset.Overlay})
 	}
-	if s.PresetObservabilityStack != "" {
-		args = append(args, "--preset", "observability-stack="+s.PresetObservabilityStack)
+	return options
+}
+
+func (s WorkflowSelection) coreSelection() workflowcore.Selection {
+	presets := map[string]string{
+		"resource-profile":    s.PresetResourceProfile,
+		"image-distribution":  s.PresetImageDistribution,
+		"network-profile":     s.PresetNetworkProfile,
+		"observability-stack": s.PresetObservabilityStack,
+		"identity-stack":      s.PresetIdentityStack,
+		"app-set":             s.PresetAppSet,
 	}
-	if s.PresetIdentityStack != "" {
-		args = append(args, "--preset", "identity-stack="+s.PresetIdentityStack)
-	}
-	if s.PresetAppSet != "" {
-		args = append(args, "--preset", "app-set="+s.PresetAppSet)
-	}
+	sets := map[string]string{}
 	if s.CustomWorkerCount != "" {
-		args = append(args, "--set", "worker_count="+s.CustomWorkerCount)
+		sets["worker_count"] = s.CustomWorkerCount
 	}
 	if s.CustomNodeImage != "" {
-		args = append(args, "--set", "node_image="+s.CustomNodeImage)
+		sets["node_image"] = s.CustomNodeImage
 	}
-	if s.HasAppToggles() {
-		for _, app := range s.Options.Apps {
-			override := s.AppOverrides[app]
-			if override != "" && override != appDefaultOverride(app, s.AppDefault(app)) {
-				args = append(args, "--app", override)
-			}
-		}
+	return workflowcore.Selection{
+		Variant:     s.Variant,
+		Stage:       s.Stage,
+		Action:      s.Action,
+		Presets:     presets,
+		Apps:        s.AppOverrides,
+		Sets:        sets,
+		AutoApprove: s.ActionUsesAutoApprove(s.Action),
 	}
-	if s.ActionUsesAutoApprove(s.Action) {
-		args = append(args, "--auto-approve")
+}
+
+func (s WorkflowSelection) WorkflowArgs(subcommand string) []string {
+	args := workflowcore.Args(s.coreOptions(), s.coreSelection(), subcommand, "--execute")
+	if subcommand == "preview" {
+		args = append(args[:2], append([]string{"--output", "json"}, args[2:]...)...)
 	}
 	return args
 }
 
 func (s WorkflowSelection) AppDefault(app string) bool {
-	tfvar := appTFVarName(app)
-	for _, preset := range s.Options.Presets {
-		if preset.Group != "app_set" || preset.ID != s.PresetAppSet || preset.Overlay == nil {
-			continue
-		}
-		if value, ok := preset.Overlay[tfvar].(bool); ok {
-			return value
-		}
-	}
-	return s.HasAppToggles()
+	return workflowcore.AppDefault(s.coreOptions(), s.coreSelection(), app)
 }
 
 func (s WorkflowSelection) HasAppToggles() bool {
-	for _, stage := range s.Options.UIRules.AppToggleStages {
-		if stage == s.Stage {
-			return true
-		}
-	}
-	for _, stage := range s.Options.Stages {
-		if stage.ID == s.Stage {
-			return stage.AppToggles
-		}
-	}
-	return false
+	return workflowcore.HasAppToggles(s.coreOptions(), s.Stage)
 }
 
 func (s WorkflowSelection) ActionSupportsAppToggles(action string) bool {
@@ -104,21 +102,5 @@ func (s WorkflowSelection) ActionSupportsAppToggles(action string) bool {
 }
 
 func (s WorkflowSelection) ActionUsesAutoApprove(action string) bool {
-	for _, option := range s.Options.ActionMetadata {
-		if option.ID == action {
-			return option.UsesAutoApprove
-		}
-	}
-	return action == "apply" || action == "reset" || action == "state-reset"
-}
-
-func appDefaultOverride(app string, enabled bool) string {
-	if enabled {
-		return app + "=on"
-	}
-	return app + "=off"
-}
-
-func appTFVarName(app string) string {
-	return "enable_app_repo_" + strings.ReplaceAll(app, "-", "_")
+	return workflowcore.ActionUsesAutoApprove(s.coreOptions(), action)
 }

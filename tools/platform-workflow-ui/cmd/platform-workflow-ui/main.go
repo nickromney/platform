@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	workflowcore "github.com/nickromney/platform/tools/platform-workflow-core"
 )
 
 type optionsPayload struct {
@@ -398,7 +400,7 @@ func (s *server) actionSelect() string {
 	var b strings.Builder
 	b.WriteString(`<select id="action" name="action">`)
 	for _, action := range s.options.ActionMetadata {
-		if action.ID == "reset" {
+		if action.ID == "reset" || action.ID == "state-reset" {
 			continue
 		}
 		selected := ""
@@ -485,13 +487,17 @@ func workflowCommand(repoRoot string, options optionsPayload, selection workflow
 }
 
 func workflowArgs(options optionsPayload, selection workflowSelection, subcommand, standardFlag string) []string {
-	args := []string{subcommand, standardFlag, "--variant", variantToTarget(options, selection.Variant), "--stage", selection.Stage, "--action", selection.Action}
+	presets := map[string]string{}
 	for field, value := range selection.Presets {
-		if value == "" || value == "default" {
-			continue
-		}
-		args = append(args, "--preset", strings.TrimPrefix(field, "preset_")+"="+value)
+		presets[strings.TrimPrefix(field, "preset_")] = value
 	}
+	apps := map[string]string{}
+	for _, app := range options.Apps {
+		if value := selection.Apps[app]; value != "" {
+			apps[app] = app + "=" + value
+		}
+	}
+	sets := map[string]string{}
 	customMap := map[string]string{
 		"custom_worker_count":     "worker_count",
 		"custom_node_image":       "node_image",
@@ -499,18 +505,28 @@ func workflowArgs(options optionsPayload, selection workflowSelection, subcomman
 	}
 	for field, option := range customMap {
 		if value := selection.CustomOverrides[field]; value != "" {
-			args = append(args, "--set", option+"="+value)
+			sets[option] = value
 		}
 	}
-	for _, app := range options.Apps {
-		if value := selection.Apps[app]; value != "" && value != "on" {
-			args = append(args, "--app", app+"="+value)
-		}
+	coreOptions := workflowcore.Options{Apps: append([]string(nil), options.Apps...)}
+	for _, stage := range options.Stages {
+		coreOptions.Stages = append(coreOptions.Stages, workflowcore.StageOption{ID: stage.ID, AppToggles: stage.AppToggles})
 	}
-	if selection.AutoApprove && actionUsesAutoApprove(options, selection.Action) {
-		args = append(args, "--auto-approve")
+	for _, action := range options.ActionMetadata {
+		coreOptions.ActionMetadata = append(coreOptions.ActionMetadata, workflowcore.ActionOption{ID: action.ID, UsesAutoApprove: action.UsesAutoApprove})
 	}
-	return args
+	for _, preset := range options.Presets {
+		coreOptions.Presets = append(coreOptions.Presets, workflowcore.PresetOption{Group: preset.Group, ID: preset.ID, Overlay: preset.Overlay})
+	}
+	return workflowcore.Args(coreOptions, workflowcore.Selection{
+		Variant:     variantToTarget(options, selection.Variant),
+		Stage:       selection.Stage,
+		Action:      selection.Action,
+		Presets:     presets,
+		Apps:        apps,
+		Sets:        sets,
+		AutoApprove: selection.AutoApprove,
+	}, subcommand, standardFlag)
 }
 
 func loadOptions(repoRoot string) (optionsPayload, error) {
@@ -586,24 +602,23 @@ func (s *jobStore) start(repoRoot string, selection workflowSelection, historyID
 	s.jobs[id] = job
 	s.mu.Unlock()
 	go func() {
-		cmd := exec.Command(command[0], command[1:]...)
-		cmd.Dir = repoRoot
-		output, err := cmd.CombinedOutput()
+		output, err := workflowcore.Run(context.Background(), repoRoot, command[0], command[1:], nil)
 		code := 0
 		if err != nil {
 			code = 1
-			if exitErr, ok := err.(*exec.ExitError); ok {
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) {
 				code = exitErr.ExitCode()
 			}
 		}
 		now := time.Now()
-		lines := strings.Split(strings.TrimRight(string(output), "\n"), "\n")
+		lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
 		s.mu.Lock()
 		job.Output = lines
 		job.ReturnCode = &code
 		job.FinishedAt = &now
 		s.mu.Unlock()
-		history.recordExit(historyID, code, string(output))
+		history.recordExit(historyID, code, output)
 	}()
 	return job
 }
@@ -672,12 +687,11 @@ func variantToTarget(options optionsPayload, variant string) string {
 }
 
 func actionUsesAutoApprove(options optionsPayload, action string) bool {
+	coreOptions := workflowcore.Options{}
 	for _, option := range options.ActionMetadata {
-		if option.ID == action {
-			return option.UsesAutoApprove
-		}
+		coreOptions.ActionMetadata = append(coreOptions.ActionMetadata, workflowcore.ActionOption{ID: option.ID, UsesAutoApprove: option.UsesAutoApprove})
 	}
-	return action == "apply" || action == "reset" || action == "state-reset"
+	return workflowcore.ActionUsesAutoApprove(coreOptions, action)
 }
 
 func actionLabel(options optionsPayload, action string) string {

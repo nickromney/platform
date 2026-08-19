@@ -6,6 +6,8 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/operator-facts.sh"
 
 FAILURES=0
 
@@ -131,35 +133,8 @@ normalize_tfvars_files() {
   TFVARS_FILES=("${normalized_files[@]}")
 }
 
-tfvar_value_from_file() {
-  local file="$1"
-  local key="$2"
-  if [[ -z "${file}" || ! -f "${file}" ]]; then
-    echo ""
-    return 0
-  fi
-  # Use last occurrence to mirror var-file override semantics.
-  grep -E "^[[:space:]]*${key}[[:space:]]*=" "${file}" 2>/dev/null | tail -n 1 | \
-    sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs || true
-}
-
-tfvar_get() {
-  local key="$1"
-  local file=""
-  local value=""
-  local candidate=""
-
-  for file in "${TFVARS_FILES[@]}"; do
-    candidate="$(tfvar_value_from_file "${file}" "${key}")"
-    if [[ -n "${candidate}" ]]; then
-      value="${candidate}"
-    fi
-  done
-
-  printf '%s\n' "${value}"
-}
-
 normalize_tfvars_files
+operator_facts_load
 
 devcontainer_enabled() {
   [[ "${PLATFORM_DEVCONTAINER:-0}" == "1" ]]

@@ -1,0 +1,10 @@
+# Files still outside make test-ci. Started at 37 on 2026-08-14; remaining 8.
+# Most are RED or have live/docker side effects. See tests/ci-test-gate.bats.
+tests/backstage-compose.bats
+tests/backstage-portal.bats
+tests/devcontainer-makefile.bats
+tests/grafana-dashboard-quality.bats
+tests/platform-workflow-ui.bats
+tests/smoke-sentiment-api-image.bats
+tests/validate-app-runtime-surfaces.bats
+tests/validate-docker-optimization-contracts.bats

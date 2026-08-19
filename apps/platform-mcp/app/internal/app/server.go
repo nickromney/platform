@@ -138,6 +138,18 @@ func (s *server) agentCard(w http.ResponseWriter, _ *http.Request) {
 				"description": "Validate that this agent can reach an OpenAI-compatible model through agentgateway.",
 				"tags":        []string{"llm", "agentgateway", "openai-compatible"},
 			},
+			{
+				"id":          "d2_validate",
+				"name":        "D2 validate",
+				"description": "Validate D2 source for the MCP Inspector smoke path.",
+				"tags":        []string{"d2", "diagrams"},
+			},
+			{
+				"id":          "d2_render",
+				"name":        "D2 render",
+				"description": "Render a lightweight SVG artifact from D2 source for the MCP Inspector smoke path.",
+				"tags":        []string{"d2", "diagrams"},
+			},
 		},
 	})
 }

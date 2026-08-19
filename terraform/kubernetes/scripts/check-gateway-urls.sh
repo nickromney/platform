@@ -6,6 +6,8 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/operator-facts.sh"
 
 FAILURES=0
 
@@ -90,51 +92,7 @@ if [[ "${#TFVARS_FILES[@]}" -gt 0 ]]; then
   done
 fi
 
-tfvar_get() {
-  local key="$2"
-  local file value=""
-  if [[ "${#TFVARS_FILES[@]}" -eq 0 ]]; then
-    return 0
-  fi
-  for file in "${TFVARS_FILES[@]}"; do
-    [[ -n "${file}" && -f "${file}" ]] || continue
-    value="$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "${file}" 2>/dev/null | tail -n 1 | sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs || true)"
-    [[ -n "${value}" ]] || continue
-  done
-  echo "${value}"
-}
-
-tfvar_list_entries() {
-  local key="$2"
-  local file raw=""
-  local entry=""
-  local -a values=()
-
-  if [[ "${#TFVARS_FILES[@]}" -eq 0 ]]; then
-    return 0
-  fi
-
-  for file in "${TFVARS_FILES[@]}"; do
-    [[ -n "${file}" && -f "${file}" ]] || continue
-    raw="$(
-      awk -v key="${key}" '
-        !capture && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" { capture=1 }
-        capture { print }
-        capture && /\]/ { exit }
-      ' "${file}" 2>/dev/null || true
-    )"
-    [[ -n "${raw}" ]] || continue
-    values=()
-    while IFS= read -r entry; do
-      [[ -n "${entry}" ]] || continue
-      values+=("${entry}")
-    done < <(printf '%s\n' "${raw}" | grep -oE '"[^"]+"' | sed 's/^"//;s/"$//' || true)
-  done
-
-  if [[ "${#values[@]}" -gt 0 ]]; then
-    printf '%s\n' "${values[@]}"
-  fi
-}
+operator_facts_load
 
 array_contains() {
   local needle="$1"

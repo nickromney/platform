@@ -111,11 +111,59 @@ func TestA2AAgentCardAdvertisesJSONRPCModelPing(t *testing.T) {
 			`"url":"https://mcpserver.dev.127.0.0.1.sslip.io/a2a"`,
 			`"preferredTransport":"JSONRPC"`,
 			`"model_ping"`,
+			`"d2_validate"`,
+			`"d2_render"`,
 			`"agentgateway"`,
 		} {
 			if !strings.Contains(body, want) {
 				t.Fatalf("%s agent card missing %s: %s", path, want, body)
 			}
+		}
+	}
+}
+
+func TestAgentCardSkillsMatchToolsList(t *testing.T) {
+	srv := NewServer(Config{PublicBaseURL: "https://mcpserver.dev.127.0.0.1.sslip.io"})
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("tools/list returned %d: %s", rec.Code, rec.Body.String())
+	}
+	var list struct {
+		Result struct {
+			Tools []struct {
+				Name string `json:"name"`
+			} `json:"tools"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/.well-known/agent-card.json", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("agent card returned %d: %s", rec.Code, rec.Body.String())
+	}
+	var card struct {
+		Skills []struct {
+			ID string `json:"id"`
+		} `json:"skills"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &card); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(list.Result.Tools) == 0 || len(list.Result.Tools) != len(card.Skills) {
+		t.Fatalf("tools/list has %d tools, agent card has %d skills", len(list.Result.Tools), len(card.Skills))
+	}
+	for i, tool := range list.Result.Tools {
+		if tool.Name != card.Skills[i].ID {
+			t.Fatalf("tool %d name %q != skill id %q", i, tool.Name, card.Skills[i].ID)
 		}
 	}
 }

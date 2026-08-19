@@ -32,6 +32,7 @@ entrypoint_interface_exemptions=(
   "scripts/check-make-target-surfaces.sh"
   "scripts/make-known-goals.sh"
   "scripts/platform-status-action-catalog.sh"
+  "scripts/run-bats-shards.sh"
   "scripts/validate-json-schema.sh"
   "terraform/kubernetes/scripts/render-kind-apiserver-oidc-manifest.sh"
 )

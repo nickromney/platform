@@ -13,8 +13,8 @@
 # spelling of the command.
 
 setup() {
-  export REPO_ROOT
-  REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
+  source "$(git -C "$(dirname "${BATS_TEST_FILENAME}")" rev-parse --show-toplevel)/tests/test_helper.bash"
+  setup_repo_root
   # A locale that cannot plausibly be installed, so the assertion holds on any
   # host regardless of which locales it happens to have generated.
   export BROKEN_LOCALE="zz_ZZ.UTF-8"

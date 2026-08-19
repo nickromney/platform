@@ -14,6 +14,8 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 source "${REPO_ROOT}/scripts/platform-env.sh"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/tf-defaults.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/operator-facts.sh"
 
 usage() {
   cat <<EOF
@@ -45,12 +47,15 @@ tfvar_bool_from_file_or_default() {
   fi
 
   local value
-  value="$(sed -nE "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*(true|false).*/\\1/p" "${file}" | tail -n 1)"
-  if [[ -n "${value}" ]]; then
-    printf '%s\n' "${value}"
-  else
-    printf '%s\n' "${default_value}"
-  fi
+  value="$(operator_facts_scalar_from_file "${file}" "${key}")"
+  case "${value}" in
+    true|false)
+      printf '%s\n' "${value}"
+      ;;
+    *)
+      printf '%s\n' "${default_value}"
+      ;;
+  esac
 }
 
 tfvar_string_or_default() {
@@ -63,10 +68,7 @@ tfvar_string_or_default() {
   fi
 
   local value
-  value="$(sed -nE "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"([^\"]*)\".*/\\1/p" "${GITEA_SYNC_TFVARS_FILE}" | tail -n 1)"
-  if [[ -z "${value}" ]]; then
-    value="$(sed -nE "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*([^#[:space:]]+).*/\\1/p" "${GITEA_SYNC_TFVARS_FILE}" | tail -n 1)"
-  fi
+  value="$(operator_facts_scalar_from_file "${GITEA_SYNC_TFVARS_FILE}" "${key}")"
   if [[ -n "${value}" ]]; then
     printf '%s\n' "${value}"
   else
@@ -75,58 +77,7 @@ tfvar_string_or_default() {
 }
 
 tfvar_map_string_or_default() {
-  local file="$1"
-  local key="$2"
-  local map_key="$3"
-  local default_value="$4"
-
-  if [[ ! -f "${file}" ]]; then
-    printf '%s\n' "${default_value}"
-    return 0
-  fi
-
-  local value
-  value="$(awk -v key="${key}" -v map_key="${map_key}" '
-    BEGIN { in_map = 0 }
-    {
-      line = $0
-      sub(/[[:space:]]*#.*/, "", line)
-      if (!in_map) {
-        pattern = "^[[:space:]]*" key "[[:space:]]*="
-        if (line ~ pattern && line ~ /\{/) {
-          in_map = 1
-        }
-        next
-      }
-      if (line ~ /^[[:space:]]*}/) {
-        in_map = 0
-        next
-      }
-      equals = index(line, "=")
-      if (equals == 0) {
-        next
-      }
-      found_key = substr(line, 1, equals - 1)
-      gsub(/^[[:space:]]+|[[:space:]]+$/, "", found_key)
-      gsub(/^"|"$/, "", found_key)
-      if (found_key != map_key) {
-        next
-      }
-      found_value = substr(line, equals + 1)
-      sub(/[[:space:]]*#.*/, "", found_value)
-      gsub(/^[[:space:]]+|[[:space:]]+$/, "", found_value)
-      sub(/,$/, "", found_value)
-      gsub(/^[[:space:]]+|[[:space:]]+$/, "", found_value)
-      gsub(/^"|"$/, "", found_value)
-      print found_value
-    }
-  ' "${file}" | tail -n 1)"
-
-  if [[ -n "${value}" ]]; then
-    printf '%s\n' "${value}"
-  else
-    printf '%s\n' "${default_value}"
-  fi
+  operator_facts_map_get "$1" "$2" "$3" "$4"
 }
 
 target_tfvars_file_or_empty() {

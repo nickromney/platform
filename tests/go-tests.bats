@@ -18,8 +18,8 @@
 # Cost measured 2026-08-17 on an M4: 9s with a cold test cache, 2s warm.
 
 setup() {
-  export REPO_ROOT
-  REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
+  source "$(git -C "$(dirname "${BATS_TEST_FILENAME}")" rev-parse --show-toplevel)/tests/test_helper.bash"
+  setup_repo_root
 }
 
 @test "go is available to the gate" {
