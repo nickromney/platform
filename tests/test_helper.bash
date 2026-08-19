@@ -16,16 +16,3 @@ setup_repo_root() {
   echo "could not find repo root from ${BATS_TEST_FILENAME}" >&2
   return 1
 }
-
-# Write an executable stub at $1. Remaining arguments are the script body.
-make_stub() {
-  local path="$1"
-  shift
-  mkdir -p "$(dirname "${path}")"
-  cat >"${path}" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-$*
-EOF
-  chmod +x "${path}"
-}

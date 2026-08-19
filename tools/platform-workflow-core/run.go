@@ -7,6 +7,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"sync"
 )
 
 type LineHandler func(line string)
@@ -32,12 +33,18 @@ func Run(ctx context.Context, cwd, script string, args []string, onLine LineHand
 		return "", err
 	}
 
+	// stdout and stderr are drained by two goroutines, so the buffer and the
+	// caller's handler are both reached concurrently. bytes.Buffer is not safe
+	// for that, and callers should not have to make their handler safe either.
+	var mu sync.Mutex
 	var captured bytes.Buffer
 	send := func(text string) {
 		text = strings.TrimRight(text, "\r\n")
 		if text == "" {
 			return
 		}
+		mu.Lock()
+		defer mu.Unlock()
 		captured.WriteString(text)
 		captured.WriteByte('\n')
 		if onLine != nil {

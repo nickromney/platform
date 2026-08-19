@@ -22,10 +22,10 @@ Read this before re-doing anything in the report.
 | Item | Status |
 | --- | --- |
 | `make -C kubernetes/lima status` was a bash syntax error, dead since #163 | **Fixed** — restored the line #163 deleted |
-| 4 `kubernetes/tests/*.bats` gated by nothing | **Fixed** — added to `CI_BATS_TESTS` |
+| 4 `kubernetes/tests/*.bats` gated by nothing | **Fixed** — first added to `CI_BATS_TESTS` by hand, then made moot: the list is now discovered |
 | Gate-coverage guard blind to `kubernetes/tests/` | **Fixed** — enumerates `git ls-files '*.bats'`, no path shape |
-| Candidate 1 — gate enumerates rather than globs | **Done** |
-| Candidate 2 — browser UI sent the action as the subcommand | **Fixed**, plus the UI's first Go tests |
+| Candidate 1 — gate enumerates rather than globs | **Done** — `CI_BATS_TESTS := $(shell scripts/list-ci-bats-tests.sh --execute)`, which is `git ls-files '*.bats'` minus `tests/ci-gate-backlog.txt`. 164 tracked, 156 gated, 8 backlogged with reasons (#206) |
+| Candidate 2 — browser UI sent the action as the subcommand | **Fixed**, plus the UI's first Go tests. Then **deepened** in #206: both surfaces now build argv through `tools/platform-workflow-core`, so the divergence class is closed rather than the one instance. See ADR 0010 |
 | Candidate 4 — 4 copy-pasted oauth2-proxy Applications | **Done**, −286 lines. See correction in the report: the original recommendation was wrong |
 | Candidate 6 — 7 of 8 `make lint` targets unguarded | **Done** — `LINTERS` list + `tests/lint-wiring.bats` |
 | Go test suites run by nothing (9.5k lines, 17 modules) | **Fixed** — `tests/go-tests.bats` + pinned `actions/setup-go` |
@@ -34,7 +34,11 @@ Read this before re-doing anything in the report.
 | OpenTofu suite (72 runs) run by nothing | **Fixed** — split into tiers; fast tier (43s) in the gate, full suite on demand |
 | Candidate 3 — Terraform has no modules; ~80 edit sites per app | **Not started** — the large one |
 | Candidate 5 — every Argo CD Application defined twice | **Withdrawn — do not do it.** The premise is wrong; see below |
-| Candidate 7 — widen the shell standard past the flag surface | **Not started** |
+| Candidate 7 — widen the shell standard past the flag surface | **Partly done.** #206 closed the tfvar-parser bullet: 8 private HCL-regex parsers across the `check-*` scripts became one `operator-facts.sh` reading Terraform-rendered `operator-facts.json`. The other three bullets stand — ~70 `fail()` definitions, ~650 raw `kubectl` calls with no retry wrapper, and no shared `wait_until` |
+| Guided surfaces each built their own argv | **Fixed** — `tools/platform-workflow-core` (#206), ADR 0010 |
+| kind and lima restated the same lifecycle and tfvar order | **Fixed** — `mk/k8s-variant-lifecycle.mk` + `stack_tfvar_args*` in `mk/k8s-terragrunt.mk` (#206), ADR 0010 |
+| Terraform `local-exec` heredocs untestable and unlintable | **Fixed** — every `command = <<` body under `terraform/kubernetes/*.tf` is now a script under `terraform/kubernetes/scripts/`, triggered by `filesha256` of the script (#206) |
+| `Run` lost streamed output lines | **Fixed** (#206). stdout and stderr were drained by two goroutines into one unsynchronised `bytes.Buffer`, silently dropping 0.5–2% of lines in both guided surfaces. Pre-existing in the TUI; found when the code was extracted for sharing. The gate does not run `go test -race`, so the guard asserts the observable consequence instead |
 | `tests/apps-makefile.bats` flake blocking `BATS_JOBS=auto` | **Still open.** The leaked-fixture hypothesis was tested and **rejected** (17/17 pass with the fixture present) — that candidate is eliminated, the cause is not yet known |
 | `tests/locale-independence.bats` — "source fingerprinting is stable across locales" | **Newly observed flake, cause unknown.** Failed once in four full serial gate runs; passes in isolation. Not caused by the changes in this branch — nothing here touches `image-catalog-lib.sh`, `apps/shared/apphttp`, or locale handling. Note `source_fingerprint_tag` uses `find -type f`, so it hashes untracked files too and is sensitive to any churn in the hashed directory. Ruled out: `go test` does not churn that directory (4 files before/during/after) |
 

@@ -74,3 +74,9 @@ oci-cache/
 .env
 .env.local
 .env.*.local
+
+# Go build outputs from the operator tools. `make build-tui` writes into bin/,
+# and `go build ./...` inside tools/platform-workflow-ui drops the binary in
+# place; neither should ever be committed.
+tools/platform-tui/bin/
+tools/platform-workflow-ui/platform-workflow-ui

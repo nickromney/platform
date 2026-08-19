@@ -33,9 +33,9 @@ type Options struct {
 }
 
 type Selection struct {
-	Variant  string
-	Stage    string
-	Action   string
+	Variant string
+	Stage   string
+	Action  string
 	// Presets is group-id -> value. Empty and "default" are omitted.
 	Presets map[string]string
 	// Apps is app-id -> "app=on|off" override. Empty values are omitted.

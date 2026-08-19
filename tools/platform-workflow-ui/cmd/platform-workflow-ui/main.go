@@ -29,8 +29,17 @@ type optionsPayload struct {
 	AppMetadata    []labelOption   `json:"app_metadata"`
 	PresetGroups   []presetGroup   `json:"preset_groups"`
 	Presets        []presetOption  `json:"presets"`
-	UIRules        map[string]any  `json:"ui_rules"`
+	UIRules        uiRules         `json:"ui_rules"`
 	Raw            map[string]any  `json:"-"`
+}
+
+// uiRules carries the app-toggle rules into the shared workflow core. Both
+// surfaces must feed the core the same facts, or they compute different argv
+// for the same selection -- which is the drift this module exists to prevent.
+// The fields duplicate stages[].app_toggles today; see docs/ddd/ubiquitous-language.md.
+type uiRules struct {
+	AppToggleStages  []string `json:"app_toggle_stages"`
+	AppToggleActions []string `json:"app_toggle_actions"`
 }
 
 type variantOption struct {
@@ -49,9 +58,10 @@ type stageOption struct {
 }
 
 type actionOption struct {
-	ID              string `json:"id"`
-	Label           string `json:"label"`
-	UsesAutoApprove bool   `json:"uses_auto_approve"`
+	ID                 string `json:"id"`
+	Label              string `json:"label"`
+	UsesAutoApprove    bool   `json:"uses_auto_approve"`
+	SupportsAppToggles bool   `json:"supports_app_toggles"`
 }
 
 type labelOption struct {
@@ -508,12 +518,22 @@ func workflowArgs(options optionsPayload, selection workflowSelection, subcomman
 			sets[option] = value
 		}
 	}
-	coreOptions := workflowcore.Options{Apps: append([]string(nil), options.Apps...)}
+	coreOptions := workflowcore.Options{
+		Apps: append([]string(nil), options.Apps...),
+		UIRules: workflowcore.UIRules{
+			AppToggleStages:  append([]string(nil), options.UIRules.AppToggleStages...),
+			AppToggleActions: append([]string(nil), options.UIRules.AppToggleActions...),
+		},
+	}
 	for _, stage := range options.Stages {
 		coreOptions.Stages = append(coreOptions.Stages, workflowcore.StageOption{ID: stage.ID, AppToggles: stage.AppToggles})
 	}
 	for _, action := range options.ActionMetadata {
-		coreOptions.ActionMetadata = append(coreOptions.ActionMetadata, workflowcore.ActionOption{ID: action.ID, UsesAutoApprove: action.UsesAutoApprove})
+		coreOptions.ActionMetadata = append(coreOptions.ActionMetadata, workflowcore.ActionOption{
+			ID:                 action.ID,
+			UsesAutoApprove:    action.UsesAutoApprove,
+			SupportsAppToggles: action.SupportsAppToggles,
+		})
 	}
 	for _, preset := range options.Presets {
 		coreOptions.Presets = append(coreOptions.Presets, workflowcore.PresetOption{Group: preset.Group, ID: preset.ID, Overlay: preset.Overlay})

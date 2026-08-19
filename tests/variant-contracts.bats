@@ -124,7 +124,7 @@ setup() {
   kind_mk="${REPO_ROOT}/kubernetes/kind/Makefile"
   lima_mk="${REPO_ROOT}/kubernetes/lima/Makefile"
 
-  python3 - "${terragrunt_mk}" <<'PY'
+  uv run --isolated python - "${terragrunt_mk}" <<'PY'
 import pathlib
 import re
 import sys
@@ -178,7 +178,7 @@ PY
   ! grep -q 'stack_tfvar_profile' "${lima_mk}"
   ! grep -q 'stack_tfvar_operator' "${lima_mk}"
 
-  python3 - "${kind_mk}" "${lima_mk}" <<'PY'
+  uv run --isolated python - "${kind_mk}" "${lima_mk}" <<'PY'
 import pathlib
 import re
 import sys
