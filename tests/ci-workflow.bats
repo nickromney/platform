@@ -327,3 +327,84 @@ PY
   [ "${status}" -eq 0 ]
   [ "${output}" -eq 0 ]
 }
+
+@test "the receipt accumulates environments for one tree and resets for another" {
+  # The host gate cannot see Linux-only breakage, so make test-ci-linux re-runs
+  # the suite in the devcontainer and records itself on the same receipt. Two
+  # properties matter and pull against each other: the two runs happen minutes
+  # apart and must merge, but a linux pass must not survive an edit -- a green
+  # Linux result for yesterday's code proves nothing about today's.
+  receipt="${BATS_TEST_TMPDIR}/receipt.json"
+  work="${BATS_TEST_TMPDIR}/repo"
+  mkdir -p "${work}"
+
+  (
+    cd "${work}"
+    git init -q
+    git config user.email test@example.com
+    git config user.name Test
+    git config commit.gpgsign false
+    printf 'one\n' >tracked.txt
+    git add tracked.txt
+    git commit -qm initial
+  )
+
+  run env REPO_ROOT="${work}" CI_RECEIPT_FILE="${receipt}" \
+    "${REPO_ROOT}/scripts/ci-receipt.sh" --execute --action stamp
+  [ "${status}" -eq 0 ]
+
+  # host alone does not satisfy a host+linux requirement.
+  run env REPO_ROOT="${work}" CI_RECEIPT_FILE="${receipt}" PLATFORM_GATE_ENVIRONMENTS=host,linux \
+    "${REPO_ROOT}/scripts/ci-receipt.sh" --execute --action verify
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"does not cover: linux"* ]]
+  [[ "${output}" == *"make test-ci-linux"* ]]
+
+  # The devcontainer run merges rather than replacing.
+  run env REPO_ROOT="${work}" CI_RECEIPT_FILE="${receipt}" \
+    "${REPO_ROOT}/scripts/ci-receipt.sh" --execute --action stamp --environment linux
+  [ "${status}" -eq 0 ]
+
+  run env REPO_ROOT="${work}" CI_RECEIPT_FILE="${receipt}" PLATFORM_GATE_ENVIRONMENTS=host,linux \
+    "${REPO_ROOT}/scripts/ci-receipt.sh" --execute --action verify
+  [ "${status}" -eq 0 ]
+
+  # An edit invalidates both, and a fresh host stamp must not resurrect linux.
+  printf 'two\n' >"${work}/tracked.txt"
+  run env REPO_ROOT="${work}" CI_RECEIPT_FILE="${receipt}" \
+    "${REPO_ROOT}/scripts/ci-receipt.sh" --execute --action stamp
+  [ "${status}" -eq 0 ]
+
+  run env REPO_ROOT="${work}" CI_RECEIPT_FILE="${receipt}" PLATFORM_GATE_ENVIRONMENTS=host,linux \
+    "${REPO_ROOT}/scripts/ci-receipt.sh" --execute --action verify
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"does not cover: linux"* ]]
+}
+
+@test "the devcontainer gate does not write the shared receipt itself" {
+  # If the container stamped directly, a host/container fingerprint disagreement
+  # -- bind-mount file modes, ownership -- would reset the receipt and silently
+  # discard the host result. The container writes a throwaway receipt; the host
+  # stamps linux only after the container run passes.
+  script="${REPO_ROOT}/scripts/run-ci-linux.sh"
+
+  # Asserts the intent, not the exact line: the container run must send its
+  # receipt somewhere disposable, and the shared stamp must happen on the host
+  # afterwards. An earlier version pinned the literal command and broke the
+  # moment the script gained `env -u ...` -- the same shape as the grep
+  # contracts this branch already had to repoint.
+  grep -Fq 'CI_RECEIPT_FILE=/tmp/platform-linux-receipt.json' "${script}"
+  grep -Eq '(^|[^-])make test-ci' "${script}"
+  grep -Fq -- '--action stamp --environment linux' "${script}"
+
+  # The stamp must come after the container run, or a failing suite still counts.
+  run bash -lc "
+    container_line=\$(grep -n 'CI_RECEIPT_FILE=/tmp/platform-linux-receipt.json' '${script}' | cut -d: -f1)
+    stamp_line=\$(grep -n -- '--action stamp --environment linux' '${script}' | cut -d: -f1)
+    [ \"\${container_line}\" -lt \"\${stamp_line}\" ]
+  "
+
+  [ "${status}" -eq 0 ]
+
+  grep -Fq 'test-ci-linux:' "${REPO_ROOT}/Makefile"
+}

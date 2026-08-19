@@ -21,6 +21,19 @@ The receipt covers uncommitted and untracked-not-ignored files too, not just
 `HEAD`. It has no expiry: it is valid while the tree matches, and worthless the
 moment a file changes.
 
+**Touching shell or anything platform-sensitive? Run the Linux gate too:**
+
+```bash
+make test-ci-linux
+```
+
+That re-runs the same 156 files inside the devcontainer and adds `linux` to the
+receipt. A macOS host cannot see Bash 3.2 vs 5 or BSD vs GNU `sed`/`awk`/`grep`
+divergence, and CI will not look before you merge. It needs Docker and the
+devcontainer CLI, and the first run builds the image, so it is not part of
+`make test-ci`. Set `PLATFORM_GATE_ENVIRONMENTS=host,linux` to make pre-push
+refuse a push that has not had both.
+
 Git hooks come from lefthook (`make hooks` installs them from `lefthook.yml`)
 and fire at commit and push, not while you work. What they cover:
 

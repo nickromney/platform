@@ -32,6 +32,17 @@ OPENTOFU_VERSION="${OPENTOFU_VERSION:-1.12.5}"
 # for apt-get update -- over six minutes when the Azure mirror stalls.
 # Tags are bare, with no leading v.
 RIPGREP_VERSION="${RIPGREP_VERSION:-15.2.0}"
+# Pinned because the devcontainer used to take it from apt (1.33.0) while CI
+# installed 1.38.0. Go needs no pin here: install-toolchain.sh reads the `go`
+# directive the modules already declare, the same source tests/ci-workflow.bats
+# holds CI's setup-go version to.
+YAMLLINT_VERSION="${YAMLLINT_VERSION:-1.38.0}"
+# Go's source of truth is the `go` directive every module declares, not an
+# upstream release feed -- so this is not in toolchain-sources.tsv and
+# update-versions does not move it. It is restated here only because the image
+# build sees .devcontainer/ and nothing else, so install-toolchain.sh cannot
+# read go.mod. tests/devcontainer-toolchain-surface.bats holds the two equal.
+GO_VERSION="${GO_VERSION:-1.26.5}"
 STARSHIP_VERSION="${STARSHIP_VERSION:-v1.26.0}"
 STEP_VERSION="${STEP_VERSION:-v0.30.6}"
 VIM_SENSIBLE_REF="${VIM_SENSIBLE_REF:-0ce2d843d6f588bb0c8c7eec6449171615dc56d9}"

@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 DEVCONTAINER_CONFIG="${DEVCONTAINER_CONFIG:-${REPO_ROOT}/.devcontainer/devcontainer.json}"
+DOCKERFILE_REQUIRED_PACKAGES=(bats)
 DOCKERFILE_PATH="${DOCKERFILE_PATH:-${REPO_ROOT}/.devcontainer/Dockerfile}"
 DOCKER_BIN="${DOCKER_BIN:-docker}"
 DEVCONTAINER_CLI="${DEVCONTAINER_CLI:-devcontainer}"
@@ -144,6 +145,8 @@ mise_pin_variable_for() {
     kyverno) printf 'KYVERNO_VERSION\n' ;;
     lefthook) printf 'LEFTHOOK_VERSION\n' ;;
     ripgrep) printf 'RIPGREP_VERSION\n' ;;
+    yamllint) printf 'YAMLLINT_VERSION\n' ;;
+    shellcheck) printf 'SHELLCHECK_VERSION\n' ;;
     lima) printf 'LIMA_VERSION\n' ;;
     starship) printf 'STARSHIP_VERSION\n' ;;
     step) printf 'STEP_VERSION\n' ;;
@@ -210,15 +213,30 @@ check_dockerfile_base_packages() {
   local missing=0
   local package
 
-  # ripgrep is no longer an apt package: install-toolchain.sh fetches the
-  # pinned release so the devcontainer, Ubuntu and Arch hosts, and CI all run
-  # one version. check_mise_pin_drift keeps the host pin in step.
-  for package in bats shellcheck yamllint; do
+  # ripgrep, shellcheck and yamllint used to be apt packages here.
+  # install-toolchain.sh takes them from the pins instead, so the devcontainer,
+  # Ubuntu and Arch hosts, and CI all run one version -- apt gave shellcheck
+  # 0.9.0 and yamllint 1.33.0 against CI's 0.11.0 and 1.38.0, so `make lint`
+  # disagreed between the two. check_mise_pin_drift keeps the host pins in step.
+  #
+  # bats is the one the Dockerfile still owns, because it has no pin anywhere.
+  for package in "${DOCKERFILE_REQUIRED_PACKAGES[@]}"; do
     if grep -Eq "^[[:space:]]*${package}[[:space:]]*\\\\" "${DOCKERFILE_PATH}"; then
       ok "Dockerfile installs ${package}"
     else
       fail_note "Dockerfile does not install required package: ${package}"
       missing=1
+    fi
+  done
+
+  # The reverse direction: a tool that has a pin must not also come from apt,
+  # or the image silently ends up with whichever ran last.
+  for package in ripgrep shellcheck yamllint; do
+    if grep -Eq "^[[:space:]]*${package}[[:space:]]*\\\\" "${DOCKERFILE_PATH}"; then
+      fail_note "Dockerfile apt-installs ${package}, which is pinned in install-toolchain.sh"
+      missing=1
+    else
+      ok "${package} comes from its pin, not apt"
     fi
   done
 

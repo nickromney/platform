@@ -24,4 +24,5 @@ starship	github:starship/starship	STARSHIP_VERSION
 step	github:smallstep/cli	STEP_VERSION
 terragrunt	github:gruntwork-io/terragrunt	ARKADE:terragrunt
 vim-sensible	audit-only	VIM_SENSIBLE_REF
+yamllint	github:adrienverge/yamllint	YAMLLINT_VERSION
 yq	github:mikefarah/yq	ARKADE:yq
