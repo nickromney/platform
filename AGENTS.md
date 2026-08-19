@@ -1,5 +1,57 @@
 Use the repo-local `use-platform` skill at `skills/use-platform/SKILL.md` first if your agent supports installable skills. Then run `make` at the root; it is informational and points to focused Makefiles. Choose a subtree with `make -C apps help`, `make -C docker/compose help`, `make -C kubernetes/kind help`, or `make -C kubernetes/lima help`, then read the nearest subtree `README.md`.
 
+## The gate is local. Run it yourself before you push
+
+**GitHub CI does not run on pull requests** (ADR 0011). It runs on `main` and on
+`workflow_dispatch` only. Nothing remote will catch your branch for you.
+
+Run this before pushing:
+
+```bash
+make lint && make test-ci
+```
+
+`make test-ci` stamps `.run/ci-receipt.json` with a fingerprint of the exact
+tree it verified. The pre-push hook checks that receipt against the tree you are
+pushing: if it matches, the push proceeds in milliseconds; if the tree has
+changed since, the push is refused and tells you to re-run. So a stale receipt
+costs you one message, not twelve minutes — but you do have to run the gate.
+
+The receipt covers uncommitted and untracked-not-ignored files too, not just
+`HEAD`. It has no expiry: it is valid while the tree matches, and worthless the
+moment a file changes.
+
+Git hooks come from lefthook (`make hooks` installs them from `lefthook.yml`)
+and fire at commit and push, not while you work. What they cover:
+
+- **pre-commit** lints only *staged* files — shellcheck on `*.sh`, yamllint on
+  `*.{yaml,yml}`, duplicate keys in `kubernetes/kind/**/*.tfvars`. Nothing
+  repo-wide, no tests.
+- **pre-push** runs `make lint` (~90s) then verifies the receipt.
+  `PLATFORM_LOCAL_CI_FULL=1 git push` runs the whole suite inline instead, but
+  git opens the SSH connection before the hook runs, so a ~12-minute hook can
+  outlive it and the push dies with "Connection closed by remote host". Running
+  `make test-ci` first avoids that race.
+
+Two things the gate does **not** check, so run them yourself when touching Go:
+
+```bash
+gofmt -l tools/ apps/
+cd <module> && go test -race ./...
+```
+
+Both have already caught real bugs here that a full green gate did not.
+
+Also note `make lint`'s shell audit only sees **tracked** files, so `git add`
+new scripts before trusting a clean run. New `*.bats` and `go.mod` files are
+picked up automatically once tracked — both are discovered with `git ls-files`.
+
+When remote confirmation genuinely matters, dispatch it:
+
+```bash
+gh workflow run ci.yml --ref <branch>
+```
+
 ## Cursor Cloud specific instructions
 
 For cloud agents on the ephemeral Cursor Cloud VM (Ubuntu 24.04, Firecracker guest

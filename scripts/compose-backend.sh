@@ -39,7 +39,7 @@ while [ "$#" -gt 0 ]; do
     --)
       shift
       if [ "$#" -gt 0 ]; then
-        shell_cli_unexpected_arg "$1"
+        shell_cli_unexpected_arg "$(shell_cli_script_name)" "$1"
         exit 1
       fi
       ;;
@@ -48,7 +48,7 @@ while [ "$#" -gt 0 ]; do
       exit 1
       ;;
     *)
-      shell_cli_unexpected_arg "$1"
+      shell_cli_unexpected_arg "$(shell_cli_script_name)" "$1"
       exit 1
       ;;
   esac

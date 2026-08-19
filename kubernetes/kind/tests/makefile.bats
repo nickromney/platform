@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
 
 setup() {
-  export REPO_ROOT
-  REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
+  source "$(git -C "$(dirname "${BATS_TEST_FILENAME}")" rev-parse --show-toplevel)/tests/test_helper.bash"
+  setup_repo_root
   export TEST_BIN="${BATS_TEST_TMPDIR}/bin"
   mkdir -p "${TEST_BIN}"
   export PATH="${TEST_BIN}:${PATH}"
@@ -504,19 +504,22 @@ EOF
 }
 
 @test "kind cluster-dependent read-only targets gate on assert-kind-active" {
-  for target in check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e show-urls gitea-sync; do
+  for target in check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e show-urls; do
     run sed -n "/^${target}:/,/^\\.PHONY:/p" "${REPO_ROOT}/kubernetes/kind/Makefile"
 
     [ "${status}" -eq 0 ]
     [[ "${output}" == *'$(MAKE) assert-kind-active >/dev/null'* ]]
   done
+
+  grep -Fq 'GITEA_SYNC_ASSERT_TARGET = assert-kind-active' "${REPO_ROOT}/kubernetes/kind/Makefile"
+  grep -Fq '$(MAKE) $(GITEA_SYNC_ASSERT_TARGET) >/dev/null' "${REPO_ROOT}/mk/k8s-variant-lifecycle.mk"
 }
 
 @test "kind gitea-sync uses the runtime-scoped policies deploy key" {
-  run sed -n '/^gitea-sync:/,/^\\.PHONY:/p' "${REPO_ROOT}/kubernetes/kind/Makefile"
+  run grep -Fn 'SSH_PRIVATE_KEY_PATH="$${SSH_PRIVATE_KEY_PATH:-$(STACK_RUNTIME_DIR)/policies-repo.id_ed25519}"' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *'SSH_PRIVATE_KEY_PATH="$${SSH_PRIVATE_KEY_PATH:-$(STACK_RUNTIME_DIR)/policies-repo.id_ed25519}"'* ]]
 }
 
 @test "kind check-version runs the active-variant assertion directly so it can report readiness" {

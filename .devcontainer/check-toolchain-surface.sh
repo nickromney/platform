@@ -82,6 +82,15 @@ resolved_configuration_json() {
     --log-format json 2>&1 | awk '/^\{"configuration":/ { print; found=1 } END { exit(found ? 0 : 1) }'
 }
 
+# `devcontainer read-configuration` shells out to `docker ps`, so it fails on
+# any host where Docker is simply not running. That is an unmet precondition,
+# not a broken devcontainer definition, and reporting it as FAIL trains people
+# to ignore a red line -- the Feature Install Surface section below already
+# treats the same condition as a skip.
+docker_available() {
+  command -v "${DOCKER_BIN}" >/dev/null 2>&1 && "${DOCKER_BIN}" info >/dev/null 2>&1
+}
+
 resolved_node_feature_assignments() {
   run_inline_python "$1" <<'PY'
 import json
@@ -134,6 +143,7 @@ mise_pin_variable_for() {
     opentofu) printf 'OPENTOFU_VERSION\n' ;;
     kyverno) printf 'KYVERNO_VERSION\n' ;;
     lefthook) printf 'LEFTHOOK_VERSION\n' ;;
+    ripgrep) printf 'RIPGREP_VERSION\n' ;;
     lima) printf 'LIMA_VERSION\n' ;;
     starship) printf 'STARSHIP_VERSION\n' ;;
     step) printf 'STEP_VERSION\n' ;;
@@ -200,7 +210,10 @@ check_dockerfile_base_packages() {
   local missing=0
   local package
 
-  for package in bats ripgrep shellcheck yamllint; do
+  # ripgrep is no longer an apt package: install-toolchain.sh fetches the
+  # pinned release so the devcontainer, Ubuntu and Arch hosts, and CI all run
+  # one version. check_mise_pin_drift keeps the host pin in step.
+  for package in bats shellcheck yamllint; do
     if grep -Eq "^[[:space:]]*${package}[[:space:]]*\\\\" "${DOCKERFILE_PATH}"; then
       ok "Dockerfile installs ${package}"
     else
@@ -299,7 +312,11 @@ check_dockerfile_base_packages
 check_mise_pin_drift
 
 if [[ -z "${RESOLVED_CONFIG_JSON}" ]]; then
-  fail_note "could not resolve the devcontainer feature configuration with ${DEVCONTAINER_CLI} read-configuration"
+  if docker_available; then
+    fail_note "could not resolve the devcontainer feature configuration with ${DEVCONTAINER_CLI} read-configuration"
+  else
+    warn "devcontainer feature checks skipped: ${DOCKER_BIN} is not available, and ${DEVCONTAINER_CLI} read-configuration runs docker ps"
+  fi
 else
   eval "$(resolved_node_feature_assignments "${RESOLVED_CONFIG_JSON}")"
   check_node_feature_resolution

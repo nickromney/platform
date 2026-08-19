@@ -75,6 +75,12 @@ notes live under [`docs/plans/archive`](plans/archive/).
   controlled and tested.
 - App repo sync and image readiness: sentiment/subnetcalc sync and wait logic
   use shared contracts instead of duplicated local-exec snippets.
+- Variant lifecycle and workflow core sharing: kind and lima include
+  `mk/k8s-variant-lifecycle.mk` and one tfvar resolution order; the TUI and
+  browser workflow UI build argv through `tools/platform-workflow-core`; the
+  remaining Terraform `local-exec` heredocs are extracted scripts; and the CI
+  Bats list is discovered from `git ls-files` minus a reviewable backlog.
+  See ADR 0010.
 - APIM simulator ownership: `apps/apim-simulator` is the repo source; older
   subnetcalc vendoring language is historical only.
 - Apps Go architecture pass: `idpauth.BootstrapVerifier`,

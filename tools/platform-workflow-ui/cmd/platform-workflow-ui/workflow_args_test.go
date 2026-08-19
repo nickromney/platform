@@ -105,6 +105,37 @@ func TestActionTravelsAsAFlagNotAsTheSubcommand(t *testing.T) {
 	}
 }
 
+// options.json states the app-toggle stages twice: as ui_rules.app_toggle_stages
+// and as stages[].app_toggles. The core reads ui_rules first, so a surface that
+// parses the payload but drops ui_rules only agrees with the TUI while the two
+// copies happen to match. This pins the ui_rules path on its own, using a stage
+// that is named ONLY there.
+func TestUIRulesReachTheCore(t *testing.T) {
+	options := optionsPayload{
+		Apps:    []string{"sentiment"},
+		Stages:  []stageOption{{ID: "930", AppToggles: false}},
+		UIRules: uiRules{AppToggleStages: []string{"930"}},
+	}
+	selection := workflowSelection{
+		Variant: "kubernetes/kind",
+		Stage:   "930",
+		Action:  "plan",
+		Apps:    map[string]string{"sentiment": "off"},
+	}
+
+	args := workflowArgs(options, selection, runSubcommand, "--execute")
+
+	var sawAppOverride bool
+	for i, a := range args {
+		if a == "--app" && i+1 < len(args) && args[i+1] == "sentiment=off" {
+			sawAppOverride = true
+		}
+	}
+	if !sawAppOverride {
+		t.Fatalf("app override dropped: ui_rules.app_toggle_stages did not reach the core; args = %v", args)
+	}
+}
+
 func TestPreviewAndRunAgreeOnEverythingButTheSubcommand(t *testing.T) {
 	selection := workflowSelection{Variant: "kubernetes/kind", Stage: "700", Action: "plan"}
 

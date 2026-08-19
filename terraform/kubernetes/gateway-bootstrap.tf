@@ -45,39 +45,17 @@ resource "null_resource" "wait_for_gateway_bootstrap_crds" {
     crd_names          = join(",", local.gateway_bootstrap_crd_names)
     kubeconfig_path    = local.kubeconfig_path_for_providers
     kubeconfig_context = local.kubeconfig_context_for_providers != null ? local.kubeconfig_context_for_providers : ""
+    script_sha         = filesha256("${local.stack_dir}/scripts/wait-for-gateway-crds.sh")
   }
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-lc"]
-    command     = <<-EOT
-      set -euo pipefail
-      export KUBECONFIG="${local.kubeconfig_path_for_providers}"
-      KUBE_CONTEXT="${local.kubeconfig_context_for_providers != null ? local.kubeconfig_context_for_providers : ""}"
-      KUBECTL_ARGS=""
-      if [[ -n "$${KUBE_CONTEXT}" ]]; then
-        KUBECTL_ARGS="--context $${KUBE_CONTEXT}"
-      fi
-
-      for crd in ${join(" ", local.gateway_bootstrap_crd_names)}; do
-        deadline=$((SECONDS + 180))
-        established=""
-        while (( SECONDS < deadline )); do
-          established="$(kubectl $${KUBECTL_ARGS} get "crd/$${crd}" -o json 2>/dev/null | jq -r '.status.conditions[]? | select(.type=="Established") | .status' | head -n1 || true)"
-          if [[ "$${established}" == "True" ]]; then
-            break
-          fi
-          sleep 2
-        done
-
-        if [[ "$${established}" != "True" ]]; then
-          echo "Timed out waiting for CRD/$${crd} to become Established" >&2
-          kubectl $${KUBECTL_ARGS} get "crd/$${crd}" -o yaml || true
-          exit 1
-        fi
-
-        kubectl $${KUBECTL_ARGS} wait --for=condition=Established --timeout=10s "crd/$${crd}" >/dev/null
-      done
-    EOT
+    command     = "bash \"${local.stack_dir}/scripts/wait-for-gateway-crds.sh\" --execute"
+    environment = {
+      KUBECONFIG  = local.kubeconfig_path_for_providers
+      KUBE_CONTEXT = local.kubeconfig_context_for_providers != null ? local.kubeconfig_context_for_providers : ""
+      CRD_NAMES    = join(" ", local.gateway_bootstrap_crd_names)
+    }
   }
 
   depends_on = [

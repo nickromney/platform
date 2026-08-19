@@ -484,162 +484,21 @@ resource "null_resource" "argocd_repo_server_restart" {
       tls_private_key.policies_repo[0].private_key_openssh,
       local.gitea_known_hosts_cluster_content,
     ]))
-    restart_script_ver = "7"
+    restart_script_sha = filesha256("${local.stack_dir}/scripts/refresh-argocd-repo-server-known-hosts.sh")
+    wait_gitea_ssh_sha  = filesha256("${local.stack_dir}/scripts/wait-for-gitea-ssh.sh")
   }
 
   provisioner "local-exec" {
-    command     = <<EOT
-set -euo pipefail
-export KUBECONFIG="${local.kubeconfig_path_expanded}"
-KNOWN_HOSTS_FILE="${local.gitea_known_hosts_cluster_path}"
-mkdir -p "$(dirname "$KNOWN_HOSTS_FILE")"
-cat >"$KNOWN_HOSTS_FILE" <<'EOF_KNOWN_HOSTS'
-${local.gitea_known_hosts_cluster_content}
-EOF_KNOWN_HOSTS
-trap 'rm -f "$KNOWN_HOSTS_FILE"' EXIT
-
-# The Kubernetes provider state can drift from the live, Helm-owned ConfigMap.
-# Patch the live ConfigMap explicitly from the generated Gitea host key file, then
-# restart argocd-repo-server so it re-reads both the mounted ssh_known_hosts
-# content and the repository credentials secrets. On a clean cluster, skipping
-# the restart because the ConfigMap is already current can leave repo-server
-# serving stale SSH trust state for newly created repo secrets.
-#
-# (e.g. "failed calling webhook ... connect: connection refused"). Retry the restart in that case.
-
-retry_webhook_fail() {
-  local max=12
-  local attempt=0
-  local delay=2
-  while true; do
-    set +e
-    out="$("$@" 2>&1)"
-    rc=$?
-    set -e
-    if [ "$rc" -eq 0 ]; then
-      echo "$out"
-      return 0
-    fi
-    if echo "$out" | grep -qE 'failed calling webhook|kyverno-svc|kyverno\\.svc-fail|connect: connection refused|no endpoints available for service'; then
-      attempt=$((attempt + 1))
-      if [ "$attempt" -ge "$max" ]; then
-        echo "$out" >&2
-        return "$rc"
-      fi
-      # Avoid Terraform interpolation in this heredoc: escape bash vars as $${var} or use $var.
-      echo "WARN webhook not ready; retrying ($attempt/$max) after $${delay}s..." >&2
-      sleep "$delay"
-      delay=$((delay * 2))
-      if [ "$delay" -gt 30 ]; then delay=30; fi
-      continue
-    fi
-    echo "$out" >&2
-    return "$rc"
-  done
-}
-
-wait_for_gitea_ssh() {
-  local gitea_ns="gitea"
-  local deadline=$((SECONDS + ${local.platform_wait_seconds.rollout_default}))
-  local pod_name=""
-  local ssh_target_port=""
-
-  if ! kubectl -n "$gitea_ns" get deployment gitea >/dev/null 2>&1; then
-    echo "Gitea deployment not found in namespace $gitea_ns" >&2
-    return 1
-  fi
-
-  kubectl -n "$gitea_ns" rollout status deployment/gitea --timeout=${local.platform_wait_seconds.rollout_default}s
-
-  while (( SECONDS < deadline )); do
-    pod_name="$(kubectl -n "$gitea_ns" get pods -l app.kubernetes.io/name=gitea -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-    ssh_target_port="$(kubectl -n "$gitea_ns" get endpoints gitea-ssh -o jsonpath='{.subsets[0].ports[0].port}' 2>/dev/null || true)"
-    if [[ -n "$pod_name" && -n "$ssh_target_port" ]] && kubectl -n "$gitea_ns" exec "$pod_name" -- sh -c '
-      ssh_target_port="$1"
-      if command -v ss >/dev/null 2>&1; then
-        ss -ltn | grep -qE "[[:space:]]:$ssh_target_port[[:space:]]"
-      elif command -v netstat >/dev/null 2>&1; then
-        netstat -ltn 2>/dev/null | grep -qE "[.:]$ssh_target_port[[:space:]]"
-      else
-        exit 1
-      fi
-    ' sh "$ssh_target_port" >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 5
-  done
-
-  echo "Timed out waiting for Gitea SSH listener to become ready" >&2
-  kubectl -n "$gitea_ns" get pods,svc,endpoints gitea gitea-ssh -o wide 2>/dev/null || true
-  return 1
-}
-
-patch_known_hosts() {
-  local tmpdir
-  tmpdir="$(mktemp -d)"
-
-  local base_file="$tmpdir/base"
-  local base_filtered="$tmpdir/base-filtered"
-  local current_hosts="$tmpdir/current-hosts"
-  local merged_file="$tmpdir/merged"
-  local patch_file="$tmpdir/patch.yaml"
-  local patch_out
-
-  kubectl -n ${var.argocd_namespace} get configmap argocd-ssh-known-hosts-cm -o jsonpath='{.data.ssh_known_hosts}' > "$base_file"
-  printf '\n' >> "$base_file"
-
-  awk 'NF {print $1}' "$KNOWN_HOSTS_FILE" | LC_ALL=C sort -u > "$current_hosts"
-  awk 'NR==FNR {replace[$1]=1; next} NF && !($1 in replace)' "$current_hosts" "$base_file" > "$base_filtered"
-  awk 'NF && !seen[$0]++' "$base_filtered" "$KNOWN_HOSTS_FILE" | LC_ALL=C sort -u > "$merged_file"
-
-  {
-    echo "data:"
-    echo "  ssh_known_hosts: |"
-    sed 's/^/    /' "$merged_file"
-  } > "$patch_file"
-
-  patch_out="$(retry_webhook_fail kubectl patch configmap argocd-ssh-known-hosts-cm -n ${var.argocd_namespace} --type merge --patch-file "$patch_file")"
-  echo "$patch_out"
-  rm -rf "$tmpdir"
-}
-
-force_delete_stuck_repo_server_pods() {
-  local stuck_pods
-  stuck_pods="$(
-    kubectl -n ${var.argocd_namespace} get pods \
-      -l app.kubernetes.io/name=argocd-repo-server \
-      -o jsonpath='{range .items[?(@.metadata.deletionTimestamp)]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true
-  )"
-
-  if [ -z "$stuck_pods" ]; then
-    return 1
-  fi
-
-  while IFS= read -r pod; do
-    [ -n "$pod" ] || continue
-    echo "WARN force deleting stuck repo-server pod: $pod" >&2
-    kubectl -n ${var.argocd_namespace} delete pod "$pod" --force --grace-period=0 >/dev/null 2>&1 || true
-  done <<< "$stuck_pods"
-
-  return 0
-}
-
-if kubectl -n ${var.argocd_namespace} get deployment argocd-repo-server >/dev/null 2>&1; then
-  wait_for_gitea_ssh
-  patch_known_hosts
-  retry_webhook_fail kubectl rollout restart deployment argocd-repo-server -n ${var.argocd_namespace}
-  if ! retry_webhook_fail kubectl rollout status deployment argocd-repo-server -n ${var.argocd_namespace} --timeout=${local.platform_wait_seconds.rollout_default}s; then
-    if force_delete_stuck_repo_server_pods; then
-      retry_webhook_fail kubectl rollout status deployment argocd-repo-server -n ${var.argocd_namespace} --timeout=${local.platform_wait_seconds.rollout_default}s
-    else
-      exit 1
-    fi
-  fi
-else
-  echo "WARN argocd-repo-server deployment not found in namespace ${var.argocd_namespace}; skipping restart" >&2
-fi
-EOT
+    command     = "bash \"${local.stack_dir}/scripts/refresh-argocd-repo-server-known-hosts.sh\" --execute"
     interpreter = ["/bin/bash", "-c"]
+    environment = {
+      KUBECONFIG                = local.kubeconfig_path_expanded
+      KNOWN_HOSTS_CONTENT       = local.gitea_known_hosts_cluster_content
+      ARGOCD_NAMESPACE          = var.argocd_namespace
+      ROLLOUT_TIMEOUT_SECONDS   = tostring(local.platform_wait_seconds.rollout_default)
+      GITEA_SSH_TIMEOUT_SECONDS = tostring(local.platform_wait_seconds.rollout_default)
+      WAIT_FOR_GITEA_SSH_MODE   = "strict"
+    }
   }
 
   depends_on = [
@@ -657,272 +516,22 @@ resource "null_resource" "argocd_refresh_gitops_repo_apps" {
     gitops_repo_hash   = local.policies_repo_render_hash
     known_hosts_hash   = local.argocd_gitops_repo_trust_hash
     gitops_repo_apps   = sha1(join(",", sort(local.argocd_gitops_repo_app_names)))
-    refresh_script_ver = "10"
+    refresh_script_sha  = filesha256("${local.stack_dir}/scripts/refresh-argocd-gitops-repo-apps.sh")
+    wait_gitea_ssh_sha   = filesha256("${local.stack_dir}/scripts/wait-for-gitea-ssh.sh")
   }
 
   provisioner "local-exec" {
-    command     = <<EOT
-set -euo pipefail
-export KUBECONFIG="${local.kubeconfig_path_expanded}"
-ARGOCD_NS="${var.argocd_namespace}"
-APP_NAMES="${join(",", local.argocd_gitops_repo_app_names)}"
-
-if [[ -z "$APP_NAMES" ]]; then
-  exit 0
-fi
-
-if ! kubectl -n "$ARGOCD_NS" get deployment argocd-repo-server >/dev/null 2>&1; then
-  echo "WARN argocd-repo-server deployment not found in namespace $ARGOCD_NS; skipping refresh" >&2
-  exit 0
-fi
-
-kubectl -n "$ARGOCD_NS" rollout status deployment argocd-repo-server --timeout=${local.platform_wait_seconds.rollout_short}s >/dev/null 2>&1 || true
-if kubectl -n "$ARGOCD_NS" get statefulset argocd-application-controller >/dev/null 2>&1; then
-  kubectl -n "$ARGOCD_NS" rollout status statefulset argocd-application-controller --timeout=${local.platform_wait_seconds.rollout_short}s >/dev/null 2>&1 || true
-fi
-
-wait_for_gitea_ssh() {
-  local gitea_ns="gitea"
-  local deadline=$((SECONDS + ${local.platform_wait_seconds.rollout_gitea}))
-  local pod_name=""
-  local ssh_target_port=""
-
-  if ! kubectl -n "$gitea_ns" get deployment gitea >/dev/null 2>&1; then
-    return 0
-  fi
-
-  kubectl -n "$gitea_ns" rollout status deployment/gitea --timeout=${local.platform_wait_seconds.rollout_gitea}s >/dev/null 2>&1 || true
-
-  while (( SECONDS < deadline )); do
-    pod_name="$(kubectl -n "$gitea_ns" get pods -l app.kubernetes.io/name=gitea -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-    ssh_target_port="$(kubectl -n "$gitea_ns" get endpoints gitea-ssh -o jsonpath='{.subsets[0].ports[0].port}' 2>/dev/null || true)"
-    if [[ -n "$pod_name" && -n "$ssh_target_port" ]] && kubectl -n "$gitea_ns" exec "$pod_name" -- sh -c '
-      ssh_target_port="$1"
-      if command -v ss >/dev/null 2>&1; then
-        ss -ltn | grep -qE "[[:space:]]:$${ssh_target_port}[[:space:]]"
-      elif command -v netstat >/dev/null 2>&1; then
-        netstat -ltn 2>/dev/null | grep -qE "[.:]$${ssh_target_port}[[:space:]]"
-      else
-        exit 1
-      fi
-    ' sh "$ssh_target_port" >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 5
-  done
-
-  echo "WARN gitea SSH listener did not become ready before Argo refresh" >&2
-  return 0
-}
-
-wait_for_gitea_ssh
-
-app_list="$(printf '%s' "$APP_NAMES" | tr ',' '\n')"
-
-refresh_app() {
-  local app="$1"
-  kubectl -n "$ARGOCD_NS" annotate app "$app" argocd.argoproj.io/refresh=hard --overwrite >/dev/null 2>&1 || true
-}
-
-get_resource_jsonpath() {
-  local resource_kind="$1"
-  local resource_namespace="$2"
-  local resource_name="$3"
-  local jsonpath_expr="$4"
-
-  if [[ -n "$resource_namespace" ]]; then
-    kubectl -n "$resource_namespace" get "$resource_kind" "$resource_name" -o "jsonpath=$jsonpath_expr" 2>/dev/null || true
-  else
-    kubectl get "$resource_kind" "$resource_name" -o "jsonpath=$jsonpath_expr" 2>/dev/null || true
-  fi
-}
-
-managed_workloads_ready() {
-  local app="$1"
-  local workloads=""
-  local found_workload=0
-
-  workloads="$(kubectl -n "$ARGOCD_NS" get app "$app" -o json 2>/dev/null | jq -r '
-    .status.resources[]?
-    | select(.kind == "Deployment" or .kind == "StatefulSet" or .kind == "DaemonSet" or .kind == "Job")
-    | [(.kind // ""), (.namespace // ""), (.name // "")]
-    | @tsv
-  ' 2>/dev/null || true)"
-
-  while IFS=$'\t' read -r workload_kind workload_namespace workload_name; do
-    local desired=""
-    local ready=""
-    local complete=""
-
-    [[ -n "$workload_kind" && -n "$workload_name" ]] || continue
-    found_workload=1
-
-    case "$workload_kind" in
-      Deployment)
-        desired="$(get_resource_jsonpath deployment "$workload_namespace" "$workload_name" '{.spec.replicas}')"
-        ready="$(get_resource_jsonpath deployment "$workload_namespace" "$workload_name" '{.status.readyReplicas}')"
-        ;;
-      StatefulSet)
-        desired="$(get_resource_jsonpath statefulset "$workload_namespace" "$workload_name" '{.spec.replicas}')"
-        ready="$(get_resource_jsonpath statefulset "$workload_namespace" "$workload_name" '{.status.readyReplicas}')"
-        ;;
-      DaemonSet)
-        desired="$(get_resource_jsonpath daemonset "$workload_namespace" "$workload_name" '{.status.desiredNumberScheduled}')"
-        ready="$(get_resource_jsonpath daemonset "$workload_namespace" "$workload_name" '{.status.numberReady}')"
-        ;;
-      Job)
-        complete="$(get_resource_jsonpath job "$workload_namespace" "$workload_name" '{.status.conditions[?(@.type=="Complete")].status}')"
-        [[ "$complete" == "True" ]] || return 1
-        continue
-        ;;
-      *)
-        continue
-        ;;
-    esac
-
-    if [[ -z "$desired" ]]; then
-      desired="1"
-    fi
-    if [[ -z "$ready" ]]; then
-      ready="0"
-    fi
-
-    [[ "$ready" -ge "$desired" ]] || return 1
-  done <<< "$workloads"
-
-  [[ "$found_workload" -eq 1 ]]
-}
-
-needs_refresh_reason=""
-needs_refresh() {
-  local app="$1"
-  local sync_status
-  local health_status
-  local comparison_msg
-
-  needs_refresh_reason=""
-
-  sync_status="$(kubectl -n "$ARGOCD_NS" get app "$app" -o jsonpath='{.status.sync.status}' 2>/dev/null || true)"
-  health_status="$(kubectl -n "$ARGOCD_NS" get app "$app" -o jsonpath='{.status.health.status}' 2>/dev/null || true)"
-  comparison_msg="$(kubectl -n "$ARGOCD_NS" get app "$app" -o jsonpath='{.status.conditions[?(@.type=="ComparisonError")].message}' 2>/dev/null || true)"
-
-  if grep -qiE 'knownhosts: key is unknown|failed to list refs: dial tcp .*:22: connect: connection refused|failed to list refs: unexpected EOF' <<<"$comparison_msg"; then
-    needs_refresh_reason="comparison=$comparison_msg"
-    return 0
-  fi
-
-  # Argo can keep the parent Application at Unknown/Degraded/Progressing after
-  # the child resources have all become ready. Only treat that as stale cache
-  # when the live managed workloads are actually ready; some Argo versions leave
-  # child resource sync/health empty while the workloads are still converging.
-  if [[ "$sync_status" == "Unknown" && -z "$comparison_msg" ]] && managed_workloads_ready "$app"; then
-    needs_refresh_reason="managed-workloads-ready"
-    return 0
-  fi
-
-  if [[ "$sync_status" == "Synced" && "$health_status" != "Healthy" ]] && managed_workloads_ready "$app"; then
-    needs_refresh_reason="managed-workloads-ready"
-    return 0
-  fi
-
-  if [[ "$sync_status" == "Unknown" ]]; then
-    needs_refresh_reason="sync=Unknown"
-    return 0
-  fi
-
-  return 1
-}
-
-while IFS= read -r app; do
-  [[ -n "$app" ]] || continue
-  if kubectl -n "$ARGOCD_NS" get app "$app" >/dev/null 2>&1; then
-    refresh_app "$app"
-  fi
-done <<< "$app_list"
-
-# Give the controller time to process the initial hard-refresh wave before
-# deciding whether any app is still stale.
-sleep 15
-
-end=$((SECONDS + ${local.platform_wait_seconds.rollout_default}))
-stable_passes=0
-soft_only_stable_passes=0
-last_pending_summary=""
-last_hard_pending_summary=""
-last_soft_pending_summary=""
-while (( SECONDS < end )); do
-  pending=0
-  pending_apps=()
-  hard_pending_apps=()
-  soft_pending_apps=()
-  while IFS= read -r app; do
-    [[ -n "$app" ]] || continue
-    if ! kubectl -n "$ARGOCD_NS" get app "$app" >/dev/null 2>&1; then
-      continue
-    fi
-
-    if needs_refresh "$app"; then
-      pending=1
-      pending_apps+=("$app:$needs_refresh_reason")
-      if [[ "$needs_refresh_reason" == "managed-workloads-ready" ]]; then
-        # Once the initial hard-refresh wave has landed, a Synced app with live
-        # workloads ready usually just needs the controller to settle its parent
-        # health. Re-refreshing every few seconds can keep the app looking
-        # perpetually unsettled. Treat this as a soft wait condition instead.
-        soft_pending_apps+=("$app:$needs_refresh_reason")
-      else
-        refresh_app "$app"
-        hard_pending_apps+=("$app:$needs_refresh_reason")
-      fi
-    fi
-  done <<< "$app_list"
-
-  if [[ "$pending" -eq 0 ]]; then
-    stable_passes=$((stable_passes + 1))
-    soft_only_stable_passes=0
-    last_pending_summary=""
-    last_hard_pending_summary=""
-    last_soft_pending_summary=""
-    if [[ "$stable_passes" -ge 2 ]]; then
-      exit 0
-    fi
-  else
-    stable_passes=0
-    last_pending_summary="$${pending_apps[*]-}"
-    last_hard_pending_summary="$${hard_pending_apps[*]-}"
-    last_soft_pending_summary="$${soft_pending_apps[*]-}"
-    if [[ "$${#hard_pending_apps[@]}" -eq 0 && "$${#soft_pending_apps[@]}" -gt 0 ]]; then
-      soft_only_stable_passes=$((soft_only_stable_passes + 1))
-      if [[ "$soft_only_stable_passes" -ge 2 ]]; then
-        echo "WARN repo-backed Argo CD applications were still waiting on parent health after refresh, but no repo comparison errors remained: $last_soft_pending_summary" >&2
-        exit 0
-      fi
-    else
-      soft_only_stable_passes=0
-    fi
-  fi
-
-  sleep 5
-done
-
-if [[ -n "$last_hard_pending_summary" ]]; then
-  echo "Repo-backed Argo CD applications still have stale comparison state after refresh: $last_hard_pending_summary" >&2
-  exit 1
-fi
-
-if [[ -n "$last_soft_pending_summary" ]]; then
-  echo "WARN repo-backed Argo CD applications were still waiting on parent health after refresh, but no repo comparison errors remained: $last_soft_pending_summary" >&2
-  exit 0
-fi
-
-if [[ -n "$last_pending_summary" ]]; then
-  echo "Repo-backed Argo CD applications still have stale comparison state after refresh: $last_pending_summary" >&2
-else
-  echo "Repo-backed Argo CD applications still have stale comparison state after refresh" >&2
-fi
-exit 1
-EOT
+    command     = "bash \"${local.stack_dir}/scripts/refresh-argocd-gitops-repo-apps.sh\" --execute"
     interpreter = ["/bin/bash", "-c"]
+    environment = {
+      KUBECONFIG                = local.kubeconfig_path_expanded
+      ARGOCD_NS                 = var.argocd_namespace
+      APP_NAMES                 = join(",", local.argocd_gitops_repo_app_names)
+      ROLLOUT_SHORT_SECONDS     = tostring(local.platform_wait_seconds.rollout_short)
+      ROLLOUT_TIMEOUT_SECONDS   = tostring(local.platform_wait_seconds.rollout_default)
+      GITEA_SSH_TIMEOUT_SECONDS = tostring(local.platform_wait_seconds.rollout_gitea)
+      WAIT_FOR_GITEA_SSH_MODE   = "best-effort"
+    }
   }
 
   depends_on = [
@@ -1053,7 +662,7 @@ resource "null_resource" "wait_gitea_actions_runner_ready" {
   triggers = {
     # Re-run if the cluster identity changes (kind reset/recreate or kubeconfig/context switch).
     cluster_id = var.provision_kind_cluster ? kind_cluster.local[0].id : "external:${local.kubeconfig_path_expanded}:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : "default"}"
-    script_v   = "2"
+    script_sha = filesha256("${local.stack_dir}/scripts/wait-for-gitea-actions-runner.sh")
     # If managed via app-of-apps, re-run when the manifest changes.
     runner_manifest_hash = var.enable_app_of_apps ? filesha256("${local.stack_dir}/apps/argocd-apps/60-gitea-actions-runner.application.yaml") : "n/a"
     # Avoid hard coupling to the Terraform-managed ArgoCD Application when the
@@ -1063,62 +672,7 @@ resource "null_resource" "wait_gitea_actions_runner_ready" {
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
-    command     = <<EOT
-set -euo pipefail
-
-KUBECONFIG="$${KUBECONFIG:?}"
-RUNNER_WAIT_SECONDS="$${RUNNER_WAIT_SECONDS:-600}"
-ARGOCD_NAMESPACE="$${ARGOCD_NAMESPACE:-argocd}"
-
-echo "Waiting for Gitea Actions runner deployment to be ready..."
-
-# Wait for namespace
-waited=0
-while [ "$waited" -lt "$RUNNER_WAIT_SECONDS" ]; do
-  if kubectl get ns gitea-runner >/dev/null 2>&1; then
-    echo "Namespace gitea-runner exists"
-    break
-  fi
-  sleep 2
-  waited=$((waited + 2))
-done
-
-if ! kubectl get ns gitea-runner >/dev/null 2>&1; then
-  echo "Timed out waiting for namespace gitea-runner" >&2
-  echo "ArgoCD app status:" >&2
-  kubectl -n "$ARGOCD_NAMESPACE" get applications.argoproj.io gitea-actions-runner -o yaml 2>/dev/null || true
-  exit 1
-fi
-
-# Wait for deployment
-waited=0
-while [ "$waited" -lt "$RUNNER_WAIT_SECONDS" ]; do
-  if kubectl -n gitea-runner get deploy act-runner >/dev/null 2>&1; then
-    echo "Deployment gitea-runner/act-runner exists"
-    break
-  fi
-  sleep 2
-  waited=$((waited + 2))
-done
-
-if ! kubectl -n gitea-runner get deploy act-runner >/dev/null 2>&1; then
-  echo "Timed out waiting for deployment gitea-runner/act-runner" >&2
-  echo "ArgoCD app status:" >&2
-  kubectl -n "$ARGOCD_NAMESPACE" get applications.argoproj.io gitea-actions-runner -o yaml 2>/dev/null || true
-  exit 1
-fi
-
-# Wait for rollout
-if ! kubectl -n gitea-runner rollout status deploy/act-runner --timeout="$${RUNNER_WAIT_SECONDS}s"; then
-  echo "Runner deployment rollout failed" >&2
-  kubectl -n gitea-runner get pods -o wide || true
-  kubectl -n gitea-runner describe pods -l app.kubernetes.io/name=act-runner || true
-  exit 1
-fi
-
-echo "Gitea Actions runner is ready"
-EOT
-
+    command     = "bash \"${local.stack_dir}/scripts/wait-for-gitea-actions-runner.sh\" --execute"
     environment = {
       KUBECONFIG          = local.kubeconfig_path_expanded
       ARGOCD_NAMESPACE    = var.argocd_namespace

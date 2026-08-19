@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
 
 setup() {
-  export REPO_ROOT
-  REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
+  source "$(git -C "$(dirname "${BATS_TEST_FILENAME}")" rev-parse --show-toplevel)/tests/test_helper.bash"
+  setup_repo_root
   export TEST_BIN="${BATS_TEST_TMPDIR}/bin"
   mkdir -p "${TEST_BIN}"
   export PATH="${TEST_BIN}:${PATH}"
@@ -192,12 +192,15 @@ setup() {
 }
 
 @test "lima cluster-dependent read-only targets gate on assert-lima-active" {
-  for target in check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e show-urls gitea-sync; do
+  for target in check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e show-urls; do
     run sed -n "/^${target}:/,/^\\.PHONY:/p" "${REPO_ROOT}/kubernetes/lima/Makefile"
 
     [ "${status}" -eq 0 ]
     [[ "${output}" == *'$(MAKE) assert-lima-active >/dev/null'* ]]
   done
+
+  grep -Fq 'GITEA_SYNC_ASSERT_TARGET = assert-lima-active' "${REPO_ROOT}/kubernetes/lima/Makefile"
+  grep -Fq '$(MAKE) $(GITEA_SYNC_ASSERT_TARGET) >/dev/null' "${REPO_ROOT}/mk/k8s-variant-lifecycle.mk"
 }
 
 @test "lima check-version runs the active-variant assertion directly so it can report readiness" {

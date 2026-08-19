@@ -29,6 +29,9 @@ contracts. These ADRs explain why the repo ended up with that shape.
 - [ADR 0006: Treat make, status, and TUI as the operator-facing application service boundary](./0006-operator-application-service-boundary.md)
 - [ADR 0007: Integrate APIM simulator as an in-repo supporting context](./0007-integrate-apim-simulator-supporting-context.md)
 - [ADR 0008: Default sample apps to minimal auditable runtimes](./0008-default-sample-apps-to-minimal-auditable-runtimes.md)
+- [ADR 0009: Treat idpauth as the auth+HTTP integration layer](./0009-idpauth-is-auth-http-integration-layer.md)
+- [ADR 0010: Concentrate the shared variant lifecycle and the guided-surface workflow core](./0010-share-variant-lifecycle-and-workflow-core.md)
+- [ADR 0011: Run the full gate locally, verified by a receipt, and take CI off pull requests](./0011-run-the-full-gate-locally-with-a-receipt.md)
 
 ## How To Read These
 

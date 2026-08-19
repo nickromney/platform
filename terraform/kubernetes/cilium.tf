@@ -2,23 +2,16 @@ resource "null_resource" "hubble_ui_service_legacy_cleanup" {
   count = local.enable_cilium_effective && var.enable_hubble ? 1 : 0
 
   triggers = {
-    node_port = var.hubble_ui_node_port
+    node_port  = var.hubble_ui_node_port
+    script_sha = filesha256("${local.stack_dir}/scripts/normalize-hubble-ui-service.sh")
   }
 
   provisioner "local-exec" {
-    command     = <<-EOT
-      set -euo pipefail
-      if ! kubectl get service hubble-ui -n kube-system >/dev/null 2>&1; then
-        exit 0
-      fi
-      # Older runs rewrote hubble-ui to port 8080. Normalize back to chart-native
-      # port 80 before Helm upgrades to avoid duplicate nodePort patch failures.
-      kubectl patch service hubble-ui -n kube-system --type=json \
-        -p '[{"op":"replace","path":"/spec/ports","value":[{"name":"http","port":80,"protocol":"TCP","targetPort":8081,"nodePort":${var.hubble_ui_node_port}}]}]'
-    EOT
+    command     = "bash \"${local.stack_dir}/scripts/normalize-hubble-ui-service.sh\" --execute"
     interpreter = ["/bin/bash", "-c"]
     environment = {
-      KUBECONFIG = local.kubeconfig_path_expanded
+      KUBECONFIG          = local.kubeconfig_path_expanded
+      HUBBLE_UI_NODE_PORT = tostring(var.hubble_ui_node_port)
     }
   }
 }
@@ -54,24 +47,16 @@ resource "null_resource" "hubble_ui_backend_relay_port_patch" {
   triggers = {
     chart_version      = var.cilium_version
     relay_service_port = tostring(try(local.cilium_values.hubble.relay.servicePort, 4245))
+    script_sha         = filesha256("${local.stack_dir}/scripts/patch-hubble-ui-relay-addr.sh")
   }
 
   provisioner "local-exec" {
-    command     = <<-EOT
-      set -euo pipefail
-      if ! kubectl get deployment hubble-ui -n kube-system >/dev/null 2>&1; then
-        exit 0
-      fi
-      # The Cilium chart exposes the relay Service port, but it hardcodes the
-      # UI backend's FLOWS_API_ADDR to hubble-relay:80. Patch the deployment so
-      # the shipped UI follows the relay Service we expose locally.
-      kubectl patch deployment hubble-ui -n kube-system --type=strategic \
-        -p '{"spec":{"template":{"spec":{"containers":[{"name":"backend","env":[{"name":"FLOWS_API_ADDR","value":"hubble-relay:${try(local.cilium_values.hubble.relay.servicePort, 4245)}"}]}]}}}}'
-      kubectl -n kube-system rollout status deployment/hubble-ui --timeout=${local.platform_wait_seconds.rollout_default}s
-    EOT
+    command     = "bash \"${local.stack_dir}/scripts/patch-hubble-ui-relay-addr.sh\" --execute"
     interpreter = ["/bin/bash", "-c"]
     environment = {
-      KUBECONFIG = local.kubeconfig_path_expanded
+      KUBECONFIG              = local.kubeconfig_path_expanded
+      FLOWS_API_ADDR          = "hubble-relay:${try(local.cilium_values.hubble.relay.servicePort, 4245)}"
+      ROLLOUT_TIMEOUT_SECONDS = tostring(local.platform_wait_seconds.rollout_default)
     }
   }
 
@@ -86,20 +71,15 @@ resource "null_resource" "cilium_restart_on_config_change" {
   triggers = {
     chart_version = var.cilium_version
     values_sha    = sha256(yamlencode(local.cilium_values))
+    script_sha    = filesha256("${local.stack_dir}/scripts/restart-cilium-daemonset.sh")
   }
 
   provisioner "local-exec" {
-    command     = <<-EOT
-      set -euo pipefail
-      # Several Cilium features, including WireGuard encryption, are sourced from
-      # the rendered ConfigMap but do not take effect until the agent DaemonSet restarts.
-      kubectl -n kube-system get daemonset cilium >/dev/null 2>&1 || exit 0
-      kubectl -n kube-system rollout restart daemonset/cilium
-      kubectl -n kube-system rollout status daemonset/cilium --timeout=${local.platform_wait_seconds.rollout_default}s
-    EOT
+    command     = "bash \"${local.stack_dir}/scripts/restart-cilium-daemonset.sh\" --execute"
     interpreter = ["/bin/bash", "-c"]
     environment = {
-      KUBECONFIG = local.kubeconfig_path_expanded
+      KUBECONFIG              = local.kubeconfig_path_expanded
+      ROLLOUT_TIMEOUT_SECONDS = tostring(local.platform_wait_seconds.rollout_default)
     }
   }
 

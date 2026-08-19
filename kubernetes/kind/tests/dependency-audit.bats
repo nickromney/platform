@@ -6,8 +6,8 @@
 # the stock bash is 3.2.
 
 setup() {
-  export REPO_ROOT
-  REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
+  source "$(git -C "$(dirname "${BATS_TEST_FILENAME}")" rev-parse --show-toplevel)/tests/test_helper.bash"
+  setup_repo_root
   export SCRIPT="${REPO_ROOT}/terraform/kubernetes/scripts/check-component-version.sh"
 }
 
@@ -139,4 +139,40 @@ EOF
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; assert_dependencies_verifiable \"\$(printf 'apps/a\tgood\t1.0.0\t1.1.0\t1.1.0\tcurrent\n')\" 0"
 
   [ "${status}" -eq 0 ]
+}
+
+@test "check-version any-stage prefers target tfvars over stage files" {
+  stages="${BATS_TEST_TMPDIR}/stages"
+  mkdir -p "${stages}"
+  printf 'cluster_name = "from-stage"\n' >"${stages}/100.tfvars"
+  printf 'cluster_name = "from-target"\n' >"${BATS_TEST_TMPDIR}/target.tfvars"
+
+  run bash -lc "
+    export CHECK_VERSION_LIB_ONLY=1
+    export STAGES_DIR='${stages}'
+    export TARGET_TFVARS='${BATS_TEST_TMPDIR}/target.tfvars'
+    source '${SCRIPT}'
+    tfvar_get_any_stage cluster_name
+  "
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "from-target" ]
+}
+
+@test "check-version any-stage reads the first stage file when target omits the key" {
+  stages="${BATS_TEST_TMPDIR}/stages"
+  mkdir -p "${stages}"
+  printf 'cluster_name = "from-stage"\n' >"${stages}/100.tfvars"
+  printf 'enable_sso = true\n' >"${BATS_TEST_TMPDIR}/target.tfvars"
+
+  run bash -lc "
+    export CHECK_VERSION_LIB_ONLY=1
+    export STAGES_DIR='${stages}'
+    export TARGET_TFVARS='${BATS_TEST_TMPDIR}/target.tfvars'
+    source '${SCRIPT}'
+    tfvar_get_any_stage cluster_name
+  "
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "from-stage" ]
 }

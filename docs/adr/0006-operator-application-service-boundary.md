@@ -57,6 +57,10 @@ workspace-wide services rather than variant-specific operations.
   leaking upward into the root workspace entrypoint.
 - Future automation should prefer the status/action contract over scraping help
   text or reproducing runtime-detection logic elsewhere.
+- A second guided surface arrived after this ADR (the browser workflow UI), and
+  "thin UI over a shared contract" only held for the TUI: the browser UI built
+  its own argv and drifted. ADR 0010 extends this boundary so both surfaces bind
+  to one shared module rather than each re-deriving the command.
 
 ## Evidence
 

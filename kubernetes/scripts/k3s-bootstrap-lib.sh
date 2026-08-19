@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 
+# The portable timeout wrapper used to live here, reachable only by whatever
+# sourced this file -- one script. It is shared now; this keeps the old name as
+# a thin alias so callers and their assertions do not have to move at once.
+K3S_BOOTSTRAP_LIB_DIR="${K3S_BOOTSTRAP_LIB_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib" && pwd)}"
+# shellcheck source=scripts/lib/timeout.sh
+source "${K3S_BOOTSTRAP_LIB_DIR}/timeout.sh"
+
 k3s_bootstrap_find_client() {
   local candidate
 
@@ -30,37 +37,5 @@ k3s_bootstrap_channel_args() {
 }
 
 k3s_bootstrap_run_with_timeout() {
-  local seconds="$1"
-  shift
-  local pid=""
-  local start=""
-  local elapsed=""
-  local rc=0
-
-  if command -v timeout >/dev/null 2>&1; then
-    timeout "${seconds}" "$@"
-    return $?
-  fi
-
-  if command -v gtimeout >/dev/null 2>&1; then
-    gtimeout "${seconds}" "$@"
-    return $?
-  fi
-
-  "$@" &
-  pid=$!
-  start="$(date +%s)"
-
-  while kill -0 "${pid}" >/dev/null 2>&1; do
-    elapsed=$(( $(date +%s) - start ))
-    if [ "${elapsed}" -ge "${seconds}" ]; then
-      kill "${pid}" >/dev/null 2>&1 || true
-      wait "${pid}" >/dev/null 2>&1 || true
-      return 124
-    fi
-    sleep 1
-  done
-
-  wait "${pid}" || rc=$?
-  return "${rc}"
+  run_with_timeout "$@"
 }

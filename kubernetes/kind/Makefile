@@ -142,7 +142,7 @@ MAKE_UNKNOWN_GOAL_GUARD_DEFER_GOALS := $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
 
-KIND_DISPATCH_TARGET := $(if $(filter apply,$(ACTION_FROM_GOALS)),apply,plan)
+KIND_DISPATCH_TARGET = $(if $(filter apply,$(ACTION_FROM_GOALS)),apply,plan)
 
 # `make -n plan` and `make -n apply` are not previews: they perform the real
 # operation. GNU make exempts recipe lines containing $(MAKE) from --just-print,
@@ -171,6 +171,7 @@ endif
 
 include ../../mk/common.mk
 include ../../mk/k8s-terragrunt.mk
+include ../../mk/k8s-variant-lifecycle.mk
 include ../../mk/stage-workflow.mk
 include ../../mk/k8s-idp-preview.mk
 
@@ -214,6 +215,15 @@ stage_file = $(STAGE_FILE_REL_$(STAGE))
 target_profile_file = targets/kind.tfvars
 KIND_PROFILE_TFVARS ?=
 kind_profile_tfvar_arg = $(if $(strip $(KIND_PROFILE_TFVARS)),--optional-file "$(KIND_PROFILE_TFVARS)")
+stack_tfvar_profile = $(kind_profile_tfvar_arg)
+stack_tfvar_operator = --optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)"
+KUBECONFIG_STACK_LABEL = kind kubeconfig
+CONFLICTING_CLUSTER_CHECK = check-lima-stopped
+GITEA_SYNC_KUBECONFIG_TARGET = ensure-kind-kubeconfig
+GITEA_SYNC_ASSERT_TARGET = assert-kind-active
+GITEA_LOCAL_ACCESS_MODE_DEFAULT = nodeport
+GITEA_SYNC_EXTRA_ENV = GITEA_SYNC_TARGET_TFVARS_FILE="$${GITEA_SYNC_TARGET_TFVARS_FILE:-$(KIND_OPERATOR_OVERRIDES_FILE)}" \
+	SSH_PRIVATE_KEY_PATH="$${SSH_PRIVATE_KEY_PATH:-$(STACK_RUNTIME_DIR)/policies-repo.id_ed25519}"
 stage_var_file = $(abspath $(stage_file))
 target_var_file = $(abspath $(target_profile_file))
 preload_images_file = $(abspath $(MAKEFILE_DIR)preload-images.txt)
@@ -398,12 +408,7 @@ sync-image-cache: workflow-validate-stage
 		tfvar_files+=("$$tfvar_file"); \
 	done < <( \
 		"$(BUILD_TFVAR_ARGS)" --execute \
-			--optional-file "$(stage_var_file)" \
-			--optional-file "$(target_var_file)" \
-			$(kind_profile_tfvar_arg) \
-			--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
-			--optional-file "$${PLATFORM_TFVARS:-}" \
-			--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+			$(stack_tfvar_args_full) \
 	); \
 	IMAGE_LIST_FILE="$(preload_images_file)" \
 	CACHE_PUSH_HOST="$(KIND_LOCAL_IMAGE_CACHE_PUSH_HOST)" \
@@ -478,24 +483,7 @@ check-kind-state:
 check-kubeconfig:
 	@set -euo pipefail; \
 	$(MAKE) ensure-kind-kubeconfig >/dev/null; \
-	default_kubeconfig="$(DEFAULT_KUBECONFIG_PATH)"; \
-	"$(KUBECONFIG_HELPER)" --execute --action ensure-valid --kubeconfig "$$default_kubeconfig"; \
-	default_count=$$("$(KUBECONFIG_HELPER)" --execute --action count-contexts --kubeconfig "$$default_kubeconfig"); \
-	default_current=$$(kubectl --kubeconfig "$$default_kubeconfig" config current-context 2>/dev/null || true); \
-	[ -n "$$default_current" ] || default_current="<none>"; \
-	echo "OK   default kubeconfig: $$default_kubeconfig ($$default_count context(s), current=$$default_current)"; \
-	"$(KUBECONFIG_HELPER)" --execute --action ensure-valid --kubeconfig "$(KUBECONFIG_PATH)"; \
-	kind_count=$$("$(KUBECONFIG_HELPER)" --execute --action count-contexts --kubeconfig "$(KUBECONFIG_PATH)"); \
-	kind_current=$$(kubectl --kubeconfig "$(KUBECONFIG_PATH)" config current-context 2>/dev/null || true); \
-	[ -n "$$kind_current" ] || kind_current="<none>"; \
-	echo "OK   kind kubeconfig: $(KUBECONFIG_PATH) ($$kind_count context(s), current=$$kind_current)"; \
-	kubie_lint_output="$$("$(KUBECONFIG_HELPER)" --execute --action lint || true)"; \
-	if [ -n "$$kubie_lint_output" ]; then \
-		echo "WARN kubie lint:"; \
-		printf '%s\n' "$$kubie_lint_output" | sed 's/^/  /'; \
-	elif command -v kubie >/dev/null 2>&1; then \
-		echo "OK   kubie lint"; \
-	fi
+	$(check_kubeconfig_body)
 
 .PHONY: ensure-node-host-alias
 ensure-node-host-alias:
@@ -574,12 +562,7 @@ check-kind-host-ports: workflow-validate-stage
 		tfvar_args+=(--var-file "$$tfvar_file"); \
 	done < <( \
 		"$(BUILD_TFVAR_ARGS)" --execute \
-			--optional-file "$(stage_var_file)" \
-			--optional-file "$(target_var_file)" \
-			$(kind_profile_tfvar_arg) \
-			--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
-			--optional-file "$${PLATFORM_TFVARS:-}" \
-			--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+			$(stack_tfvar_args_full) \
 	); \
 	TARGET_LABEL="kind" \
 	"$(CHECK_TARGET_HOST_PORTS)" $(READONLY_MODE_FLAG) --variant-json "$(VARIANT_JSON)" "$${tfvar_args[@]}"
@@ -587,10 +570,6 @@ check-kind-host-ports: workflow-validate-stage
 .PHONY: check-lima-stopped
 check-lima-stopped:
 	@LIMA_INSTANCE_PREFIX="$(KIND_CHECK_LIMA_INSTANCE_PREFIX)" "$(CHECK_LIMA_STOPPED)" $(READONLY_MODE_FLAG)
-
-.PHONY: check-conflicting-clusters-stopped
-check-conflicting-clusters-stopped:
-	@$(MAKE) check-lima-stopped
 
 .PHONY: assert-kind-active
 assert-kind-active:
@@ -694,12 +673,7 @@ plan: workflow-validate-stage
 		fi; \
 	fi; \
 	plan_args="$$( "$(BUILD_TFVAR_ARGS)" --execute --format assignment --flag -var-file \
-		--optional-file "$(stage_var_file)" \
-		--optional-file "$(target_var_file)" \
-		$(kind_profile_tfvar_arg) \
-		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
-		--optional-file "$${PLATFORM_TFVARS:-}" \
-		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+		$(stack_tfvar_args_full) \
 	)"; \
 	if [ -n "$${KUBECONFIG_PATH:-}" ]; then plan_args="$$plan_args -var kubeconfig_path=$${KUBECONFIG_PATH}"; fi; \
 	if [ -n "$${KUBECONFIG_CONTEXT:-}" ]; then plan_args="$$plan_args -var kubeconfig_context=$${KUBECONFIG_CONTEXT}"; fi; \
@@ -775,12 +749,7 @@ apply: workflow-validate-stage
 		tfvar_files+=("$$tfvar_file"); \
 	done < <( \
 		"$(BUILD_TFVAR_ARGS)" --execute \
-			--optional-file "$(stage_var_file)" \
-			--optional-file "$(target_var_file)" \
-			$(kind_profile_tfvar_arg) \
-			--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
-			--optional-file "$${PLATFORM_TFVARS:-}" \
-			--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+			$(stack_tfvar_args_full) \
 	); \
 	prefer_external_platform_images="$$( "$(RESOLVE_TFVAR_VALUE)" --execute prefer_external_platform_images false "$${tfvar_files[@]}" )"; \
 	enable_sso="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_sso false "$${tfvar_files[@]}" )"; \
@@ -808,12 +777,7 @@ apply: workflow-validate-stage
 		echo "Skipping KIND_PRELOAD_IMAGES_MODE because KIND_IMAGE_DISTRIBUTION_MODE=$$kind_image_distribution_mode"; \
 	fi; \
 	apply_args="$$( "$(BUILD_TFVAR_ARGS)" --execute --format assignment --flag -var-file \
-		--optional-file "$(stage_var_file)" \
-		--optional-file "$(target_var_file)" \
-		$(kind_profile_tfvar_arg) \
-		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
-		--optional-file "$${PLATFORM_TFVARS:-}" \
-		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+		$(stack_tfvar_args_full) \
 	)"; \
 	if [ -n "$${KUBECONFIG_PATH:-}" ]; then apply_args="$$apply_args -var kubeconfig_path=$${KUBECONFIG_PATH}"; fi; \
 	if [ -n "$${KUBECONFIG_CONTEXT:-}" ]; then apply_args="$$apply_args -var kubeconfig_context=$${KUBECONFIG_CONTEXT}"; fi; \
@@ -899,12 +863,7 @@ check-health: workflow-validate-stage
 	@$(MAKE) check-policy-drift
 	@$(MAKE) render-operator-overrides >/dev/null
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
-		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
-		--optional-file "$(target_var_file)" \
-		$(kind_profile_tfvar_arg) \
-		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
-		--optional-file "$${PLATFORM_TFVARS:-}" \
-		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+		$(stack_tfvar_args) \
 	)"; \
 	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(RUN_DIAGNOSTIC_CHECK)" $(READONLY_MODE_FLAG) --variant-json "$(VARIANT_JSON)" --action check-health --stage "$(STAGE)" --stack-dir "$(abspath $(STACK_DIR))" $$vf
 
@@ -914,12 +873,7 @@ check-security: workflow-validate-stage
 	@$(MAKE) assert-kind-active >/dev/null
 	@$(MAKE) render-operator-overrides >/dev/null
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
-		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
-		--optional-file "$(target_var_file)" \
-		$(kind_profile_tfvar_arg) \
-		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
-		--optional-file "$${PLATFORM_TFVARS:-}" \
-		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+		$(stack_tfvar_args) \
 	)"; \
 	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-security.sh" $(READONLY_MODE_FLAG) $$vf
 
@@ -979,12 +933,7 @@ check-gateway-urls: workflow-validate-stage
 	@$(MAKE) assert-kind-active >/dev/null
 	@$(MAKE) render-operator-overrides >/dev/null
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
-		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
-		--optional-file "$(target_var_file)" \
-		$(kind_profile_tfvar_arg) \
-		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
-		--optional-file "$${PLATFORM_TFVARS:-}" \
-		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+		$(stack_tfvar_args) \
 	)"; \
 	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-gateway-urls.sh" $(READONLY_MODE_FLAG) $$vf
 
@@ -996,12 +945,7 @@ check-app: workflow-validate-stage
 	@set -euo pipefail; \
 	if [ -z "$${APP:-}" ]; then echo "Missing APP=... (e.g., APP=grafana)"; exit 1; fi; \
 	vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
-		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
-		--optional-file "$(target_var_file)" \
-		$(kind_profile_tfvar_arg) \
-		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
-		--optional-file "$${PLATFORM_TFVARS:-}" \
-		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+		$(stack_tfvar_args) \
 	)"; \
 	path_flag=""; \
 	if [ -n "$${APP_PATH:-}" ]; then path_flag="--path $${APP_PATH}"; fi; \
@@ -1017,12 +961,7 @@ check-sso: workflow-validate-stage
 	@$(MAKE) assert-kind-active >/dev/null
 	@$(MAKE) render-operator-overrides >/dev/null
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
-		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
-		--optional-file "$(target_var_file)" \
-		$(kind_profile_tfvar_arg) \
-		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
-		--optional-file "$${PLATFORM_TFVARS:-}" \
-		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+		$(stack_tfvar_args) \
 	)"; \
 	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-sso.sh" $(READONLY_MODE_FLAG) $$vf
 
@@ -1057,32 +996,6 @@ exercise-oidc-recovery:
 	OIDC_RECOVERY_FORCE_MODE="$(OIDC_RECOVERY_FORCE_MODE)" \
 	"$(STACK_DIR)/scripts/exercise-kind-oidc-recovery.sh" $(READONLY_MODE_FLAG)
 
-.PHONY: gitea-sync
-gitea-sync: workflow-validate-stage
-	@set -euo pipefail; \
-	$(MAKE) check-platform-env; \
-	$(MAKE) ensure-kind-kubeconfig >/dev/null; \
-	$(MAKE) assert-kind-active >/dev/null; \
-	stack_path="$(abspath $(STACK_DIR))"; \
-	script="$$stack_path/scripts/sync-gitea.sh"; \
-	if [ ! -x "$$script" ]; then echo "Missing $$script"; exit 1; fi; \
-	mode_flag="--execute"; \
-	sync_stage_file="$(abspath $(STAGE_FILE_REL_900))"; \
-	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then sync_stage_file="$(stage_var_file)"; fi; \
-	if [ "$(DRY_RUN)" = "1" ]; then mode_flag="--dry-run"; fi; \
-	GITEA_POLICIES_REMOTE="$${GITEA_POLICIES_REMOTE:-http://127.0.0.1:30090/platform/policies.git}" \
-	GITEA_BRANCH="$${GITEA_BRANCH:-main}" \
-	GITEA_USER="$${GITEA_USER:-gitea-admin}" \
-	GITEA_PASSWORD="$${GITEA_PASSWORD:-$${PLATFORM_ADMIN_PASSWORD}}" \
-	GITEA_LOCAL_ACCESS_MODE="$${GITEA_LOCAL_ACCESS_MODE:-nodeport}" \
-	GITEA_SYNC_TFVARS_FILE="$$sync_stage_file" \
-	GITEA_SYNC_TARGET_TFVARS_FILE="$${GITEA_SYNC_TARGET_TFVARS_FILE:-$(KIND_OPERATOR_OVERRIDES_FILE)}" \
-	SSH_PRIVATE_KEY_PATH="$${SSH_PRIVATE_KEY_PATH:-$(STACK_RUNTIME_DIR)/policies-repo.id_ed25519}" \
-	STACK_DIR="$$stack_path" \
-	KUBECONFIG="$(KUBECONFIG_PATH)" \
-	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
-	"$$script" "$$mode_flag"
-
 .PHONY: launchpad-render
 launchpad-render:
 	@"$(RENDER_LAUNCHPAD)" $(READONLY_MODE_FLAG) --stack-dir "$(abspath $(STACK_DIR))"
@@ -1093,12 +1006,7 @@ show-urls: workflow-validate-stage
 	@$(MAKE) assert-kind-active >/dev/null
 	@$(MAKE) render-operator-overrides >/dev/null
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
-		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
-		--optional-file "$(target_var_file)" \
-		$(kind_profile_tfvar_arg) \
-		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
-		--optional-file "$${PLATFORM_TFVARS:-}" \
-		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+		$(stack_tfvar_args) \
 	)"; \
 	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(RUN_DIAGNOSTIC_CHECK)" $(READONLY_MODE_FLAG) --variant-json "$(VARIANT_JSON)" --action show-urls --stage "$(STAGE)" --stack-dir "$(abspath $(STACK_DIR))" $$vf
 
@@ -1469,28 +1377,6 @@ reset:
 	rm -f "$(STACK_DIR)/kind-config.yaml" "$(STACK_DIR)/backend.tf" 2>/dev/null || true; \
 	echo "OK   Done"
 
-.PHONY: state-reset
-state-reset:
-	@set -euo pipefail; \
-	lock_file="$(STATE_LOCK_FILE)"; \
-	if [ ! -e "$$lock_file" ]; then \
-		echo "OK   No Terraform/OpenTofu state lock found: $$lock_file"; \
-		exit 0; \
-	fi; \
-	echo "This will remove the Terraform/OpenTofu state lock only:"; \
-	echo "  - $$lock_file"; \
-	if command -v jq >/dev/null 2>&1; then \
-		lock_summary="$$(jq -r '[.Operation,.Who,.Created] | map(select(. != null and . != "")) | join("; ")' "$$lock_file" 2>/dev/null || true)"; \
-		if [ -n "$$lock_summary" ]; then echo "Lock: $$lock_summary"; fi; \
-	fi; \
-	if [ "$(AUTO_APPROVE)" != "1" ]; then \
-		if [ ! -t 0 ]; then echo "ABORTED: state reset requires AUTO_APPROVE=1 in non-interactive mode. No state files were changed."; exit 2; fi; \
-		printf "Proceed with Terraform/OpenTofu state lock removal? [y/N] "; read -r confirm; \
-		if [ "$$confirm" != "y" ] && [ "$$confirm" != "Y" ]; then echo "ABORTED: state reset cancelled by user. No state files were changed."; exit 0; fi; \
-	fi; \
-	rm -f "$$lock_file"; \
-	echo "OK   Removed Terraform/OpenTofu state lock: $$lock_file"
-
 .PHONY: env
 env:
 	@$(MAKE) prereqs
@@ -1530,13 +1416,14 @@ test-shell:
 BATS ?= bats
 BATS_FLAGS ?= --timing
 BATS_SHARDS ?= 7
+RUN_BATS_SUITE ?= $(REPO_ROOT)/scripts/run-bats-suite.sh
 
 .PHONY: test-bats test-bats-plan test-bats-serial test-bats-all
 test-bats:
-	@"$(MAKEFILE_DIR)scripts/run-bats-shards.sh" --tests-dir "$(MAKEFILE_DIR)tests" --shards "$(BATS_SHARDS)"
+	@"$(RUN_BATS_SUITE)" --execute --shards "$(BATS_SHARDS)" --tests-dir "$(MAKEFILE_DIR)tests"
 
 test-bats-plan:
-	@"$(MAKEFILE_DIR)scripts/run-bats-shards.sh" --tests-dir "$(MAKEFILE_DIR)tests" --shards "$(BATS_SHARDS)" --plan
+	@"$(RUN_BATS_SUITE)" --execute --shards "$(BATS_SHARDS)" --tests-dir "$(MAKEFILE_DIR)tests" --plan
 
 test-bats-serial:
 	@$(BATS) --abort --timing "$(MAKEFILE_DIR)tests"

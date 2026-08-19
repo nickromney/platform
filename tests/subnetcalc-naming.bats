@@ -13,8 +13,8 @@
 # failures: this suite sat outside CI_BATS_TESTS and had gone red unnoticed.
 
 setup() {
-  export REPO_ROOT
-  REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
+  source "$(git -C "$(dirname "${BATS_TEST_FILENAME}")" rev-parse --show-toplevel)/tests/test_helper.bash"
+  setup_repo_root
 }
 
 # Names the separate `subnet-calculator` repository, which is its real name --

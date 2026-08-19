@@ -1,8 +1,16 @@
 name: CI
 
+# No pull_request trigger. The full gate runs locally instead: `make test-ci`
+# stamps a receipt naming the tree it verified, and the pre-push hook refuses a
+# push whose tree does not match it (scripts/ci-receipt.sh). That keeps the
+# feedback loop off GitHub's queue, which is where the waiting was.
+#
+# What remains here is the evidence that local runs cannot produce: main is the
+# protected line, and the macOS job covers Bash 3.2 and BSD awk from a Linux
+# host. Run it against a branch on demand with:
+#   gh workflow run ci.yml --ref <branch>
 on:
   workflow_dispatch:
-  pull_request:
   push:
     branches:
       - main
@@ -24,8 +32,27 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Install Bats and query tools
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
         run: |
           set -euo pipefail
+
+          # The runner image arrives with third-party taps (aws/tap today).
+          # Homebrew now requires per-tap trust and prints a ~15 line notice for
+          # each untrusted one on every invocation, which buries the actual
+          # install output. bats-core, jq and yq are all homebrew/core, so no
+          # third-party tap can affect what is installed here -- drop them
+          # rather than silencing the check with the deprecated
+          # HOMEBREW_NO_REQUIRE_TAP_TRUST. The runner is ephemeral.
+          while read -r tap; do
+            case "${tap}" in
+              homebrew/*) ;;
+              "") ;;
+              *) brew untap "${tap}" || true ;;
+            esac
+          done < <(brew tap)
+
           brew install bats-core jq yq
 
       - name: Record the interpreters under test
@@ -56,26 +83,55 @@ jobs:
       # the runner image, for the reason #202 pinned shellcheck. The version
       # tracks the `go` directive shared by all 17 go.mod files; tests/
       # ci-workflow.bats asserts the two stay equal.
+      # cache-dependency-path is required, not optional: every go.mod in this
+      # repo is nested under apps/ or tools/, and setup-go looks for one in the
+      # workspace root. Without it the step logs "Dependencies file is not
+      # found" and silently disables the module and build caches, so every run
+      # re-downloads and re-builds all 18 modules.
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
         with:
           go-version: "1.26"
+          cache-dependency-path: "**/go.mod"
 
       - name: Install lint and Bats tools
         run: |
           set -euo pipefail
 
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            ca-certificates \
-            curl \
-            git \
-            gzip \
-            make \
-            ripgrep \
-            tar \
-            unzip
-          sudo rm -rf /var/lib/apt/lists/*
+          # apt is the fallback, not the path. ubuntu-latest ships all of these,
+          # and ripgrep -- the one tool the image lacks that the gate needs, in
+          # ten Bats files -- comes from its pinned GitHub release below like
+          # shellcheck and kyverno. That matters because `apt-get update` alone
+          # has taken over six minutes here when the Azure mirror Ign:s and the
+          # run falls back to archive.ubuntu.com.
+          #
+          # The check stays so a changed runner image surfaces as a named
+          # install rather than a confusing failure later. Package names differ
+          # from command names, hence the map.
+          declare -A base_tools=(
+            [curl]=curl
+            [git]=git
+            [gzip]=gzip
+            [make]=make
+            [tar]=tar
+            [unzip]=unzip
+          )
+          missing_packages=()
+          for command_name in "${!base_tools[@]}"; do
+            command -v "${command_name}" >/dev/null 2>&1 ||
+              missing_packages+=("${base_tools[${command_name}]}")
+          done
+          [[ -s /etc/ssl/certs/ca-certificates.crt ]] ||
+            missing_packages+=(ca-certificates)
+
+          if ((${#missing_packages[@]})); then
+            printf 'installing missing base tools: %s\n' "${missing_packages[*]}"
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends "${missing_packages[@]}"
+            sudo rm -rf /var/lib/apt/lists/*
+          else
+            echo "OK   base tools already present on the runner image; skipping apt"
+          fi
 
           source .devcontainer/toolchain-versions.sh
 
@@ -98,12 +154,14 @@ jobs:
               kyverno_arch="x86_64"
               uv_arch="x86_64"
               shellcheck_arch="x86_64"
+              ripgrep_target="x86_64-unknown-linux-musl"
               ;;
             aarch64|arm64)
               go_arch="arm64"
               kyverno_arch="arm64"
               uv_arch="aarch64"
               shellcheck_arch="aarch64"
+              ripgrep_target="aarch64-unknown-linux-gnu"
               ;;
             *)
               printf 'unsupported architecture: %s\n' "$(uname -m)" >&2
@@ -150,6 +208,14 @@ jobs:
           sudo install -m 0755 \
             "${tmp_dir}/yq_linux_${go_arch}" \
             /usr/local/bin/yq
+
+          # Pinned rather than apt-installed so no CI run pays for apt-get
+          # update. Ten gated Bats files call rg; nothing else here needs apt.
+          ripgrep_dir="ripgrep-${RIPGREP_VERSION}-${ripgrep_target}"
+          curl -fsSL \
+            "https://github.com/BurntSushi/ripgrep/releases/download/${RIPGREP_VERSION}/${ripgrep_dir}.tar.gz" \
+            | tar -xz -C "${tmp_dir}" --strip-components=1 "${ripgrep_dir}/rg"
+          sudo install -m 0755 "${tmp_dir}/rg" /usr/local/bin/rg
 
           # Pinned like every other tool here. Left to the runner image this was
           # 0.9.0, which emits SC2317 ("Command appears to be unreachable") where

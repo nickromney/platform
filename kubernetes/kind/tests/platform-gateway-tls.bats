@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
 
 setup() {
-  export REPO_ROOT
-  REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
+  source "$(git -C "$(dirname "${BATS_TEST_FILENAME}")" rev-parse --show-toplevel)/tests/test_helper.bash"
+  setup_repo_root
 }
 
 @test "nginx gateway controller enables snippet support for platform gateway hardening" {
@@ -397,15 +397,29 @@ PY
 }
 
 @test "gateway bootstrap CRD waiter tolerates missing status conditions during early reconciliation" {
+  script="${REPO_ROOT}/terraform/kubernetes/scripts/wait-for-gateway-crds.sh"
+
+  grep -Fq 'CRD_WAIT_SECONDS="${CRD_WAIT_SECONDS:-180}"' "${script}"
+  grep -Fq 'deadline=$((SECONDS + CRD_WAIT_SECONDS))' "${script}"
+  grep -Fq "jq -r '.status.conditions[]? | select(.type==\"Established\") | .status'" "${script}"
+  grep -Fq 'established="$(kubectl "${kubectl_args[@]}" get "crd/${crd}" -o json 2>/dev/null | jq -r '\''.status.conditions[]? | select(.type=="Established") | .status'\'' | head -n1 || true)"' "${script}"
+  grep -Fq 'Timed out waiting for CRD/${crd} to become Established' "${script}"
+  grep -Fq 'kubectl "${kubectl_args[@]}" wait --for=condition=Established --timeout=10s "crd/${crd}" >/dev/null' "${script}"
+
+  # The body left a Terraform heredoc, where `$$` escaped a literal `$`. A
+  # surviving `$$` in the plain script would be a botched extraction.
+  ! grep -Fq '$$' "${script}"
+}
+
+@test "gateway bootstrap local-exec delegates to the extracted CRD waiter" {
   file="${REPO_ROOT}/terraform/kubernetes/gateway-bootstrap.tf"
 
-  grep -Fq 'deadline=$((SECONDS + 180))' "${file}"
-  grep -Fq "jq -r '.status.conditions[]? | select(.type==\"Established\") | .status'" "${file}"
-  grep -Fq 'established="$(kubectl $${KUBECTL_ARGS} get "crd/$${crd}" -o json 2>/dev/null | jq -r '\''.status.conditions[]? | select(.type=="Established") | .status'\'' | head -n1 || true)"' "${file}"
-  grep -Fq 'Timed out waiting for CRD/$${crd} to become Established' "${file}"
-  grep -Fq 'kubectl $${KUBECTL_ARGS} wait --for=condition=Established --timeout=10s "crd/$${crd}" >/dev/null' "${file}"
-  ! grep -Fq '$$((SECONDS + 180))' "${file}"
-  ! grep -Fq '$$(kubectl' "${file}"
+  grep -Fq 'scripts/wait-for-gateway-crds.sh' "${file}"
+  grep -Fq 'filesha256("${local.stack_dir}/scripts/wait-for-gateway-crds.sh")' "${file}"
+
+  run grep -E 'command[[:space:]]*=[[:space:]]*<<' "${file}"
+
+  [ "${status}" -ne 0 ]
 }
 
 @test "cert-manager config app retries through webhook warmup before gateway TLS is required" {

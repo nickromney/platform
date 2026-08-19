@@ -10,6 +10,10 @@ fi
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/platform-env.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/operator-facts.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/tf-defaults.sh"
 
 usage() {
   cat <<EOF
@@ -777,41 +781,7 @@ if [[ "${#TFVARS_FILES[@]}" -gt 0 ]]; then
   done
 fi
 
-tfvar_get_in_file() {
-  local file="$1"
-  local key="$2"
-  if [[ -z "${file}" || ! -f "${file}" ]]; then
-    echo ""
-    return 0
-  fi
-  grep -E "^[[:space:]]*${key}[[:space:]]*=" "${file}" 2>/dev/null | tail -n 1 | \
-    sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs || true
-}
-
-tfvar_get() {
-  local key="$1"
-  local value=""
-  local file current
-
-  for file in ${TFVARS_FILES[@]+"${TFVARS_FILES[@]}"}; do
-    current="$(tfvar_get_in_file "${file}" "${key}")"
-    if [[ -n "${current}" ]]; then
-      value="${current}"
-    fi
-  done
-
-  echo "${value}"
-}
-
-tfvar_bool() {
-  local key="$1"
-  local v
-  v=$(tfvar_get "$key")
-  case "$v" in
-    true|false) echo "$v" ;;
-    *) echo "" ;;
-  esac
-}
+operator_facts_load
 
 tfvar_or_default() {
   local key="$1"
@@ -822,35 +792,6 @@ tfvar_or_default() {
     echo "$v"
   else
     echo "$default"
-  fi
-}
-
-tfvar_list_entries() {
-  local key="$1"
-  local raw=""
-  local file
-  local entry=""
-  local -a values=()
-
-  for file in ${TFVARS_FILES[@]+"${TFVARS_FILES[@]}"}; do
-    [[ -n "${file}" && -f "${file}" ]] || continue
-    raw="$(
-      awk -v key="${key}" '
-        !capture && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" { capture=1 }
-        capture { print }
-        capture && /\]/ { exit }
-      ' "${file}" 2>/dev/null || true
-    )"
-    [[ -n "${raw}" ]] || continue
-    values=()
-    while IFS= read -r entry; do
-      [[ -n "${entry}" ]] || continue
-      values+=("${entry}")
-    done < <(printf '%s\n' "${raw}" | grep -oE '"[^"]+"' | sed 's/^"//;s/"$//' || true)
-  done
-
-  if [[ "${#values[@]}" -gt 0 ]]; then
-    printf '%s\n' "${values[@]}"
   fi
 }
 

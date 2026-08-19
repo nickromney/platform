@@ -32,33 +32,37 @@ fi
 
 cd "${HOOKS_REPO_ROOT}"
 
-# The full suite is the wrong thing to run here, and not for taste reasons.
+# Running the full suite here is the wrong thing, and not for taste reasons.
 # git opens the SSH connection to the remote BEFORE running pre-push, so a gate
 # that takes ~12 minutes outlives it: the hook passes and the push then fails
 # with "Connection to github.com closed by remote host". A gate that prevents
 # the operation it guards is not a gate.
 #
-# So the default is the fast pair -- lint plus the host-portable subset, about 90
-# seconds -- and the full suite runs in CI, which #196 wired to pull_request and
-# push. Set PLATFORM_LOCAL_CI_FULL=1 to run the whole thing locally anyway,
-# knowing the push itself may then time out.
+# GitHub CI no longer runs on pull_request either -- it is main and
+# workflow_dispatch only -- so "it will be caught remotely" is not a fallback.
+# The full suite has to run locally, just not inside the push.
+#
+# So: `make test-ci` stamps a receipt naming the exact tree it verified, and
+# this hook checks that receipt against the tree being pushed. Full coverage,
+# about 90 seconds of hook, and no twelve-minute wait on an unchanged tree.
+#
+# PLATFORM_LOCAL_CI_FULL=1 runs the whole suite here instead, knowing the push
+# itself may then time out.
 LOCAL_CI_FULL="${PLATFORM_LOCAL_CI_FULL:-0}"
+
 if [[ "${LOCAL_CI_FULL}" == "1" ]]; then
-  suite_target="test-ci"
-  suite_label="the full Bats suite"
+  gate_label="make lint && make test-ci"
 else
-  suite_target="test-host-portable"
-  suite_label="the host-portable Bats subset (full suite runs in CI)"
+  gate_label="make lint && the make test-ci receipt for this tree"
 fi
 
 cat <<EOF
 Platform pre-push local CI gate
 
 Running:
-  make lint
-  make ${suite_target}   -- ${suite_label}
+  ${gate_label}
 
-Run everything locally instead:
+Run the full suite inside the push instead:
   PLATFORM_LOCAL_CI_FULL=1 git push
 
 Skip only when you have a reason:
@@ -72,8 +76,12 @@ failed_gate=""
 
 if ! make lint; then
   failed_gate="make lint"
-elif ! make "${suite_target}"; then
-  failed_gate="make ${suite_target}"
+elif [[ "${LOCAL_CI_FULL}" == "1" ]]; then
+  if ! make test-ci; then
+    failed_gate="make test-ci"
+  fi
+elif ! "${HOOKS_REPO_ROOT}/scripts/ci-receipt.sh" --execute --action verify; then
+  failed_gate="the make test-ci receipt"
 fi
 
 if [[ -n "${failed_gate}" ]]; then
@@ -81,4 +89,4 @@ if [[ -n "${failed_gate}" ]]; then
   exit 1
 fi
 
-hook_ok "pre-push gate passed: make lint && make ${suite_target}"
+hook_ok "pre-push gate passed: ${gate_label}"

@@ -7,6 +7,8 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 # shellcheck source=/dev/null
+source "${SCRIPT_DIR}/operator-facts.sh"
+# shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/http-fetch.sh"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/parallel.sh"
@@ -450,19 +452,7 @@ source "${SCRIPT_DIR}/tf-defaults.sh"
 source "${REPO_ROOT}/kubernetes/workflow/image-catalog-lib.sh"
 
 tfvar_get_from_file() {
-  local file="$1"
-  local key="$2"
-  if [ ! -f "$file" ]; then
-    echo ""
-    return 0
-  fi
-  local line
-  line=$(grep -E "^[[:space:]]*${key}[[:space:]]*=[[:space:]]*" "$file" 2>/dev/null | tail -n 1 || true)
-  if [ -z "$line" ]; then
-    echo ""
-    return 0
-  fi
-  echo "$line" | sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs
+  operator_facts_scalar_from_file "$1" "$2"
 }
 
 tfvar_get() {
@@ -471,23 +461,26 @@ tfvar_get() {
 
 tfvar_get_any_stage() {
   local key="$1"
-  local value
+  local value=""
+  local file
 
   if [ -n "${TARGET_TFVARS}" ] && [ -f "${TARGET_TFVARS}" ]; then
-    value=$(tfvar_get_from_file "${TARGET_TFVARS}" "${key}")
+    value="$(tfvar_get_from_file "${TARGET_TFVARS}" "${key}")"
     if [ -n "${value}" ]; then
-      echo "${value}"
+      printf '%s\n' "${value}"
       return 0
     fi
   fi
 
-  local line
-  line=$(grep -hE "^[[:space:]]*${key}[[:space:]]*=[[:space:]]*" "${STAGES_DIR}"/*.tfvars 2>/dev/null | head -n 1 || true)
-  if [ -z "$line" ]; then
-    echo ""
-    return 0
-  fi
-  echo "$line" | sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs
+  for file in "${STAGES_DIR}"/*.tfvars; do
+    [ -f "${file}" ] || continue
+    value="$(operator_facts_scalar_from_file "${file}" "${key}")"
+    if [ -n "${value}" ]; then
+      printf '%s\n' "${value}"
+      return 0
+    fi
+  done
+  printf '\n'
 }
 
 tfvar_get_any_stage_or_default() {
@@ -3027,14 +3020,23 @@ argocd_app_deployed_target_revision() {
 
 check_consistent_tfvars() {
   local key="$1"
-  local uniq
+  local file
+  local value
+  local uniq=""
+  local -a values=()
 
-  uniq=$(grep -hE "^[[:space:]]*${key}[[:space:]]*=[[:space:]]*" "${STAGES_DIR}"/*.tfvars 2>/dev/null | \
-    sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs -n1 | sort -u || true)
+  for file in "${STAGES_DIR}"/*.tfvars; do
+    [ -f "${file}" ] || continue
+    value="$(operator_facts_scalar_from_file "${file}" "${key}")"
+    [ -n "${value}" ] || continue
+    values+=("${value}")
+  done
 
-  if [ -z "$uniq" ]; then
+  if [ "${#values[@]}" -eq 0 ]; then
     return 0
   fi
+
+  uniq="$(printf '%s\n' "${values[@]}" | sort -u)"
 
   local count
   count=$(echo "$uniq" | wc -l | tr -d ' ')

@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
 
 setup() {
-  export REPO_ROOT
-  REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
+  source "$(git -C "$(dirname "${BATS_TEST_FILENAME}")" rev-parse --show-toplevel)/tests/test_helper.bash"
+  setup_repo_root
   export TEST_BIN="${BATS_TEST_TMPDIR}/bin"
   export KUBECTL_STATE_FILE="${BATS_TEST_TMPDIR}/health-state"
   mkdir -p "${TEST_BIN}"
