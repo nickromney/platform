@@ -276,16 +276,21 @@ PY
   [ "$(git -C "${REPO_ROOT}" status --porcelain -unormal)" = "${before}" ]
 }
 
-@test "the macOS job does not inherit untrusted Homebrew taps" {
-  # The runner image taps aws/tap, and Homebrew prints a long trust notice for
-  # every untrusted tap on every invocation. Dropped rather than silenced with
-  # HOMEBREW_NO_REQUIRE_TAP_TRUST, which Homebrew documents as deprecated.
-  run grep -Fn 'brew untap "${tap}"' "${REPO_ROOT}/.github/workflows/ci.yml"
+@test "the macOS job does not fight the runner's Homebrew taps" {
+  # The runner image ships untrusted third-party taps and Homebrew prints a
+  # trust notice for each one. It is cosmetic -- bats-core, jq and yq are all
+  # homebrew/core.
+  #
+  # Untapping them was tried and reverted: Homebrew refuses to untap a tap
+  # holding installed formulae (bicep, packer) and writes that refusal to
+  # stderr, which Actions renders as a red ##[error] on an otherwise passing
+  # job. This pins the revert so the notice does not invite the same fix twice.
+  run grep -Fn 'brew untap' "${REPO_ROOT}/.github/workflows/ci.yml"
 
-  [ "${status}" -eq 0 ]
+  [ "${status}" -ne 0 ]
 
-  # Matches the variable being *set*, not the comment naming it -- the
-  # self-reference trap tests/python-wrapper-policy.bats records.
+  # Nor silenced with the variable Homebrew documents as deprecated. Matches it
+  # being set, not the comment naming it.
   run grep -nE 'HOMEBREW_NO_REQUIRE_TAP_TRUST[[:space:]]*[:=]' "${REPO_ROOT}/.github/workflows/ci.yml"
 
   [ "${status}" -ne 0 ]

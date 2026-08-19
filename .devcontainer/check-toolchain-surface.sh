@@ -262,8 +262,10 @@ verify_node_feature_install_surface() {
     -e "USERNAME=${DEVCONTAINER_REMOTE_USER}" \
     -e "EXPECTED_NODE_VERSION=${DEVCONTAINER_NODE_VERSION}" \
     -e "EXPECTED_NVM_VERSION=${DEVCONTAINER_NODE_NVM_VERSION}" \
+    -e "REPO_ROOT=/tmp/platform-repo" \
     -v "${RESOLVED_NODE_FEATURE_CACHE_PATH}:/tmp/platform-devcontainer-node-feature:ro" \
     -v "${NORMALIZE_NODE_TOOLCHAIN_SCRIPT}:/tmp/platform-devcontainer-normalize-node-toolchain.sh:ro" \
+    -v "${REPO_ROOT}/scripts/lib:/tmp/platform-repo/scripts/lib:ro" \
     "${base_image}" \
     bash -lc '
       set -euo pipefail
