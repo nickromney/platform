@@ -12,7 +12,7 @@ setup() {
 @test "list-ci-bats-tests.sh matches git ls-files minus the backlog" {
   local listed expected
 
-  listed="$(cd "${REPO_ROOT}" && scripts/list-ci-bats-tests.sh)"
+  listed="$(cd "${REPO_ROOT}" && scripts/list-ci-bats-tests.sh --execute)"
   expected="$(
     cd "${REPO_ROOT}" && git ls-files '*.bats' | LC_ALL=C sort | grep -vxF -f tests/ci-gate-backlog.txt
   )"
@@ -22,7 +22,7 @@ setup() {
 }
 
 @test "Makefile discovers CI_BATS_TESTS instead of listing files by hand" {
-  run grep -F 'CI_BATS_TESTS := $(shell "$(LIST_CI_BATS_TESTS)")' "${REPO_ROOT}/Makefile"
+  run grep -F 'CI_BATS_TESTS := $(shell "$(LIST_CI_BATS_TESTS)" --execute)' "${REPO_ROOT}/Makefile"
 
   [ "${status}" -eq 0 ]
 

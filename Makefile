@@ -85,7 +85,7 @@ HOST_PORTABLE_BATS_TESTS := \
 LIST_CI_BATS_TESTS ?= scripts/list-ci-bats-tests.sh
 # Discovered from git ls-files '*.bats' minus tests/ci-gate-backlog.txt.
 # A new tracked suite is gated automatically; name it in the backlog to keep it out.
-CI_BATS_TESTS := $(shell "$(LIST_CI_BATS_TESTS)")
+CI_BATS_TESTS := $(shell "$(LIST_CI_BATS_TESTS)" --execute)
 
 .DEFAULT_GOAL := default
 
