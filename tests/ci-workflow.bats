@@ -158,7 +158,9 @@ PY
 @test "CI installs base tools only when the runner image lacks them" {
   # `apt-get update` has taken over six minutes on this job when the Azure
   # mirror Ign:s and the run falls back to archive.ubuntu.com. ubuntu-latest
-  # ships all of these already, so the update must be conditional.
+  # ships every package named here, and ripgrep -- the one thing it does not
+  # ship that the gate needs -- comes from its pinned release instead, so the
+  # apt path should not run at all. It stays as a fallback for a changed image.
   run bash -lc "
     awk '/^          declare -A base_tools=\(/,/^          fi\$/' '${REPO_ROOT}/.github/workflows/ci.yml' |
       grep -c 'apt-get update'
@@ -287,4 +289,36 @@ PY
   run grep -nE 'HOMEBREW_NO_REQUIRE_TAP_TRUST[[:space:]]*[:=]' "${REPO_ROOT}/.github/workflows/ci.yml"
 
   [ "${status}" -ne 0 ]
+}
+
+@test "ripgrep is pinned and installed from its release, not from apt" {
+  # Ten gated Bats files call `rg`, and ubuntu-latest does not ship it. Getting
+  # it from apt made every run pay for apt-get update, which is where the
+  # six-minute Azure-mirror stalls happened. Pinned like shellcheck and kyverno,
+  # and cooldown-governed through the same machinery as every other pin.
+  run grep -cE '^RIPGREP_VERSION="\$\{RIPGREP_VERSION:-[0-9]' "${REPO_ROOT}/.devcontainer/toolchain-versions.sh"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" -eq 1 ]
+
+  # Registered for the version audit, or the pin silently stops being tracked.
+  # BSD grep has no -P, so the tabs are literal rather than escapes.
+  run grep -cxF "ripgrep	github:BurntSushi/ripgrep	RIPGREP_VERSION" "${REPO_ROOT}/.devcontainer/toolchain-sources.tsv"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" -eq 1 ]
+
+  # Fetched from the pin in CI.
+  run grep -Fn 'https://github.com/BurntSushi/ripgrep/releases/download/${RIPGREP_VERSION}/${ripgrep_dir}.tar.gz' "${REPO_ROOT}/.github/workflows/ci.yml"
+
+  [ "${status}" -eq 0 ]
+
+  # And never from apt, which is the regression this replaced.
+  run bash -lc "
+    awk '/^          declare -A base_tools=\(/,/^          fi\$/' '${REPO_ROOT}/.github/workflows/ci.yml' |
+      grep -c 'ripgrep' || true
+  "
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" -eq 0 ]
 }

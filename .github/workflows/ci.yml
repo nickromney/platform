@@ -98,17 +98,21 @@ jobs:
         run: |
           set -euo pipefail
 
-          # ubuntu-latest already ships every one of these. `apt-get update`
-          # alone has taken over six minutes on this job when the Azure mirror
-          # Ign:s and the run falls back to archive.ubuntu.com, so pay that cost
-          # only when something is genuinely absent. Package names differ from
-          # command names (ripgrep/rg), hence the map.
+          # apt is the fallback, not the path. ubuntu-latest ships all of these,
+          # and ripgrep -- the one tool the image lacks that the gate needs, in
+          # ten Bats files -- comes from its pinned GitHub release below like
+          # shellcheck and kyverno. That matters because `apt-get update` alone
+          # has taken over six minutes here when the Azure mirror Ign:s and the
+          # run falls back to archive.ubuntu.com.
+          #
+          # The check stays so a changed runner image surfaces as a named
+          # install rather than a confusing failure later. Package names differ
+          # from command names, hence the map.
           declare -A base_tools=(
             [curl]=curl
             [git]=git
             [gzip]=gzip
             [make]=make
-            [rg]=ripgrep
             [tar]=tar
             [unzip]=unzip
           )
@@ -150,12 +154,14 @@ jobs:
               kyverno_arch="x86_64"
               uv_arch="x86_64"
               shellcheck_arch="x86_64"
+              ripgrep_target="x86_64-unknown-linux-musl"
               ;;
             aarch64|arm64)
               go_arch="arm64"
               kyverno_arch="arm64"
               uv_arch="aarch64"
               shellcheck_arch="aarch64"
+              ripgrep_target="aarch64-unknown-linux-gnu"
               ;;
             *)
               printf 'unsupported architecture: %s\n' "$(uname -m)" >&2
@@ -202,6 +208,14 @@ jobs:
           sudo install -m 0755 \
             "${tmp_dir}/yq_linux_${go_arch}" \
             /usr/local/bin/yq
+
+          # Pinned rather than apt-installed so no CI run pays for apt-get
+          # update. Ten gated Bats files call rg; nothing else here needs apt.
+          ripgrep_dir="ripgrep-${RIPGREP_VERSION}-${ripgrep_target}"
+          curl -fsSL \
+            "https://github.com/BurntSushi/ripgrep/releases/download/${RIPGREP_VERSION}/${ripgrep_dir}.tar.gz" \
+            | tar -xz -C "${tmp_dir}" --strip-components=1 "${ripgrep_dir}/rg"
+          sudo install -m 0755 "${tmp_dir}/rg" /usr/local/bin/rg
 
           # Pinned like every other tool here. Left to the runner image this was
           # 0.9.0, which emits SC2317 ("Command appears to be unreachable") where

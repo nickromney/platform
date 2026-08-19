@@ -18,6 +18,7 @@ lima	github:lima-vm/lima	LIMA_VERSION
 markdownlint-cli2	audit-only	MARKDOWNLINT_CLI2_VERSION
 mkcert	github:FiloSottile/mkcert	MKCERT_VERSION
 opentofu	github:opentofu/opentofu	OPENTOFU_VERSION
+ripgrep	github:BurntSushi/ripgrep	RIPGREP_VERSION
 ruff	github:astral-sh/ruff	RUFF_VERSION
 starship	github:starship/starship	STARSHIP_VERSION
 step	github:smallstep/cli	STEP_VERSION

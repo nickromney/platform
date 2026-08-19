@@ -26,6 +26,12 @@ SHELLCHECK_VERSION="${SHELLCHECK_VERSION:-v0.11.0}"
 LIMA_VERSION="${LIMA_VERSION:-v2.2.0}"
 MKCERT_VERSION="${MKCERT_VERSION:-v1.4.4}"
 OPENTOFU_VERSION="${OPENTOFU_VERSION:-1.12.5}"
+# Pinned because CI installs it from the GitHub release rather than apt:
+# ripgrep is the one tool ten gated Bats files need that the ubuntu-latest
+# image does not ship, and reaching for apt to get it made every CI run pay
+# for apt-get update -- over six minutes when the Azure mirror stalls.
+# Tags are bare, with no leading v.
+RIPGREP_VERSION="${RIPGREP_VERSION:-15.2.0}"
 STARSHIP_VERSION="${STARSHIP_VERSION:-v1.26.0}"
 STEP_VERSION="${STEP_VERSION:-v0.30.6}"
 VIM_SENSIBLE_REF="${VIM_SENSIBLE_REF:-0ce2d843d6f588bb0c8c7eec6449171615dc56d9}"

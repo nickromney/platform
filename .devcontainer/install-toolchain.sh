@@ -252,6 +252,24 @@ linux_arch_for_mkcert() {
   esac
 }
 
+# ripgrep publishes Rust target triples rather than amd64/arm64. musl on x86_64
+# so the binary does not depend on the image's glibc; there is no aarch64 musl
+# build with the same guarantees, so arm64 takes the gnu one.
+linux_target_for_ripgrep() {
+  case "$(uname -m)" in
+    x86_64|amd64)
+      printf 'x86_64-unknown-linux-musl\n'
+      ;;
+    aarch64|arm64)
+      printf 'aarch64-unknown-linux-gnu\n'
+      ;;
+    *)
+      echo "unsupported architecture: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+}
+
 linux_arch_for_lefthook() {
   case "$(uname -m)" in
     x86_64|amd64)
@@ -385,6 +403,20 @@ install_mkcert() {
   rm -rf "${tmp_dir}"
 }
 
+# Pinned rather than apt-installed so every host -- devcontainer, Ubuntu on
+# slicer-mac, Arch on omarchy, and CI -- runs the same ripgrep. Ten gated Bats
+# files call rg, and distro packages drift by years between them.
+install_ripgrep() {
+  local target tmp_dir
+
+  target="$(linux_target_for_ripgrep)"
+  tmp_dir="$(mktemp -d)"
+  curl -fsSL "https://github.com/BurntSushi/ripgrep/releases/download/${RIPGREP_VERSION}/ripgrep-${RIPGREP_VERSION}-${target}.tar.gz" \
+    | tar -xz -C "${tmp_dir}" --strip-components=1 "ripgrep-${RIPGREP_VERSION}-${target}/rg"
+  install "${tmp_dir}/rg" /usr/local/bin/rg
+  rm -rf "${tmp_dir}"
+}
+
 install_opentofu() {
   local tmp_dir installer
 
@@ -441,6 +473,7 @@ install_kyverno
 install_lefthook
 install_lima
 install_mkcert
+install_ripgrep
 install_vim_sensible_source
 
 for entry in "${DEVCONTAINER_ARKADE_TOOLS[@]}"; do
