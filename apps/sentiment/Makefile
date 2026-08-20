@@ -2,6 +2,8 @@ MAKE_KNOWN_GOALS := help prereqs build test update check-prerequisites app-test 
 
 include ../../mk/app-common.mk
 
+.PHONY: check-prerequisites build up up-tls test smoke urls
+
 PLATFORM_REQUIRED_ENV_VARS :=
 ifneq ($(strip $(wildcard $(PLATFORM_ENV_FILE))),)
 include $(PLATFORM_ENV_FILE)

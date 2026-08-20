@@ -2,6 +2,8 @@ MAKE_KNOWN_GOALS := help test build update app-help app-prereqs app-test app-js-
 
 include ../../mk/app-common.mk
 
+.PHONY: app-prereqs app-run-chat app-run-agent app-run-evals test build
+
 ##@ App
 app-prereqs: ## Check Go plus the optional host oMLX OpenAI-compatible server
 	@$(MAKE) --no-print-directory -C app prereqs

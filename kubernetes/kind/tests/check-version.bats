@@ -151,6 +151,17 @@ EOF
   [ "${output}" = "after lookup" ]
 }
 
+@test "check-version treats 1.10 as newer than 1.9 when selecting latest tags" {
+  # Same trap as the provider checker: 1.9 vs 1.10 is where string sort lies.
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}';
+    if version_gte 1.10.0 1.9.0; then printf 'gte=0\n'; else printf 'gte=1\n'; fi
+    printf '%s\n' v1.9.0 v1.10.0 v1.2.0 | sort_semver | tail -n 1
+  "
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf 'gte=0\nv1.10.0')" ]
+}
+
 @test "check-version accepts --ci in dry-run mode" {
   run "${SCRIPT}" --dry-run --ci
 

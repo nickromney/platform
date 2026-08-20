@@ -25,7 +25,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       projectLink="https://github.com/nickromney/platform"
     />
   )
-  const footer = <Footer>Local platform docs. Source repo: ~/Developer/personal/platform.</Footer>
+  const footer = <Footer>Local platform docs.</Footer>
 
   return (
     <html lang="en" dir="ltr" suppressHydrationWarning>

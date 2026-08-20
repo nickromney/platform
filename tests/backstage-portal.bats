@@ -612,6 +612,7 @@ assert backend_template["metadata"]["annotations"]["prometheus.io/port"] == "${{
 backend_env = {item["name"]: item["value"] for item in backend_template["spec"]["containers"][0]["env"]}
 assert backend_env["OTEL_SERVICE_NAME"] == "${{ values.name }}-backend"
 assert backend_env["OTEL_SERVICE_NAMESPACE"] == "${{ values.team }}"
+assert backend_env["PORT"] == "${{ values.backendPort }}"
 assert "service.version=0.1.0" in backend_env["OTEL_RESOURCE_ATTRIBUTES"]
 assert prometheus_scrape["kind"] == "ConfigMap"
 assert "job_name: ${{ values.name }}-backend" in prometheus_scrape["data"]["prometheus-additional-scrape.yaml"]

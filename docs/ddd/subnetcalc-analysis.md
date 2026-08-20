@@ -32,7 +32,7 @@ That split is already visible in the code:
 - the default frontend orchestration sits in [app.js](../../apps/subnetcalc/app/internal/app/web/app.js)
 - legacy comparison variants still include FastAPI, Flask, Vite, and React
 - the APIM simulator has its own contract and policy language in
-  [contract_matrix.yml](../../apps/apim-simulator/contracts/contract_matrix.yml)
+  [config.go](../../apps/apim-simulator/app/internal/app/config.go)
 
 ## Observed User Capabilities
 

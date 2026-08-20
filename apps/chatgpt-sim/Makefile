@@ -2,6 +2,8 @@ MAKE_KNOWN_GOALS := help prereqs test build update app-help app-test app-js-chec
 
 include ../../mk/app-common.mk
 
+.PHONY: app-run-mcp app-run-shell test compose-smoke-sso build up up-direct
+
 SSO_COMPOSE_ENV := PLATFORM_DEMO_PASSWORD=$(PLATFORM_DEMO_PASSWORD) OAUTH2_PROXY_COOKIE_SECRET=$(OAUTH2_PROXY_COOKIE_SECRET) CHATGPT_SIM_PUBLIC_PORT=18084 CHATGPT_SIM_APP_PORT=18085 CHATGPT_SIM_KEYCLOAK_PORT=8500
 
 ##@ App

@@ -2,6 +2,8 @@ MAKE_KNOWN_GOALS := help prereqs build test update app-help app-test app-js-chec
 
 include ../../mk/app-common.mk
 
+.PHONY: app-run build test compose-smoke-sso up up-direct urls
+
 APIM_LOCAL_PLATFORM ?= $(APP_LOCAL_PLATFORM)
 ifeq ($(APIM_LOCAL_PLATFORM),linux/arm64)
 APIM_GOARCH := arm64

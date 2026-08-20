@@ -10,6 +10,8 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 source "${REPO_ROOT}/scripts/lib/http-fetch.sh"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/parallel.sh"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/semver.sh"
 
 CHECK_VERSION_FORMAT="${CHECK_VERSION_FORMAT:-text}"
 HTTP_FETCH_MAX_TIME_SECONDS="${HTTP_FETCH_MAX_TIME_SECONDS:-${CHECK_PROVIDER_VERSION_CURL_MAX_TIME_SECONDS:-15}}"
@@ -76,26 +78,6 @@ cleanup_temp_paths() {
   [ -n "${first}" ] && rm -f "${first}"
   [ -n "${second}" ] && rm -f "${second}"
   [ -n "${directory}" ] && rm -rf "${directory}"
-}
-
-version_lt() {
-  local left="$1"
-  local right="$2"
-  [ "$(printf '%s\n%s\n' "${left}" "${right}" | sort -V | head -n 1)" = "${left}" ] && [ "${left}" != "${right}" ]
-}
-
-version_lte() {
-  local left="$1"
-  local right="$2"
-  [ "${left}" = "${right}" ] || version_lt "${left}" "${right}"
-}
-
-version_gt() {
-  version_lt "$2" "$1"
-}
-
-version_gte() {
-  [ "$1" = "$2" ] || version_gt "$1" "$2"
 }
 
 constraint_clause_allows_version() {
@@ -195,7 +177,7 @@ latest_registry_version() {
   IFS='/' read -r host namespace name <<<"${source}"
 
   versions_json="$(http_cached_output "terraform-provider-versions" "${source}" latest_registry_version_uncached "${source}")"
-  jq -r '.versions[].version' <<<"${versions_json}" | grep -v -- '-' | sort -V | tail -n 1
+  jq -r '.versions[].version' <<<"${versions_json}" | grep -v -- '-' | sort_semver | tail -n 1
 }
 
 latest_registry_version_uncached() {

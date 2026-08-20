@@ -6,6 +6,14 @@ setup() {
   export SCRIPT="${REPO_ROOT}/terraform/kubernetes/scripts/preload-images.sh"
 }
 
+@test "preload-images compares kind versions numerically without GNU sort -V" {
+  # v0.31 vs v0.32 can pass by accident; 0.9 vs 0.10 cannot. The script must
+  # use the shared helper rather than `sort -V`.
+  grep -Fq 'scripts/lib/semver.sh' "${SCRIPT}"
+  run grep -nE '(^|[[:space:];|&])sort[[:space:]]+-V' "${SCRIPT}"
+  [ "${status}" -ne 0 ]
+}
+
 @test "preload-images blocks kind load with kind older than v0.32.0" {
   local stub_bin="${BATS_TEST_TMPDIR}/bin"
   local image_list="${BATS_TEST_TMPDIR}/images.txt"
@@ -132,6 +140,7 @@ EOF
   local image_ref="example.com/repo/app:v1@${digest}"
   mkdir -p "${stub_bin}" "${temp_root}/scripts/lib"
   ln -s "${REPO_ROOT}/scripts/lib/shell-cli.sh" "${temp_root}/scripts/lib/shell-cli.sh"
+  ln -s "${REPO_ROOT}/scripts/lib/semver.sh" "${temp_root}/scripts/lib/semver.sh"
 
   for rel in \
     apps/subnetcalc/app/Dockerfile \
@@ -199,6 +208,7 @@ EOF
   local pinned_ref="example.com/repo/app@${digest}"
   mkdir -p "${stub_bin}" "${temp_root}/scripts/lib"
   ln -s "${REPO_ROOT}/scripts/lib/shell-cli.sh" "${temp_root}/scripts/lib/shell-cli.sh"
+  ln -s "${REPO_ROOT}/scripts/lib/semver.sh" "${temp_root}/scripts/lib/semver.sh"
 
   for rel in \
     apps/subnetcalc/app/Dockerfile \

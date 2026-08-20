@@ -31,6 +31,29 @@ EOF
   [ "${output}" = "$(printf '1.2.3\n--\n1.2.3')" ]
 }
 
+@test "check-provider-version treats 1.10 as newer than 1.9" {
+  # Lexicographic sort puts 1.9 after 1.10. This is the comparison the
+  # provider checker has to get right on macOS BSD sort as well as GNU sort.
+  local stub_bin="${BATS_TEST_TMPDIR}/bin"
+  local cache_dir="${BATS_TEST_TMPDIR}/cache"
+  mkdir -p "${stub_bin}" "${cache_dir}"
+
+  cat >"${stub_bin}/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '{"versions":[{"version":"1.9.0"},{"version":"1.10.0"},{"version":"1.2.0"}]}'
+EOF
+  chmod +x "${stub_bin}/curl"
+
+  run bash -lc "export CHECK_PROVIDER_VERSION_LIB_ONLY=1 CHECK_PROVIDER_VERSION_CACHE_DIR='${cache_dir}' PATH='${stub_bin}:'\"\$PATH\"; source '${SCRIPT}';
+    printf '%s\n' \"\$(latest_registry_version 'registry.terraform.io/hashicorp/aws')\"
+    if constraint_allows_version '>= 1.10.0' '1.9.0'; then printf 'reject=0\n'; else printf 'reject=1\n'; fi
+    if constraint_allows_version '>= 1.9.0' '1.10.0'; then printf 'accept=0\n'; else printf 'accept=1\n'; fi
+  "
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf '1.10.0\nreject=1\naccept=0')" ]
+}
+
 @test "check-provider-version fetches provider versions with bounded concurrency" {
   local stack_dir="${BATS_TEST_TMPDIR}/stack"
   local stub_bin="${BATS_TEST_TMPDIR}/bin"

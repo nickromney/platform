@@ -25,8 +25,8 @@ The platform and Subnetcalc paths consume that integrated source directly:
 - shared Docker Compose builds APIM from `apps/apim-simulator`
 - Kubernetes image distribution builds the `subnetcalc-apim-simulator` image
   from the Image Catalog Module entry for `apps/apim-simulator`
-- APIM behaviour contracts live in
-  `apps/apim-simulator/contracts/contract_matrix.yml`
+- APIM behaviour contracts live in the in-repo Go simulator under
+  `apps/apim-simulator`, with the config schema and routing tests as evidence
 - Subnetcalc keeps APIM as a supporting context at the API mediation seam
 
 Remove guidance that asks maintainers to edit an external simulator repo and
@@ -48,7 +48,8 @@ re-vendor a runtime subset into `apps/subnetcalc`.
 ## Evidence
 
 - [apps/apim-simulator](../../apps/apim-simulator)
-- [apps/apim-simulator/contracts/contract_matrix.yml](../../apps/apim-simulator/contracts/contract_matrix.yml)
+- [apps/apim-simulator/README.md](../../apps/apim-simulator/README.md)
+- [apps/apim-simulator/app/internal/app/config.go](../../apps/apim-simulator/app/internal/app/config.go)
 - [docker/compose/compose.yml](../../docker/compose/compose.yml)
 - [kubernetes/workflow/image-catalog.json](../../kubernetes/workflow/image-catalog.json)
 - [docs/ddd/contracts.md](../ddd/contracts.md)

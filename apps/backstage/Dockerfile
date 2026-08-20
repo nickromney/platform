@@ -17,6 +17,8 @@ ENV PYTHON=/usr/bin/python3
 ENV COREPACK_HOME=/tmp/corepack
 WORKDIR /app
 
+# Debian security updates rotate package versions; pin the distro tag, not each deb.
+# hadolint ignore=DL3008
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && \
@@ -34,8 +36,7 @@ FROM deps AS build
 
 COPY . .
 
-RUN yarn tsc
-RUN yarn build:backend
+RUN yarn tsc && yarn build:backend
 
 FROM node:22-bookworm-slim AS production-deps
 
@@ -45,6 +46,8 @@ ENV PYTHON=/usr/bin/python3
 ENV COREPACK_HOME=/tmp/corepack
 WORKDIR /app
 
+# Debian security updates rotate package versions; pin the distro tag, not each deb.
+# hadolint ignore=DL3008
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && \
@@ -55,7 +58,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 RUN corepack enable
 
-USER node
+USER 1000:1000
 
 COPY --chown=node:node --from=build /app/.yarn ./.yarn
 COPY --chown=node:node --from=build /app/.yarnrc.yml /app/yarn.lock /app/package.json /app/backstage.json ./

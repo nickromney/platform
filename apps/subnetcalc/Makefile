@@ -2,6 +2,8 @@ MAKE_KNOWN_GOALS := help prereqs build test update app-help app-test app-js-chec
 
 include ../../mk/app-common.mk
 
+.PHONY: app-run-backend app-run-frontend build test compose-smoke-sso up up-direct urls
+
 SUBNETCALC_LOCAL_PLATFORM ?= $(APP_LOCAL_PLATFORM)
 ifeq ($(SUBNETCALC_LOCAL_PLATFORM),linux/arm64)
 SUBNETCALC_GOARCH := arm64
