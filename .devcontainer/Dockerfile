@@ -34,11 +34,9 @@ RUN apt-get update \
         python3 \
         python3-venv \
         rsync \
-        shellcheck \
         sudo \
         unzip \
         xz-utils \
-        yamllint \
         zip \
     && locale-gen en_GB.UTF-8 \
     && rm -rf /var/lib/apt/lists/*

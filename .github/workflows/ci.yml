@@ -38,21 +38,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          # The runner image arrives with third-party taps (aws/tap today).
-          # Homebrew now requires per-tap trust and prints a ~15 line notice for
-          # each untrusted one on every invocation, which buries the actual
-          # install output. bats-core, jq and yq are all homebrew/core, so no
-          # third-party tap can affect what is installed here -- drop them
-          # rather than silencing the check with the deprecated
-          # HOMEBREW_NO_REQUIRE_TAP_TRUST. The runner is ephemeral.
-          while read -r tap; do
-            case "${tap}" in
-              homebrew/*) ;;
-              "") ;;
-              *) brew untap "${tap}" || true ;;
-            esac
-          done < <(brew tap)
-
+          # The runner image arrives with third-party taps (aws/tap,
+          # azure/bicep, hashicorp/tap), and Homebrew prints a tap-trust notice
+          # for each untrusted one on every invocation. That is cosmetic: the
+          # three formulae below are all homebrew/core, so no third-party tap
+          # can change what gets installed.
+          #
+          # An earlier attempt untapped them, which was worse. Homebrew refuses
+          # to untap anything holding installed formulae -- bicep and packer
+          # here -- and emits that refusal on stderr, which Actions renders as a
+          # red ##[error] annotation. Trading a cosmetic notice for two error
+          # annotations, on a job that still passed, is a bad trade. Left alone
+          # deliberately; do not "fix" the notice again.
           brew install bats-core jq yq
 
       - name: Record the interpreters under test

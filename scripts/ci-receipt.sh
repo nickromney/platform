@@ -20,6 +20,13 @@ source "${SCRIPT_DIR}/lib/shell-cli.sh"
 
 RECEIPT_FILE="${CI_RECEIPT_FILE:-${REPO_ROOT}/.run/ci-receipt.json}"
 ACTION=""
+# Which environment this run represents, and which the push must cover. The
+# host gate alone cannot see Linux-only breakage, and GitHub no longer runs on
+# pull_request -- so `make test-ci-linux` re-runs the same suite in the
+# devcontainer and records itself here. Default stays "host" so the fast path
+# is unchanged; set PLATFORM_GATE_ENVIRONMENTS=host,linux to require both.
+ENVIRONMENT="${CI_RECEIPT_ENVIRONMENT:-host}"
+REQUIRED_ENVIRONMENTS="${PLATFORM_GATE_ENVIRONMENTS:-host}"
 
 # shellcheck disable=SC2329 # invoked by name through the shell_cli_* helpers
 usage() {
@@ -28,9 +35,13 @@ Usage: ${0##*/} --action stamp|verify|fingerprint [--dry-run] [--execute]
 
 Record or check that the full local gate passed for the current working tree.
 
-  stamp        write ${RECEIPT_FILE} for the current tree
-  verify       exit 0 only if the receipt matches the current tree
+  stamp        record ${ENVIRONMENT} as passing for the current tree
+  verify       exit 0 only if the receipt covers ${REQUIRED_ENVIRONMENTS} for this tree
   fingerprint  print the current tree fingerprint and exit
+
+Environments:
+  CI_RECEIPT_ENVIRONMENT      environment this run records (default host)
+  PLATFORM_GATE_ENVIRONMENTS  comma-separated set a push must cover (default host)
 
 $(shell_cli_standard_options)
 EOF
@@ -45,6 +56,14 @@ while [[ $# -gt 0 ]]; do
         exit 2
       }
       ACTION="$2"
+      shift 2
+      ;;
+    --environment)
+      [[ $# -ge 2 ]] || {
+        printf '%s: --environment requires a value\n' "${0##*/}" >&2
+        exit 2
+      }
+      ENVIRONMENT="$2"
       shift 2
       ;;
     *)
@@ -86,6 +105,24 @@ esac
 # ignored ones do not), and `git write-tree` hashes it. Blobs land in
 # .git/objects unreferenced and are collected by gc, the same as `git stash
 # create`.
+receipt_field() {
+  sed -n "s/.*\"$1\": \"\\([^\"]*\\)\".*/\\1/p" "${RECEIPT_FILE}"
+}
+
+# Space-separated set operations, kept in shell so the receipt needs no jq.
+environment_covered() {
+  local haystack=" $1 "
+  [[ "${haystack}" == *" $2 "* ]]
+}
+
+add_environment() {
+  if environment_covered "$1" "$2"; then
+    printf '%s\n' "$1"
+    return 0
+  fi
+  printf '%s\n' "${1}${1:+ }${2}"
+}
+
 tree_fingerprint() {
   cd "${REPO_ROOT}"
   local temp_index
@@ -111,17 +148,33 @@ case "${ACTION}" in
   stamp)
     fingerprint="$(tree_fingerprint)"
     mkdir -p "$(dirname "${RECEIPT_FILE}")"
+
+    # Environments accumulate for one tree. A host run and a devcontainer run
+    # happen minutes apart and must both land in the same receipt, so stamping
+    # merges -- but only when the fingerprint still matches. A different tree
+    # starts over, because a linux pass for yesterday's code proves nothing
+    # about today's.
+    covered=""
+    if [[ -f "${RECEIPT_FILE}" ]]; then
+      previous_fingerprint="$(receipt_field fingerprint)"
+      if [[ "${previous_fingerprint}" == "${fingerprint}" ]]; then
+        covered="$(receipt_field environments)"
+      fi
+    fi
+    covered="$(add_environment "${covered}" "${ENVIRONMENT}")"
+
     # No timestamp in the digest, and none used for validity: a receipt is
     # valid because the tree still matches, not because it is recent. The
     # recorded time and commit are for the message pre-push prints.
     cat >"${RECEIPT_FILE}" <<JSON
 {
   "fingerprint": "${fingerprint}",
+  "environments": "${covered}",
   "head": "$(git -C "${REPO_ROOT}" rev-parse --short HEAD)",
   "stamped_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 JSON
-    printf 'OK   gate receipt stamped for %s\n' "${fingerprint:0:12}"
+    printf 'OK   gate receipt stamped for %s [%s]\n' "${fingerprint:0:12}" "${covered}"
     ;;
 
   verify)
@@ -131,9 +184,12 @@ JSON
       exit 1
     fi
 
-    recorded="$(sed -n 's/.*"fingerprint": "\([^"]*\)".*/\1/p' "${RECEIPT_FILE}")"
-    recorded_head="$(sed -n 's/.*"head": "\([^"]*\)".*/\1/p' "${RECEIPT_FILE}")"
-    recorded_at="$(sed -n 's/.*"stamped_at": "\([^"]*\)".*/\1/p' "${RECEIPT_FILE}")"
+    recorded="$(receipt_field fingerprint)"
+    recorded_head="$(receipt_field head)"
+    recorded_at="$(receipt_field stamped_at)"
+    recorded_environments="$(receipt_field environments)"
+    # Receipts written before environments existed cover the host run.
+    [[ -n "${recorded_environments}" ]] || recorded_environments="host"
     current="$(tree_fingerprint)"
 
     if [[ "${recorded}" != "${current}" ]]; then
@@ -144,6 +200,25 @@ JSON
       exit 1
     fi
 
-    printf 'OK   gate receipt current for %s (%s)\n' "${current:0:12}" "${recorded_head:-unknown}"
+    missing=""
+    while IFS= read -r wanted; do
+      [[ -n "${wanted}" ]] || continue
+      if ! environment_covered "${recorded_environments}" "${wanted}"; then
+        missing="${missing}${missing:+ }${wanted}"
+      fi
+    done < <(printf '%s\n' "${REQUIRED_ENVIRONMENTS//,/$'\n'}")
+
+    if [[ -n "${missing}" ]]; then
+      printf 'gate receipt matches this tree but does not cover: %s\n' "${missing}" >&2
+      printf '  covered: %s\n' "${recorded_environments}" >&2
+      case "${missing}" in
+        *linux*) printf 'run: make test-ci-linux\n' >&2 ;;
+        *) printf 'run: make test-ci\n' >&2 ;;
+      esac
+      exit 1
+    fi
+
+    printf 'OK   gate receipt current for %s (%s) [%s]\n' \
+      "${current:0:12}" "${recorded_head:-unknown}" "${recorded_environments}"
     ;;
 esac

@@ -65,6 +65,62 @@ There is no expiry: an hour-old receipt on an unchanged tree is exactly as good
 as a fresh one, and a receipt from thirty seconds ago is worthless if a file
 changed after it.
 
+### Environments
+
+A macOS host gate cannot see Linux-only breakage — Bash 3.2 vs 5, BSD vs GNU
+`sed`/`awk`/`grep`, case-insensitive filesystems — and with CI off pull requests
+nothing else looks before merge. So a receipt records *which environments*
+passed for that tree, not merely that something did.
+
+`make test-ci` records `host`. `make test-ci-linux` re-runs the same suite
+inside the devcontainer and records `linux`. Stamping merges into an existing
+receipt when the fingerprint matches, and starts over when it does not: a Linux
+pass for yesterday's tree proves nothing about today's.
+
+`PLATFORM_GATE_ENVIRONMENTS` (default `host`) is what pre-push insists on.
+`host,linux` makes every push carry both, at roughly double the gate time; the
+default keeps the fast path and leaves the Linux run for changes that touch
+shell or platform behaviour.
+
+The devcontainer run deliberately does **not** write the shared receipt. It
+stamps a throwaway one inside `/tmp`, and the host stamps `linux` only after the
+container run passes — otherwise a host/container fingerprint disagreement over
+bind-mount file modes or ownership would reset the receipt and silently discard
+the host result.
+
+### The devcontainer is not a clean room, and the gate has to say so
+
+Its `containerEnv` rewires `KUBECONFIG_PATH` and the registry host alias so the
+container can drive the *host's* kind cluster and registry. Run as-is, the gate
+measures that wiring rather than Linux: kind reports
+`push_host=host.docker.internal`, and lima reports the **kind** kubeconfig,
+because `KUBECONFIG_PATH` is set globally to a kind-specific value. So
+`run-ci-linux.sh` unsets that wiring, in a plain shell — `bash -lc` re-sources
+the profile and puts it straight back.
+
+That global `KUBECONFIG_PATH` is worth fixing in `devcontainer.json` on its own
+merits: `KIND_KUBECONFIG_PATH` already exists for the kind-specific value, and
+setting the generic one makes every other variant misreport inside the
+devcontainer.
+
+### Known residue
+
+Fixing the container toolchain took the devcontainer run from 25 failures to 5.
+`make test-ci-linux` therefore does **not** pass yet, and
+`PLATFORM_GATE_ENVIRONMENTS` stays `host` by default until it does. What remains
+is environment difference, not Linux-only defects:
+
+| test | why |
+| --- | --- |
+| `configure-k3s-apiserver-oidc` mkcert skip | asserts mkcert is *absent*; the devcontainer installs it |
+| `kubernetes-sso-runner` Playwright wiring | pins the Docker bridge IP `172.17.0.1`, which differs under docker-outside-of-docker |
+| `makefile` root lint delegation | `make lint` needs markdownlint-cli2, biome and deno, which CI installs and the devcontainer does not |
+| `opentofu-tier` fast tier | provider plugin init inside the container |
+| `variant-contracts` Makefile defaults | kind's `push_host` is legitimately the host alias in a container |
+
+Each wants either a container-aware assertion or the missing tool installed, and
+each is separable.
+
 GitHub CI drops its `pull_request` trigger and keeps `push: branches: [main]`
 and `workflow_dispatch`. It stops being the feedback loop and becomes the
 evidence local runs cannot produce: the protected line, and the macOS job that

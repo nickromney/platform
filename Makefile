@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-MAKE_KNOWN_GOALS := help prereqs init-env test test-ci test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-python lint-bash32 lint-shell lint-shellcheck lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+MAKE_KNOWN_GOALS := help prereqs init-env test test-ci test-ci-linux test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-python lint-bash32 lint-shell lint-shellcheck lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
 APP_ENTRYPOINT_DIRS_CMD := { printf '%s\n' apps; find apps -mindepth 2 -maxdepth 2 -name Makefile -print | xargs -n 1 dirname; } | LC_ALL=C sort
@@ -45,6 +45,7 @@ WORKFLOW_UI_HTTP ?= h2
 CI_UV_CACHE_DIR ?= $(CURDIR)/.run/uv-cache
 CHECK_WORKTREE_UNCHANGED ?= scripts/check-worktree-unchanged.sh
 CI_RECEIPT_SCRIPT ?= scripts/ci-receipt.sh
+RUN_CI_LINUX_SCRIPT ?= scripts/run-ci-linux.sh
 RUN_BATS_SUITE ?= scripts/run-bats-suite.sh
 # Serial by default, on the evidence rather than by preference.
 #
@@ -92,7 +93,7 @@ CI_BATS_TESTS := $(shell "$(LIST_CI_BATS_TESTS)" --execute)
 
 include mk/common.mk
 
-.PHONY: default help prereqs init-env test test-ci test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-python lint-bash32 lint-shell lint-shellcheck lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+.PHONY: default help prereqs init-env test test-ci test-ci-linux test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-python lint-bash32 lint-shell lint-shellcheck lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 
 default:
 	@$(MAKE) --no-print-directory help
@@ -207,6 +208,14 @@ test-ci:
 	if ! "$(CHECK_WORKTREE_UNCHANGED)" --execute --verify "$(CI_WORKTREE_SNAPSHOT)"; then rc=1; fi; \
 	if [ "$$rc" -eq 0 ]; then "$(CI_RECEIPT_SCRIPT)" --execute --action stamp; fi; \
 	exit $$rc
+
+# The same suite again, in the devcontainer, recorded as "linux" on the same
+# receipt. A macOS host cannot see Bash 3.2 vs 5 or BSD vs GNU divergence, and
+# GitHub no longer runs on pull_request. Slow, so it is not part of test-ci;
+# run it before pushing anything shell- or platform-sensitive, or set
+# PLATFORM_GATE_ENVIRONMENTS=host,linux to make pre-push insist on it.
+test-ci-linux:
+	@"$(RUN_CI_LINUX_SCRIPT)" --execute
 
 status:
 	@"$(PLATFORM_STATUS_SCRIPT)" --execute --output "$(STATUS_FORMAT)"

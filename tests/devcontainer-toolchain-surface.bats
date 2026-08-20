@@ -55,3 +55,45 @@ setup() {
 
   [ "${status}" -eq 0 ]
 }
+
+@test "the devcontainer Go pin matches the go directive every module declares" {
+  # GO_VERSION is a patch-level pin (1.26.5) because the Go download URL needs
+  # one; the modules declare major.minor (1.26). The image build sees only
+  # .devcontainer/, so install-toolchain.sh cannot read go.mod and has to
+  # restate it -- which is exactly how the two drift apart unsupervised.
+  run bash -lc "
+    set -euo pipefail
+    cd '${REPO_ROOT}'
+    source .devcontainer/toolchain-versions.sh
+    declared=\$(git ls-files '*go.mod' | xargs -I{} sed -nE 's/^go[[:space:]]+([0-9]+\.[0-9]+)(\.[0-9]+)?\$/\\1/p' {} | sort -u)
+    [ \"\$(printf '%s' \"\${declared}\" | wc -l | tr -d ' ')\" = '0' ] || {
+      echo \"modules disagree on the go directive: \${declared}\" >&2
+      exit 1
+    }
+    case \"\${GO_VERSION}\" in
+      \"\${declared}\"|\"\${declared}\".*) ;;
+      *)
+        echo \"GO_VERSION=\${GO_VERSION} does not satisfy the go directive \${declared}\" >&2
+        exit 1
+        ;;
+    esac
+    printf 'GO_VERSION=%s satisfies go %s\n' \"\${GO_VERSION}\" \"\${declared}\"
+  "
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "the devcontainer takes shellcheck and yamllint from pins, not apt" {
+  # apt gave shellcheck 0.9.0 and yamllint 1.33.0 while CI ran 0.11.0 and
+  # 1.38.0, so `make lint` genuinely disagreed between the devcontainer and CI.
+  # 0.9.0 is the version that emits 449 spurious SC2317 findings (#202).
+  grep -Fq 'install_shellcheck' "${REPO_ROOT}/.devcontainer/install-toolchain.sh"
+  grep -Fq 'install_yamllint' "${REPO_ROOT}/.devcontainer/install-toolchain.sh"
+  grep -Fq 'install_go' "${REPO_ROOT}/.devcontainer/install-toolchain.sh"
+
+  for package in shellcheck yamllint ripgrep; do
+    run grep -nE "^\s+${package} \\\\$" "${REPO_ROOT}/.devcontainer/Dockerfile"
+
+    [ "${status}" -ne 0 ]
+  done
+}

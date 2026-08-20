@@ -417,6 +417,61 @@ install_ripgrep() {
   rm -rf "${tmp_dir}"
 }
 
+# Go was absent entirely, so tests/go-tests.bats -- 17 modules, ~9.5k lines --
+# could never run in the devcontainer even though `make test-ci` claims to.
+# GO_VERSION restates the modules' `go` directive because the image build sees
+# only .devcontainer/ and cannot read go.mod; a test holds the two equal.
+install_go() {
+  local arch_name tmp_dir go_version
+
+  # shellcheck disable=SC2153 # GO_VERSION comes from toolchain-versions.sh
+  go_version="${GO_VERSION}"
+
+  arch_name="$(linux_arch_for_mkcert)"
+  tmp_dir="$(mktemp -d)"
+  curl -fsSL "https://go.dev/dl/go${go_version}.linux-${arch_name}.tar.gz" \
+    -o "${tmp_dir}/go.tar.gz"
+  rm -rf /usr/local/go
+  tar -C /usr/local -xzf "${tmp_dir}/go.tar.gz"
+  ln -sf /usr/local/go/bin/go /usr/local/bin/go
+  ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt
+  rm -rf "${tmp_dir}"
+}
+
+# Was apt's 0.9.0, which emits SC2317 ("Command appears to be unreachable")
+# where 0.11.0 does not. #202 pinned CI away from exactly this and left the
+# devcontainer on it, so `make lint` disagreed between the two.
+install_shellcheck() {
+  local arch_name tmp_dir
+
+  case "$(uname -m)" in
+    x86_64 | amd64) arch_name="x86_64" ;;
+    aarch64 | arm64) arch_name="aarch64" ;;
+    *)
+      echo "unsupported architecture: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+
+  tmp_dir="$(mktemp -d)"
+  curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.${arch_name}.tar.xz" \
+    | tar -xJ -C "${tmp_dir}" --strip-components=1 "shellcheck-${SHELLCHECK_VERSION}/shellcheck"
+  install "${tmp_dir}/shellcheck" /usr/local/bin/shellcheck
+  rm -rf "${tmp_dir}"
+}
+
+# Was apt's 1.33.0 against CI's 1.38.0. uv is already in the image.
+install_yamllint() {
+  # The build runs as root but the container runs as vscode, so uv's defaults
+  # (~/.local under root) leave the tool present and unreachable -- which is
+  # exactly how the first attempt at this "installed" yamllint and still had
+  # `command -v yamllint` fail. Put both the venv and the shim on system paths.
+  UV_TOOL_DIR=/usr/local/share/uv/tools \
+    UV_TOOL_BIN_DIR=/usr/local/bin \
+    uv tool install --force "yamllint==${YAMLLINT_VERSION}"
+  chmod -R a+rX /usr/local/share/uv
+}
+
 install_opentofu() {
   local tmp_dir installer
 
@@ -474,6 +529,9 @@ install_lefthook
 install_lima
 install_mkcert
 install_ripgrep
+install_go
+install_shellcheck
+install_yamllint
 install_vim_sensible_source
 
 for entry in "${DEVCONTAINER_ARKADE_TOOLS[@]}"; do
