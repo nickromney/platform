@@ -2,6 +2,8 @@ MAKE_KNOWN_GOALS := help test build update app-help app-prereqs app-test app-js-
 
 include ../../mk/app-common.mk
 
+.PHONY: app-prereqs app-run test build
+
 ##@ App
 app-prereqs: ## Check the Go toolchain needed to build and run the app
 	@$(MAKE) --no-print-directory -C app prereqs

@@ -138,9 +138,10 @@ Notes:
 
 Useful references once the kind path is working:
 
-- [`docs/prerequisites.md`](docs/prerequisites.md) for toolchain expectations
-- [`docs/tooling.md`](docs/tooling.md) for the Terraform, Terragrunt, and
-  kubeconfig model
+- [`kubernetes/kind/docs/prerequisites.md`](kubernetes/kind/docs/prerequisites.md)
+  for toolchain expectations
+- [`kubernetes/kind/docs/tooling.md`](kubernetes/kind/docs/tooling.md) for the
+  Terraform, Terragrunt, and kubeconfig model
 - [`terraform/kubernetes/docs/README.md`](terraform/kubernetes/docs/README.md)
   for the shared stack internals
 - [`apps/subnetcalc/README.md`](apps/subnetcalc/README.md) for

@@ -12,6 +12,8 @@ source "${SCRIPT_DIR}/operator-facts.sh"
 source "${REPO_ROOT}/scripts/lib/http-fetch.sh"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/parallel.sh"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/semver.sh"
 
 CHECK_VERSION_FORMAT="${CHECK_VERSION_FORMAT:-text}"
 CHECK_VERSION_CI_MODE="${CHECK_VERSION_CI_MODE:-0}"
@@ -1047,13 +1049,6 @@ filter_python_versions_by_specifiers() {
   done
 }
 
-version_gte() {
-  local left="$1"
-  local right="$2"
-
-  [ "${left}" = "${right}" ] || [ "$(printf '%s\n%s\n' "${left}" "${right}" | sort -V | tail -n 1)" = "${left}" ]
-}
-
 uv_lock_resolved_version() {
   local lockfile="$1"
   local dep
@@ -1174,7 +1169,7 @@ npm_latest_eligible_version() {
       | .key
     ' <<<"${payload}" 2>/dev/null || true
   )"
-  printf '%s\n' "${versions}" | sed '/^$/d' | filter_prerelease_versions | sort -V | tail -n 1
+  printf '%s\n' "${versions}" | sed '/^$/d' | filter_prerelease_versions | sort_semver | tail -n 1
 }
 
 pypi_latest_overall_version() {
@@ -1196,7 +1191,7 @@ pypi_latest_overall_version() {
       | .key
     ' <<<"${payload}" 2>/dev/null || true
   )"
-  printf '%s\n' "${versions}" | sed '/^$/d' | filter_prerelease_versions | filter_python_versions_by_specifiers "${specifiers}" | sort -V | tail -n 1
+  printf '%s\n' "${versions}" | sed '/^$/d' | filter_prerelease_versions | filter_python_versions_by_specifiers "${specifiers}" | sort_semver | tail -n 1
 }
 
 pypi_latest_any_version() {
@@ -1218,7 +1213,7 @@ pypi_latest_any_version() {
       | .key
     ' <<<"${payload}" 2>/dev/null || true
   )"
-  printf '%s\n' "${versions}" | sed '/^$/d' | filter_python_versions_by_specifiers "${specifiers}" | sort -V | tail -n 1
+  printf '%s\n' "${versions}" | sed '/^$/d' | filter_python_versions_by_specifiers "${specifiers}" | sort_semver | tail -n 1
 }
 
 pypi_latest_eligible_version() {
@@ -1255,7 +1250,7 @@ pypi_latest_eligible_version() {
         end
     ' <<<"${payload}" 2>/dev/null || true
   )"
-  printf '%s\n' "${versions}" | sed '/^$/d' | filter_prerelease_versions | filter_python_versions_by_specifiers "${specifiers}" | sort -V | tail -n 1
+  printf '%s\n' "${versions}" | sed '/^$/d' | filter_prerelease_versions | filter_python_versions_by_specifiers "${specifiers}" | sort_semver | tail -n 1
 }
 
 # A dependency whose version could not be established is not a passing row, it
@@ -1484,7 +1479,7 @@ docker_hub_latest_tag_for_ref() {
   )"
 
   if [ -n "${candidate_tags}" ]; then
-    printf '%s\n' "${candidate_tags}" | sort -V | tail -n 1
+    printf '%s\n' "${candidate_tags}" | sort_semver | tail -n 1
     return 0
   fi
 
@@ -1528,7 +1523,7 @@ oci_registry_latest_tag_for_ref() {
   )"
 
   if [ -n "${candidate_tags}" ]; then
-    printf '%s\n' "${candidate_tags}" | sort -V | tail -n 1
+    printf '%s\n' "${candidate_tags}" | sort_semver | tail -n 1
     return 0
   fi
 
@@ -2144,7 +2139,7 @@ oci_registry_repo_tags() {
 kindest_node_latest_tag() {
   docker_hub_repo_tags "kindest" "node" 2>/dev/null | \
     grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | \
-    sort -V | tail -n 1 || true
+    sort_semver | tail -n 1 || true
 }
 
 makefile_variable_value() {

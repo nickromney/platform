@@ -10,8 +10,8 @@ RUN mkdir -p /tmp/plugins \
 
 FROM ${GRAFANA_BASE_IMAGE}
 
-USER root
+USER 0
 RUN mkdir -p /opt/grafana/plugins
 COPY --from=plugin /tmp/plugins/victoriametrics-logs-datasource /opt/grafana/plugins/victoriametrics-logs-datasource
 RUN chown -R grafana:root /opt/grafana/plugins
-USER grafana
+USER 472

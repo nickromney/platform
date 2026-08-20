@@ -24,6 +24,8 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/semver.sh"
 
 usage() {
   cat <<'EOF'
@@ -582,14 +584,12 @@ semver_core() {
 semver_at_least() {
   local observed
   local minimum
-  local first
 
   observed="$(semver_core "$1")"
   minimum="$(semver_core "$2")"
   [[ -n "${observed}" && -n "${minimum}" ]] || return 1
 
-  first="$(printf '%s\n%s\n' "${minimum}" "${observed}" | sort -V | head -n 1)"
-  [[ "${first}" == "${minimum}" ]]
+  version_gte "${observed}" "${minimum}"
 }
 
 ensure_kind_load_cli_compatible() {

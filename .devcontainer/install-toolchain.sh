@@ -359,13 +359,15 @@ install_starship() {
 }
 
 install_step() {
-  local arch_name tmp_dir package_name
+  local arch_name tmp_dir archive version
 
+  version="${STEP_VERSION#v}"
   arch_name="$(linux_arch_for_mkcert)"
+  archive="step_linux_${version}_${arch_name}.tar.gz"
   tmp_dir="$(mktemp -d)"
-  package_name="step-cli_${STEP_VERSION#v}-1_${arch_name}.deb"
-  curl -fsSL "https://github.com/smallstep/cli/releases/download/v${STEP_VERSION#v}/${package_name}" -o "${tmp_dir}/${package_name}"
-  apt-get install -y "${tmp_dir}/${package_name}"
+  curl -fsSL "https://github.com/smallstep/cli/releases/download/v${version}/${archive}" -o "${tmp_dir}/${archive}"
+  tar -xzf "${tmp_dir}/${archive}" -C "${tmp_dir}"
+  install "${tmp_dir}/step_${version}/bin/step" /usr/local/bin/step
   rm -rf "${tmp_dir}"
 }
 
@@ -506,7 +508,6 @@ install_playwright_runtime_deps() {
 }
 
 cleanup_toolchain_caches() {
-  apt-get clean
   rm -rf \
     /var/lib/apt/lists/* \
     /var/cache/apt/archives/* \

@@ -51,6 +51,8 @@ spec:
               value: service.version=0.1.0,k8s.deployment.name=${{ values.name }}-backend
             - name: LOG_FORMAT
               value: json
+            - name: PORT
+              value: "${{ values.backendPort }}"
           ports:
             - name: http
               containerPort: ${{ values.backendPort }}

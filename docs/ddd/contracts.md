@@ -178,13 +178,12 @@ outside the request path above.
   same APIM runtime can be configured with a different issuer or no identity
   provider at all.
 - **Contract evidence:**
-  [`apps/apim-simulator/contracts/contract_matrix.yml`](../../apps/apim-simulator/contracts/contract_matrix.yml)
-  is the canonical record of APIM contract IDs (`GW-HEALTH`,
-  `ROUTE-HOST-MATCH`, `ROUTE-VERSION-HEADER`, and so on).
-- **Safe pre-launch changes:** adding new contract IDs with
-  `status: supported`; adding optional policies that pass through unchanged;
-  changing the stage-specific issuer/JWKS/audience configuration without
-  changing APIM's own contract language.
+  [`apps/apim-simulator/app/internal/app/config.go`](../../apps/apim-simulator/app/internal/app/config.go)
+  and [`server_test.go`](../../apps/apim-simulator/app/internal/app/server_test.go)
+  are the canonical record of APIM config, routing, and health behaviour.
+- **Safe pre-launch changes:** adding optional policies that pass through
+  unchanged; changing the stage-specific issuer/JWKS/audience configuration
+  without changing APIM's own contract language.
 - **Breaking changes:** changing the subscription-key header name, altering
   how version routing resolves, or removing a contract ID that shipped as
   `supported`.
@@ -262,7 +261,8 @@ Changes in this list do not break any of the edges above.
   - Add `POST /api/v1/lookup` on `subnetcalc` that composes the existing four
     calls and returns the same fields the frontend already assembles.
   - Add new optional response fields on any existing endpoint.
-  - Add new contract IDs to `contract_matrix.yml`.
+  - Add focused tests next to `apps/apim-simulator/app/internal/app` when
+    extending APIM behaviour.
 - **Documentation changes:**
   - Use ratified stage labels (`cluster available`, `app repos`,
     `observability`, `SSO`) in docs and runbooks while keeping Makefile

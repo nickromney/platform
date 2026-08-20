@@ -2,6 +2,8 @@ MAKE_KNOWN_GOALS := help prereqs test build update app-help app-test app-build a
 
 include ../../mk/app-common.mk
 
+.PHONY: app-run test build up
+
 ##@ App
 app-run: ## Run the MCP server directly
 	@$(MAKE) --no-print-directory -C app run

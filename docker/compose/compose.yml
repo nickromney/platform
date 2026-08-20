@@ -78,7 +78,7 @@ services:
     <<: *app-runtime-hardening
     build:
       context: ../../apps/apim-simulator
-      dockerfile: Dockerfile
+      dockerfile: app/Dockerfile
     platform: linux/amd64
     image: platform-subnetcalc-apim-simulator:compose
     ports:
