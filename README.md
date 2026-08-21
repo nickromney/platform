@@ -118,6 +118,11 @@ Notes:
   on-demand Linux confirmation surface, triggered with
   `gh workflow run ci.yml` or from the Actions tab.
 - `make fmt` applies the tracked markdown formatting pass.
+- `make mutation SCRIPT=<path>` plans bash mutation testing for one script,
+  and `make mutation-execute SCRIPT=<path>` runs the cycle and exits non-zero
+  when mutants survive. See
+  [`docs/bash-mutation-testing.md`](docs/bash-mutation-testing.md) for the
+  operators, the current per-script baseline, and the triage order.
 - `make check-version` verifies the root workflow pins, the vendored
   `apim-simulator` tag/SHA metadata, and the repo-local dependency age gates
   for npm, Bun, and uv-managed Python roots.
@@ -146,6 +151,8 @@ Useful references once the kind path is working:
   for the shared stack internals
 - [`apps/subnetcalc/README.md`](apps/subnetcalc/README.md) for
   the main sample application workflow
+- [`docs/bash-mutation-testing.md`](docs/bash-mutation-testing.md) for how the
+  bash test suites are measured for assertion strength
 
 ## Devcontainer
 
