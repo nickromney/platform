@@ -53,6 +53,67 @@ setup() {
   [ "${status}" -eq 7 ]
 }
 
+@test "the fallback kills exactly at the budget tick without a grace sleep" {
+  # Mutation triage target: timeout.sh's expiry check is `-ge`. A `-gt` mutant
+  # must not pass, so the first poll lands on elapsed == seconds exactly: the
+  # real code kills immediately, the mutant takes one more loop turn. The
+  # difference is asserted via a stub sleep's call log, never wall-clock.
+  shim="${BATS_TEST_TMPDIR}/shim-boundary"
+  state="${BATS_TEST_TMPDIR}/state"
+  mkdir -p "${shim}" "${state}"
+  # Only tools that stay real get symlinks; date and sleep are replaced by
+  # stubs below, and linking them first would make the heredoc write through
+  # the symlink into the system binary.
+  for tool in bash sh tail; do
+    target="$(command -v "${tool}" 2>/dev/null || true)"
+    [ -n "${target}" ] || continue
+    ln -sf "${target}" "${shim}/${tool}"
+  done
+
+  # The stub must use shell builtins only: the stripped PATH it runs under
+  # has no cat/awk, and any external dependency silently resets the counter
+  # and busy-loops the fallback.
+  cat >"${shim}/date" <<'STUB'
+#!/bin/sh
+f="${SHIM_STATE}/date-count"
+n=0
+if [ -r "${f}" ]; then
+  read -r n <"${f}"
+fi
+n=$((n + 1))
+printf '%s\n' "${n}" >"${f}"
+if [ "${n}" -eq 1 ]; then
+  echo 1000
+elif [ "${n}" -eq 2 ]; then
+  echo 1003
+else
+  echo 1004
+fi
+STUB
+  chmod +x "${shim}/date"
+
+  cat >"${shim}/sleep" <<'STUB'
+#!/bin/sh
+printf '%s\n' "$@" >>"${SHIM_STATE}/sleep-calls"
+STUB
+  chmod +x "${shim}/sleep"
+
+  run env PATH="${shim}" SHIM_STATE="${state}" \
+    bash -c "source '${LIB}'; run_with_timeout 3 tail -f /dev/null"
+
+  [ "${status}" -eq 124 ]
+  [ ! -s "${state}/sleep-calls" ]
+}
+
+# Accepted equivalent mutants (documented, not killed): the `|| true` guards
+# on kill/wait inside the fallback's expiry branch (timeout.sh:41-42). Their
+# LOGICAL_AND_OR and BOOLEAN_LITERAL mutants differ only when kill or wait
+# fails mid-expiry. Both are shell builtins, so PATH shims cannot reach them;
+# manufacturing their failure needs a race between kill -0 and signal
+# delivery whose failure mode hangs the ORIGINAL code too. No honest oracle
+# distinguishes them, so they are recorded as accepted survivors instead of
+# being "killed" with a flaky or self-hanging test.
+
 @test "the k3s bootstrap lib keeps its old name as an alias over the shared wrapper" {
   # bootstrap-k3s-lima.sh still calls k3s_bootstrap_run_with_timeout.
   lib="${REPO_ROOT}/kubernetes/scripts/k3s-bootstrap-lib.sh"

@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-MAKE_KNOWN_GOALS := help prereqs init-env test test-ci test-ci-linux test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-python lint-bash32 lint-shell lint-shellcheck lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+MAKE_KNOWN_GOALS := help prereqs init-env test test-ci test-ci-linux test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-python lint-bash32 lint-shell lint-shellcheck lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run mutation mutation-execute makefiles apps kubernetes docker sonar-scan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
 APP_ENTRYPOINT_DIRS_CMD := { printf '%s\n' apps; find apps -mindepth 2 -maxdepth 2 -name Makefile -print | xargs -n 1 dirname; } | LC_ALL=C sort
@@ -25,6 +25,7 @@ FMT_MARKDOWN_SCRIPT ?= scripts/fmt-markdown.sh
 FMT_HCL_SCRIPT ?= scripts/fmt-hcl.sh
 CHECK_VERSION_SCRIPT ?= scripts/check-repo-version.sh
 UPDATE_VERSIONS_SCRIPT ?= scripts/update-versions.sh
+MUTATION_TEST_SCRIPT ?= scripts/mutation-test.sh
 RELEASE_SCRIPT ?= scripts/release.sh
 SONAR_SCAN_SCRIPT ?= scripts/sonar-scan.sh
 SONAR_SCAN_REPO ?= $(CURDIR)
@@ -93,7 +94,7 @@ CI_BATS_TESTS := $(shell "$(LIST_CI_BATS_TESTS)" --execute)
 
 include mk/common.mk
 
-.PHONY: default help prereqs init-env test test-ci test-ci-linux test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-python lint-bash32 lint-shell lint-shellcheck lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+.PHONY: default help prereqs init-env test test-ci test-ci-linux test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-python lint-bash32 lint-shell lint-shellcheck lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run mutation mutation-execute makefiles apps kubernetes docker sonar-scan
 
 default:
 	@$(MAKE) --no-print-directory help
@@ -126,6 +127,8 @@ help:
 		'make lint-kyverno-live\tValidate deployed Kyverno policy matches via the current kubeconfig' \
 		'make lint-shell\tRun repo shell audit checks' \
 		'make makefiles\tList every Makefile in the repo' \
+		'make mutation SCRIPT=<path>\tPlan bash mutation testing for one script against its mapped bats suites' \
+		'make mutation-execute SCRIPT=<path>\tRun the mutation cycle; nonzero exit when mutants survive' \
 		'make prereqs\tShow the focused prerequisite entrypoints' \
 		'make release VERSION=0.3.0\tBump VERSION, run checks, and create a release commit' \
 		'make release-dry-run VERSION=0.3.0\tPreview the release commit flow' \
@@ -304,6 +307,14 @@ init-env:
 
 update-versions:
 	@"$(UPDATE_VERSIONS_SCRIPT)" --execute
+
+mutation:
+	@[ -n "$(SCRIPT)" ] || { echo "SCRIPT is required, e.g. make mutation SCRIPT=scripts/lib/semver.sh [MUTATION_ARGS=...]"; exit 1; }
+	@"$(MUTATION_TEST_SCRIPT)" $(MUTATION_ARGS) --script "$(SCRIPT)"
+
+mutation-execute:
+	@[ -n "$(SCRIPT)" ] || { echo "SCRIPT is required, e.g. make mutation-execute SCRIPT=scripts/lib/semver.sh [MUTATION_ARGS=--no-fail]"; exit 1; }
+	@"$(MUTATION_TEST_SCRIPT)" $(MUTATION_ARGS) --script "$(SCRIPT)" --execute
 
 sonar-scan:
 	@SONAR_SCAN_REPO="$(SONAR_SCAN_REPO)" "$(SONAR_SCAN_SCRIPT)" --execute

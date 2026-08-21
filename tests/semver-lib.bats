@@ -26,6 +26,20 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "version_lte accepts strictly less and equal cores but rejects greater" {
+  run bash -c "source '${LIB}'; version_lte 1.9 1.10"
+
+  [ "${status}" -eq 0 ]
+
+  run bash -c "source '${LIB}'; version_lte 1.2 1.2"
+
+  [ "${status}" -eq 0 ]
+
+  run bash -c "source '${LIB}'; version_lte 1.10 1.9"
+
+  [ "${status}" -eq 1 ]
+}
+
 @test "sort_semver returns the highest dotted version from a list" {
   run bash -c "source '${LIB}'; printf '%s\n' 1.9.0 v1.10.0 1.10.0-unused 1.2.3 | grep -v -- '-' | sort_semver | tail -n 1"
 
