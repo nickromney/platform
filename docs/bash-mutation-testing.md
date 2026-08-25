@@ -74,8 +74,8 @@ Score = killed / (killed + survived). Timeouts count as killed.
 | `semver.sh` | 3 | 3 | 0 | 100% | `tests/semver-lib.bats` |
 | `http-fetch.sh` | 13 | 11 | 2 | 85% (2 accepted equivalents) | `tests/http-fetch.bats` |
 | `mutation.sh` | 30 | 19 | 11 | 63% | `tests/mutation-lib.bats` |
-| `host-port-listeners.sh` | 50 | 28 | 22 | 56% | `tests/host-port-listeners.bats` |
-| `parallel.sh` | 9 | 5 | 4 | 55% | `tests/parallel.bats` |
+| `host-port-listeners.sh` | 50 | 48 | 2 | 96% (2 accepted equivalents) | `tests/host-port-listeners.bats` |
+| `parallel.sh` | 9 | 9 | 0 | 100% | `tests/parallel.bats` |
 | `timeout.sh` | 6 | 2 | 4 | 33% (4 accepted equivalents) | `tests/timeout-lib.bats` |
 | `shell-cli.sh` | 16 | 7 | 9 | 44% | `tests/audit-shell-scripts.bats` |
 | `shell-cli-posix.sh` | — | — | — | untested | none |
@@ -94,6 +94,11 @@ expected to kill them, never silently dropped from the score.
   left of an `&&` list from errexit, and every real caller reads the value back
   through `"$(...)"`, where errexit does not apply either. The survivors are
   really saying the guard covers a case callers cannot reach.
+- `host-port-listeners.sh:26` — the `|| true` on the loopback `grep`. `grep -E`
+  exits nonzero exactly when nothing matched, and nothing matched is exactly
+  when `body` is empty, so the next line returns 1 either way. The guard cannot
+  change a status or a byte of output; it only keeps an errexit caller from
+  aborting one line earlier than it already does.
 
 ## What the survivors keep saying
 
@@ -107,19 +112,44 @@ expected to kill them, never silently dropped from the score.
 - **`BOUNDARY_CHECK` needs an exact-boundary input.** `timeout.sh`'s fallback
   `-ge` was only killed once a stubbed clock landed a poll on
   `elapsed == seconds` exactly; anything else passes under both `-ge` and `-gt`.
+- **`|| true` on a command substitution is rarely an equivalent.** The eight
+  guards around `lsof` and `ss` in `host-port-listeners.sh` read like noise
+  until a stub exits nonzero *while still printing listeners*, which is what
+  real `lsof` does when it cannot examine every socket. Under `set -e` the
+  mutant aborts before printing and a busy port reports as free. The guards
+  that really are equivalent are the ones whose command's exit status is fully
+  determined by whether its output was empty, as at `:26` above.
 
 ## Attack order for the remaining gaps
 
 1. `http-fetch.sh` — done; 15% -> 85%.
 2. `timeout.sh` — done; the boundary mutant is killed and the rest are
    documented equivalents.
-3. `parallel.sh` and `host-port-listeners.sh` — mid scores, mostly guard
-   branches that are never driven to bail out.
-4. `shell-cli.sh` — the oracle is an audit suite rather than a unit suite, which
+3. `parallel.sh` — done; 55% -> 100%.
+4. `host-port-listeners.sh` — done; 56% -> 96%.
+5. `shell-cli.sh` — the oracle is an audit suite rather than a unit suite, which
    is why the score is low and the runs are slow.
-5. `compose-cli.sh`, `shell-cli-posix.sh` — write a first bats suite before any
+6. `compose-cli.sh`, `shell-cli-posix.sh` — write a first bats suite before any
    refactoring. Mutation testing says nothing without an oracle.
-6. `mutation.sh` — keep at or above 63% as operators evolve; it gates itself.
+7. `mutation.sh` — keep at or above 63% as operators evolve; it gates itself.
 
 Per file: strengthen assertions until the score plateaus, only then split
 functions toward do-one-thing, and re-mutate to confirm no behaviour drifted.
+
+## Open question: cache-dir substitution
+
+`http_cache_dir_ensure` silently substitutes a fresh mktemp dir when
+`HTTP_FETCH_CACHE_DIR` is set but missing, and the substitution happens per
+call inside subshells — consecutive calls can resolve different directories,
+orphaning entries written earlier. The primed-hit test pins current semantics;
+whether production should instead fail fast or create the configured directory
+is an unresolved product decision, recorded here so the suite's shape is not
+mistaken for an endorsement.
+
+## Roadmap
+
+1. First bats suites for `compose-cli.sh` and `shell-cli-posix.sh`; mutation
+   testing says nothing until an oracle exists.
+2. `shell-cli.sh`: give it a unit suite of its own, so the oracle stops being
+   a whole audit run.
+3. Resolve the cache-dir substitution question above.
