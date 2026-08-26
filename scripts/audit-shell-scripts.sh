@@ -6,6 +6,20 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/lib/shell-cli.sh"
+# shellcheck source=scripts/lib/timeout.sh
+source "${SCRIPT_DIR}/lib/timeout.sh"
+
+# The no-args probe below runs each entrypoint's preview, and a preview is
+# allowed to inspect real local state. kubernetes/kind/scripts/docker-safe-clean.sh
+# shells out to `docker system df`, which walks every image, volume and build
+# cache entry and can take minutes on a busy daemon -- or never return on a
+# wedged one. An unbounded probe makes `make lint` hang, which hangs the
+# pre-push hook, which hangs the push. A linter must fail, not block.
+# Generous on purpose: this is a stop-hanging backstop, not a performance
+# budget. A preview that inspects a busy Docker daemon has been measured at 39s
+# here, and failing an honest-but-slow entrypoint would be a worse bug than the
+# hang this replaces.
+SHELL_AUDIT_PROBE_TIMEOUT="${SHELL_AUDIT_PROBE_TIMEOUT:-120}"
 
 allowed_python_execution=(
   ".devcontainer/check-toolchain-surface.sh"
@@ -233,10 +247,37 @@ run_interface_probe() {
   : >"${SHELL_AUDIT_PROBE_STDOUT_FILE}"
   : >"${SHELL_AUDIT_PROBE_STDERR_FILE}"
 
-  if "${env_cmd[@]}" "${file}" "$@" >"${SHELL_AUDIT_PROBE_STDOUT_FILE}" 2>"${SHELL_AUDIT_PROBE_STDERR_FILE}"; then
+  # Bounded only when a real timeout binary is available. scripts/lib/timeout.sh
+  # falls back to polling with `sleep 1` when coreutils is absent, which costs
+  # about a second per call -- unnoticeable for the handful of reads in a
+  # cleanup script, but this audit runs roughly 965 probes, and measured here it
+  # added sixteen minutes to `make lint`. A backstop that makes the gate slower
+  # than the hang it prevents is not a backstop.
+  #
+  # So macOS, which ships no timeout, trades the bound for the speed; Linux and
+  # CI keep it. That is the wrong way round for where the hang was first seen,
+  # and the honest fix is a fallback that does not poll on a one-second tick.
+  if [[ "$(timeout_implementation)" != "shell-fallback" ]]; then
+    if run_with_timeout "${SHELL_AUDIT_PROBE_TIMEOUT}" \
+      "${env_cmd[@]}" "${file}" "$@" \
+      >"${SHELL_AUDIT_PROBE_STDOUT_FILE}" 2>"${SHELL_AUDIT_PROBE_STDERR_FILE}"; then
+      rc=0
+    else
+      rc=$?
+    fi
+  elif "${env_cmd[@]}" "${file}" "$@" \
+    >"${SHELL_AUDIT_PROBE_STDOUT_FILE}" 2>"${SHELL_AUDIT_PROBE_STDERR_FILE}"; then
     rc=0
   else
     rc=$?
+  fi
+
+  # 124 is the coreutils expiry status, which scripts/lib/timeout.sh reproduces
+  # on its fallback path. Name it, because the stderr file is usually empty on a
+  # timeout and "exit 124" alone sends the reader looking for the wrong bug.
+  if [[ "${rc}" -eq 124 ]]; then
+    SHELL_AUDIT_LAST_ERROR="did not return within ${SHELL_AUDIT_PROBE_TIMEOUT}s"
+    return 1
   fi
 
   if [[ "${rc}" -ne 0 ]]; then
