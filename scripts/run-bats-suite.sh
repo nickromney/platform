@@ -196,12 +196,24 @@ esac
 #   make-target-surfaces    runs make against the real tree
 #   apps-makefile           runs make against the real tree
 #
+# Added 2026-08-26, after the suite started running in parallel by default:
+#
+#   cilium-module-renderers runs render-category.sh --execute, which rewrites
+#                           the checked-in policy files under
+#                           cluster-policies/cilium/, then diffs against them.
+#                           More than ten other files read that same tree, so a
+#                           reader can catch a file mid-rewrite. It does not
+#                           reproduce at `bats -j 8` on the file alone -- the
+#                           collision is with other files, not within this one,
+#                           which is why it showed up only in a full gate.
+#
 # Isolating them properly is the fix; running them serially is the stopgap.
 SERIAL_ONLY_FILES="${BATS_SERIAL_ONLY_FILES:-tests/platform-workflow.bats
 tests/release-workflow.bats
 tests/app-layout-consistency.bats
 tests/make-target-surfaces.bats
-tests/apps-makefile.bats}"
+tests/apps-makefile.bats
+kubernetes/kind/tests/cilium-module-renderers.bats}"
 
 is_serial_only() {
   printf '%s\n' "${SERIAL_ONLY_FILES}" | grep -qxF "$1"
