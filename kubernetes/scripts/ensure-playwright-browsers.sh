@@ -283,7 +283,20 @@ run_install_with_timeout() {
   pid="$!"
   start_seconds="$(date +%s)"
 
+  # The elapsed check comes after the sleep, not before it. `date +%s` has
+  # one-second granularity, so if a second boundary falls between capturing
+  # start_seconds and the first poll, `now - start` is already 1 and a
+  # timeout_seconds of 1 fires immediately -- announcing "timed out after 1s"
+  # having waited nearly none of it. Sleeping first puts a real second between
+  # launch and the earliest possible kill.
+  #
+  # This is not theoretical: it is why tests/ensure-playwright-browsers.bats
+  # intermittently saw one recorded install attempt where it asserts two. The
+  # install stub is killed before it can append its line. At the default 600s
+  # timeout the same bug is invisible, which is why it surfaced only in a test
+  # that sets the timeout to 1.
   while kill -0 "${pid}" 2>/dev/null; do
+    sleep 1
     now_seconds="$(date +%s)"
     if [ "$((now_seconds - start_seconds))" -ge "${timeout_seconds}" ]; then
       printf 'ERROR Playwright browser install timed out after %ss; killing process group %s\n' "${timeout_seconds}" "${pid}" >&2
@@ -291,7 +304,6 @@ run_install_with_timeout() {
       wait "${pid}" 2>/dev/null || true
       return 124
     fi
-    sleep 1
   done
 
   wait "${pid}" || status=$?
