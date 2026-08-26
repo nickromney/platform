@@ -37,8 +37,15 @@ after something else, name it explicitly:
 
 ```bash
 scripts/mutation-test.sh --script scripts/lib/shell-cli.sh \
-  --bats tests/audit-shell-scripts.bats --execute --no-fail
+  --bats tests/shell-cli-lib.bats --execute
 ```
+
+Naming it matters more than it looks. The default glob for
+`shell-cli.sh` is `tests/shell-cli*.bats`, which also matches
+`tests/shell-cli-posix-lib.bats` -- a suite for a different library that
+cannot kill a single one of its mutants. Left to the default, those runs
+carry a second suite for nothing. Name the oracle explicitly for both
+`shell-cli.sh` and `shell-cli-posix.sh`.
 
 ### Safety
 
@@ -73,13 +80,13 @@ Score = killed / (killed + survived). Timeouts count as killed.
 |---|---|---|---|---|---|
 | `semver.sh` | 3 | 3 | 0 | 100% | `tests/semver-lib.bats` |
 | `http-fetch.sh` | 13 | 11 | 2 | 85% (2 accepted equivalents) | `tests/http-fetch.bats` |
-| `mutation.sh` | 30 | 19 | 11 | 63% | `tests/mutation-lib.bats` |
-| `host-port-listeners.sh` | 50 | 28 | 22 | 56% | `tests/host-port-listeners.bats` |
-| `parallel.sh` | 9 | 5 | 4 | 55% | `tests/parallel.bats` |
+| `mutation.sh` | 30 | 29 | 1 | 97% (1 accepted equivalent) | `tests/mutation-lib.bats` |
+| `host-port-listeners.sh` | 50 | 48 | 2 | 96% (2 accepted equivalents) | `tests/host-port-listeners.bats` |
+| `parallel.sh` | 9 | 9 | 0 | 100% | `tests/parallel.bats` |
 | `timeout.sh` | 6 | 2 | 4 | 33% (4 accepted equivalents) | `tests/timeout-lib.bats` |
-| `shell-cli.sh` | 16 | 7 | 9 | 44% | `tests/audit-shell-scripts.bats` |
-| `shell-cli-posix.sh` | — | — | — | untested | none |
-| `compose-cli.sh` | — | — | — | untested | none |
+| `shell-cli.sh` | 16 | 16 | 0 | 100% | `tests/shell-cli-lib.bats` |
+| `shell-cli-posix.sh` | 9 | 9 | 0 | 100% | `tests/shell-cli-posix-lib.bats` |
+| `compose-cli.sh` | 12 | 12 | 0 | 100% | `tests/compose-cli-lib.bats` |
 
 ## Accepted equivalents
 
@@ -94,6 +101,20 @@ expected to kill them, never silently dropped from the score.
   left of an `&&` list from errexit, and every real caller reads the value back
   through `"$(...)"`, where errexit does not apply either. The survivors are
   really saying the guard covers a case callers cannot reach.
+- `host-port-listeners.sh:26` — the `|| true` on the loopback `grep`. `grep -E`
+  exits nonzero exactly when nothing matched, and nothing matched is exactly
+  when `body` is empty, so the next line returns 1 either way. The guard cannot
+  change a status or a byte of output; it only keeps an errexit caller from
+  aborting one line earlier than it already does.
+- `mutation.sh:22` — the `-lt` bound on the `mutation_strip_comment` scan loop.
+  Under `-le` the loop runs one extra iteration at `i == len`, where
+  `${line:len:1}` is unavoidably the empty string. An empty `ch` matches no arm
+  of the `case`, and the only early return is the `'#'` arm, so the extra pass
+  can neither print nor return; it increments `i` past the bound and exits. A
+  differential run over 1583 inputs -- every hand-picked end state
+  (unterminated quote, trailing backslash, trailing hash) plus every string up
+  to length four over the six characters that drive each branch -- found no
+  difference in stdout or exit status.
 
 ## What the survivors keep saying
 
@@ -107,19 +128,47 @@ expected to kill them, never silently dropped from the score.
 - **`BOUNDARY_CHECK` needs an exact-boundary input.** `timeout.sh`'s fallback
   `-ge` was only killed once a stubbed clock landed a poll on
   `elapsed == seconds` exactly; anything else passes under both `-ge` and `-gt`.
+- **`|| true` on a command substitution is rarely an equivalent.** The eight
+  guards around `lsof` and `ss` in `host-port-listeners.sh` read like noise
+  until a stub exits nonzero *while still printing listeners*, which is what
+  real `lsof` does when it cannot examine every socket. Under `set -e` the
+  mutant aborts before printing and a busy port reports as free. The guards
+  that really are equivalent are the ones whose command's exit status is fully
+  determined by whether its output was empty, as at `:26` above.
 
-## Attack order for the remaining gaps
+## Attack order, and how each file closed out
 
 1. `http-fetch.sh` — done; 15% -> 85%.
 2. `timeout.sh` — done; the boundary mutant is killed and the rest are
    documented equivalents.
-3. `parallel.sh` and `host-port-listeners.sh` — mid scores, mostly guard
-   branches that are never driven to bail out.
-4. `shell-cli.sh` — the oracle is an audit suite rather than a unit suite, which
-   is why the score is low and the runs are slow.
-5. `compose-cli.sh`, `shell-cli-posix.sh` — write a first bats suite before any
-   refactoring. Mutation testing says nothing without an oracle.
-6. `mutation.sh` — keep at or above 63% as operators evolve; it gates itself.
+3. `parallel.sh` — done; 55% -> 100%.
+4. `host-port-listeners.sh` — done; 56% -> 96%.
+5. `shell-cli.sh` — done; 44% -> 100%. The gain was mostly the oracle: swapping
+   the audit suite for `tests/shell-cli-lib.bats` took the run from minutes to
+   32s, and a unit suite can drive the error paths an audit run never reaches.
+6. `compose-cli.sh`, `shell-cli-posix.sh` — done; both went from no oracle to
+   100% on their first suite. Neither needs a container runtime: every backend
+   probe is driven through a PATH holding nothing but stubs.
+7. `mutation.sh` — done; 63% -> 97%, with the one survivor a documented
+   equivalent. Keep it here as operators evolve; it gates itself.
 
 Per file: strengthen assertions until the score plateaus, only then split
 functions toward do-one-thing, and re-mutate to confirm no behaviour drifted.
+
+## Open question: cache-dir substitution
+
+`http_cache_dir_ensure` silently substitutes a fresh mktemp dir when
+`HTTP_FETCH_CACHE_DIR` is set but missing, and the substitution happens per
+call inside subshells — consecutive calls can resolve different directories,
+orphaning entries written earlier. The primed-hit test pins current semantics;
+whether production should instead fail fast or create the configured directory
+is an unresolved product decision, recorded here so the suite's shape is not
+mistaken for an endorsement.
+
+## Roadmap
+
+Every script in `scripts/lib/` now has an oracle and a score. What is left:
+
+1. Resolve the cache-dir substitution question above.
+2. Hold the line: a new function in `scripts/lib/` arrives with its own suite,
+   and a re-mutation is what proves the suite is worth having.

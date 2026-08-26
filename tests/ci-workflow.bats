@@ -44,9 +44,9 @@ assert re.search(r"^permissions:\n  contents: read\n", text, re.MULTILINE)
 assert "runs-on: ubuntu-latest" in text
 assert "run: make lint" in text
 assert "run: make test-ci" in text
-assert ".devcontainer/toolchain-versions.sh" in text
-assert "yamllint==1.38.0" in text
-assert "markdownlint-cli2@0.22.1" in text
+assert "scripts/ci/install-ci-toolchain.sh --execute" in text
+assert "uv tool install" not in text
+assert "npm install --global" not in text
 assert "docker run" not in text.lower()
 assert "docker compose" not in text.lower()
 assert "kind create" not in text
@@ -117,8 +117,10 @@ PY
   [ "${status}" -eq 0 ]
   [ "${output}" -ge 1 ]
 
-  # Installed from the pin, not inherited from the runner image.
-  run grep -cE 'shellcheck-\$\{SHELLCHECK_VERSION\}\.linux' "${REPO_ROOT}/.github/workflows/ci.yml"
+  # Installed from the pin, not inherited from the runner image. The archive
+  # name is parameterized by OS so the same installer can grow a macOS job
+  # later; CI today only runs this on Linux.
+  run grep -cE 'shellcheck-\$\{SHELLCHECK_VERSION\}\.\$\{os_name\}' "${REPO_ROOT}/scripts/ci/install-ci-toolchain.sh"
 
   [ "${status}" -eq 0 ]
   [ "${output}" -ge 1 ]
@@ -128,13 +130,45 @@ PY
   # Generalises the above. Every tool the lint job installs is pinned by an
   # explicit version, a *_VERSION variable, or an @/== specifier. A bare
   # `apt-get install <tool>` or a reliance on the image is what this catches.
-  run bash -lc "
-    grep -nE '^\s+(uv tool install|npm install --global) ' '${REPO_ROOT}/.github/workflows/ci.yml' |
-      grep -vE '(==|@)[0-9]' || true
-  "
+  installer="${REPO_ROOT}/scripts/ci/install-ci-toolchain.sh"
+
+  run grep -nE '^(uv tool install|npm install --global) ' "${installer}"
 
   [ "${status}" -eq 0 ]
-  [ -z "${output}" ]
+  [ -n "${output}" ]
+
+  # Pin forms, not a regex: `bash -lc "... \$\{ ..."` eats the braces, and BSD
+  # grep treats `\{` as a bound. `==${PIN}` / `@${PIN}` / `==1.2.3` / `@1.2.3`.
+  unpinned="$(
+    grep -nE '^(uv tool install|npm install --global) ' "${installer}" |
+      grep -vF '==${' |
+      grep -vF '@${' |
+      grep -vE '(==|@)[0-9]' || true
+  )"
+
+  [ -z "${unpinned}" ]
+}
+
+@test "CI toolchain installer defaults to dry-run and reads the pin source" {
+  # The workflow only calls this with --execute. Without that flag it must not
+  # curl anything: a missing --execute in YAML would otherwise look like a
+  # successful step that installed nothing.
+  installer="${REPO_ROOT}/scripts/ci/install-ci-toolchain.sh"
+
+  run "${installer}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Usage:"* ]]
+  [[ "${output}" == *"INFO dry-run: would install the pinned CI toolchain into /usr/local/bin"* ]]
+
+  grep -Fq 'source .devcontainer/toolchain-versions.sh' "${installer}"
+  grep -Fq 'yamllint==${YAMLLINT_VERSION}' "${installer}"
+  grep -Fq 'ruff==${RUFF_VERSION}' "${installer}"
+  grep -Fq 'markdownlint-cli2@${MARKDOWNLINT_CLI2_VERSION}' "${installer}"
+  grep -Fq '@biomejs/biome@${BIOME_VERSION}' "${installer}"
+  grep -Fq 'deno_version="${DENO_VERSION#v}"' "${installer}"
+  grep -Eq '^bats_version="[0-9]+\.[0-9]+\.[0-9]+"' "${installer}"
+  grep -Fq 'could not parse uv version from .devcontainer/Dockerfile' "${installer}"
 }
 
 @test "CI Go setup points the cache at the nested go.mod files" {
@@ -161,18 +195,22 @@ PY
   # ships every package named here, and ripgrep -- the one thing it does not
   # ship that the gate needs -- comes from its pinned release instead, so the
   # apt path should not run at all. It stays as a fallback for a changed image.
-  run bash -lc "
-    awk '/^          declare -A base_tools=\(/,/^          fi\$/' '${REPO_ROOT}/.github/workflows/ci.yml' |
-      grep -c 'apt-get update'
-  "
+  installer="${REPO_ROOT}/scripts/ci/install-ci-toolchain.sh"
+
+  # Count the command, not the comments that name it. `grep -cF 'apt-get update'`
+  # was 3: two prose mentions plus the one sudo call this is pinning.
+  run grep -cE '^[[:space:]]*sudo apt-get update$' "${installer}"
 
   [ "${status}" -eq 0 ]
   [ "${output}" -eq 1 ]
 
-  # An unconditional `apt-get update` outside that guard is the regression.
-  run bash -lc "
-    grep -nE '^          (sudo )?apt-get update' '${REPO_ROOT}/.github/workflows/ci.yml' || true
-  "
+  run grep -cF 'installing missing base tools' "${installer}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" -eq 1 ]
+
+  # The workflow must not grow its own apt path now the installer owns it.
+  run bash -lc "grep -nF 'apt-get' '${REPO_ROOT}/.github/workflows/ci.yml' || true"
 
   [ "${status}" -eq 0 ]
   [ -z "${output}" ]
@@ -314,13 +352,13 @@ PY
   [ "${output}" -eq 1 ]
 
   # Fetched from the pin in CI.
-  run grep -Fn 'https://github.com/BurntSushi/ripgrep/releases/download/${RIPGREP_VERSION}/${ripgrep_dir}.tar.gz' "${REPO_ROOT}/.github/workflows/ci.yml"
+  run grep -Fn 'https://github.com/BurntSushi/ripgrep/releases/download/${RIPGREP_VERSION}/${ripgrep_dir}.tar.gz' "${REPO_ROOT}/scripts/ci/install-ci-toolchain.sh"
 
   [ "${status}" -eq 0 ]
 
   # And never from apt, which is the regression this replaced.
   run bash -lc "
-    awk '/^          declare -A base_tools=\(/,/^          fi\$/' '${REPO_ROOT}/.github/workflows/ci.yml' |
+    awk '/missing_packages=\(\)/,/skipping apt/' '${REPO_ROOT}/scripts/ci/install-ci-toolchain.sh' |
       grep -c 'ripgrep' || true
   "
 
