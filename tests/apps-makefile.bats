@@ -5,11 +5,47 @@ setup() {
   setup_repo_root
 }
 
+# Fixture wrappers have to live under apps/ for `make -C apps` to discover
+# them, so they cannot move to BATS_TEST_TMPDIR and uniqueness has to come from
+# the name. Three tests shared zz-test-update-wrapper and two shared each of
+# the others, while this teardown removed all four -- so under `bats -j` one
+# test deleted another's fixture mid-run. That is what the "load-related" flake
+# in apps-makefile.bats was: a race, deterministic at -j 8, not a mystery.
+#
+# Scoped to this test's own fixtures. A glob over every zz-test-* would
+# reintroduce the same race from the cleanup side.
+# Tests that publish a fixture wrapper must not run concurrently with each
+# other. Unique names are not enough: `make -C apps <target>` enumerates every
+# wrapper present when it parses, then recurses into each one, so a fixture
+# belonging to another test that finishes first disappears mid-recursion and
+# make stops with "No such file or directory". The coupling is the shared
+# apps/ tree, which the fixtures cannot leave -- discovery is what is under
+# test.
+#
+# mkdir is the mutex because it is atomic on every filesystem here and needs no
+# flock, which macOS does not ship. Released in teardown so a failing test
+# cannot wedge the suite.
+apps_wrapper_lock() {
+  local lock="${REPO_ROOT}/.run/apps-wrapper.lock"
+  local waited=0
+
+  mkdir -p "${REPO_ROOT}/.run"
+  until mkdir "${lock}" 2>/dev/null; do
+    sleep 0.2
+    waited=$((waited + 1))
+    if [ "${waited}" -ge 600 ]; then
+      echo "timed out waiting for ${lock}" >&2
+      return 1
+    fi
+  done
+  APPS_WRAPPER_LOCK="${lock}"
+}
+
 teardown() {
-  rm -rf "${REPO_ROOT}/apps/zz-test-update-wrapper"
-  rm -rf "${REPO_ROOT}/apps/zz-test-app-wrapper"
-  rm -rf "${REPO_ROOT}/apps/zz-test-js-wrapper"
-  rm -rf "${REPO_ROOT}/apps/zz-test-compose-wrapper"
+  rm -rf "${REPO_ROOT}/apps/zz-test-${BATS_TEST_NUMBER}-"*
+  if [ -n "${APPS_WRAPPER_LOCK:-}" ]; then
+    rmdir "${APPS_WRAPPER_LOCK}" 2>/dev/null || true
+  fi
 }
 
 @test "apps make help exposes the Trivy security workflow" {
@@ -100,7 +136,9 @@ PY
 }
 
 @test "apps test delegates to the default app checks" {
-  temp_app="${REPO_ROOT}/apps/zz-test-app-wrapper"
+  apps_wrapper_lock
+
+  temp_app="${REPO_ROOT}/apps/zz-test-${BATS_TEST_NUMBER}-app-wrapper"
   rm -rf "${temp_app}"
   mkdir -p "${temp_app}"
   printf '%s\n' \
@@ -138,7 +176,9 @@ PY
 }
 
 @test "apps js-check delegates to app wrapper JavaScript checks" {
-  temp_app="${REPO_ROOT}/apps/zz-test-js-wrapper"
+  apps_wrapper_lock
+
+  temp_app="${REPO_ROOT}/apps/zz-test-${BATS_TEST_NUMBER}-js-wrapper"
   rm -rf "${temp_app}"
   mkdir -p "${temp_app}"
   printf '%s\n' \
@@ -274,7 +314,9 @@ PY
 }
 
 @test "apps compose-smoke delegates to app wrapper compose smoke checks" {
-  temp_app="${REPO_ROOT}/apps/zz-test-compose-wrapper"
+  apps_wrapper_lock
+
+  temp_app="${REPO_ROOT}/apps/zz-test-${BATS_TEST_NUMBER}-compose-wrapper"
   rm -rf "${temp_app}"
   mkdir -p "${temp_app}"
   printf '%s\n' \
@@ -312,7 +354,9 @@ PY
 }
 
 @test "apps dynamic compose-smoke app target delegates to matching wrapper" {
-  temp_app="${REPO_ROOT}/apps/zz-test-compose-wrapper"
+  apps_wrapper_lock
+
+  temp_app="${REPO_ROOT}/apps/zz-test-${BATS_TEST_NUMBER}-compose-wrapper"
   rm -rf "${temp_app}"
   mkdir -p "${temp_app}"
   printf '%s\n' \
@@ -322,7 +366,7 @@ PY
     '	@echo compose wrapper' \
     >"${temp_app}/Makefile"
 
-  run make -C "${REPO_ROOT}/apps" compose-smoke-zz-test-compose-wrapper
+  run make -C "${REPO_ROOT}/apps" "compose-smoke-${temp_app##*/}"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"compose wrapper"* ]]
@@ -367,7 +411,9 @@ PY
 }
 
 @test "apps update delegates to each app root update workflow" {
-  temp_app="${REPO_ROOT}/apps/zz-test-update-wrapper"
+  apps_wrapper_lock
+
+  temp_app="${REPO_ROOT}/apps/zz-test-${BATS_TEST_NUMBER}-update-wrapper"
   rm -rf "${temp_app}"
   mkdir -p "${temp_app}"
   printf '%s\n' \
@@ -403,7 +449,9 @@ PY
 }
 
 @test "apps wrapper target discovery supports continued MAKE_KNOWN_GOALS declarations" {
-  temp_app="${REPO_ROOT}/apps/zz-test-update-wrapper"
+  apps_wrapper_lock
+
+  temp_app="${REPO_ROOT}/apps/zz-test-${BATS_TEST_NUMBER}-update-wrapper"
   rm -rf "${temp_app}"
   mkdir -p "${temp_app}"
   printf '%s\n' \
@@ -417,12 +465,14 @@ PY
   run make -n -C "${REPO_ROOT}/apps" update
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"make --no-print-directory -C ./zz-test-update-wrapper update"* ]]
+  [[ "${output}" == *"make --no-print-directory -C ./${temp_app##*/} update"* ]]
   rm -rf "${temp_app}"
 }
 
 @test "apps wrapper target discovery uses evaluated MAKE_KNOWN_GOALS additions" {
-  temp_app="${REPO_ROOT}/apps/zz-test-update-wrapper"
+  apps_wrapper_lock
+
+  temp_app="${REPO_ROOT}/apps/zz-test-${BATS_TEST_NUMBER}-update-wrapper"
   rm -rf "${temp_app}"
   mkdir -p "${temp_app}"
   printf '%s\n' \
@@ -436,12 +486,14 @@ PY
   run make -n -C "${REPO_ROOT}/apps" update
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"make --no-print-directory -C ./zz-test-update-wrapper update"* ]]
+  [[ "${output}" == *"make --no-print-directory -C ./${temp_app##*/} update"* ]]
   rm -rf "${temp_app}"
 }
 
 @test "apps Makefile contract helpers use evaluated MAKE_KNOWN_GOALS additions" {
-  temp_app="${REPO_ROOT}/apps/zz-test-app-wrapper"
+  apps_wrapper_lock
+
+  temp_app="${REPO_ROOT}/apps/zz-test-${BATS_TEST_NUMBER}-app-wrapper"
   rm -rf "${temp_app}"
   mkdir -p "${temp_app}"
   printf '%s\n' \
@@ -458,7 +510,7 @@ from pathlib import Path
 from tests.app_contracts import app_wrapper_names_with_target
 
 names = app_wrapper_names_with_target(Path("${REPO_ROOT}"), "app-test")
-assert "zz-test-app-wrapper" in names, names
+assert "${temp_app##*/}" in names, names
 print("validated evaluated app wrapper target helper")
 PY
 
