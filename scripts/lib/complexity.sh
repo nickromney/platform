@@ -25,7 +25,68 @@
 # does introduce one. `case` is counted through its arms, not its head.
 _COMPLEXITY_KEYWORDS="if elif while until for"
 
-# Count decision points on one line of shell. The line must already have had
+# Written by complexity_blank_quoted; see the note on its definition.
+COMPLEXITY_QUOTE=""
+COMPLEXITY_BLANKED=""
+
+# Blank the contents of quoted spans, preserving length so offsets still line
+# up. Shell scripts here embed awk and sed programs as quoted arguments, and
+# those programs have their own `for`, `if` and `||`. Counting them would
+# measure the embedded language rather than the bash function holding it --
+# scripts/lib/semver.sh scored 2 on the strength of a `for` belonging to an awk
+# BEGIN block. Inflation like that is systematic in this repo, not incidental.
+#
+# The quote itself is kept, so a `case` arm written as 'x') still reads as an arm.
+#
+# Quote state carries between lines through COMPLEXITY_QUOTE, because the
+# programs that matter here open on one line and close many lines later --
+# scripts/lib/semver.sh opens an awk program on line 9 and the `for` that was
+# being miscounted sits on line 15. So this writes its result to a global
+# instead of printing it: a command substitution would run it in a subshell and
+# discard the carried state.
+complexity_blank_quoted() {
+  local line="$1"
+  local len=${#line}
+  local i=0
+  local out="" ch=""
+  local quote="${COMPLEXITY_QUOTE}"
+
+  while [ "${i}" -lt "${len}" ]; do
+    ch="${line:${i}:1}"
+    if [ -n "${quote}" ]; then
+      if [ "${ch}" = "${quote}" ]; then
+        quote=""
+        out="${out}${ch}"
+      elif [ "${ch}" = "\\" ] && [ "${quote}" = '"' ]; then
+        # Escaped character inside double quotes: blank both halves.
+        out="${out}  "
+        i=$((i + 1))
+      else
+        out="${out} "
+      fi
+      i=$((i + 1))
+      continue
+    fi
+
+    case "${ch}" in
+      "'"|'"')
+        quote="${ch}"
+        out="${out}${ch}"
+        ;;
+      *)
+        out="${out}${ch}"
+        ;;
+    esac
+    i=$((i + 1))
+  done
+
+  COMPLEXITY_QUOTE="${quote}"
+  COMPLEXITY_BLANKED="${out}"
+}
+
+# Count decision points on one line of shell. The line must already have been
+# passed through complexity_blank_quoted, or an embedded awk program is counted
+# as though it were bash. The line must already have had
 # its comment stripped, or a `# && something` remark inflates the score.
 complexity_line_points() {
   local line="$1"
@@ -72,6 +133,9 @@ complexity_score_range() {
   local lineno=0
   local line="" stripped=""
 
+  COMPLEXITY_QUOTE=""
+  COMPLEXITY_BLANKED=""
+
   while IFS= read -r line || [ -n "${line}" ]; do
     lineno=$((lineno + 1))
     if [ "${lineno}" -lt "${start}" ]; then
@@ -80,7 +144,8 @@ complexity_score_range() {
     if [ "${lineno}" -gt "${end}" ]; then
       break
     fi
-    stripped="$(mutation_strip_comment "${line}")"
+    complexity_blank_quoted "${line}"
+    stripped="$(mutation_strip_comment "${COMPLEXITY_BLANKED}")"
     score=$((score + $(complexity_line_points "${stripped}")))
   done <"${file}"
 
