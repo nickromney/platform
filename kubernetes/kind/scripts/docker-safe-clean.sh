@@ -5,6 +5,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+# shellcheck source=scripts/lib/timeout.sh
+source "${REPO_ROOT}/scripts/lib/timeout.sh"
+
+DOCKER_READ_TIMEOUT="${DOCKER_READ_TIMEOUT:-5}"
+DOCKER_DF_TIMEOUT="${DOCKER_DF_TIMEOUT:-10}"
 
 INCLUDE_BUILDER_CACHE=1
 INCLUDE_DANGLING_IMAGES=1
@@ -41,8 +46,12 @@ fail() {
   exit 1
 }
 
+# Bounded for the same reason as the reads below: this is the first thing the
+# preview calls, so an unbounded `docker info` against a wedged daemon stalls
+# the lint probe before a single line of the plan is printed.
 docker_ready() {
-  command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1
+  command -v docker >/dev/null 2>&1 &&
+    run_with_timeout "${DOCKER_READ_TIMEOUT}" docker info >/dev/null 2>&1
 }
 
 require_docker() {
@@ -50,14 +59,34 @@ require_docker() {
   docker info >/dev/null 2>&1 || fail "docker daemon is not reachable"
 }
 
+# Every read below runs on the no-args preview path, which scripts/audit-shell-
+# scripts.sh probes on each `make lint` -- so an unbounded read here stalls the
+# lint gate, and the pre-push hook behind it, until someone notices. A busy
+# daemon makes that routine rather than exotic: `docker system df` walks every
+# image, volume and build cache entry, and has been measured here at over 45s
+# while `docker images` took 17s.
+#
+# So reads are bounded and the plan degrades to a named gap. Only reads: the
+# prune and rm calls on the --execute path stay unbounded, because killing a
+# cleanup halfway is worse than waiting for it.
+docker_read() {
+  run_with_timeout "${DOCKER_READ_TIMEOUT}" docker "$@"
+}
+
 print_docker_df() {
+  local rc=0
   echo "Docker disk usage:"
-  docker system df 2>/dev/null || echo "  docker system df unavailable"
+  run_with_timeout "${DOCKER_DF_TIMEOUT}" docker system df 2>/dev/null || rc=$?
+  if [[ "${rc}" -eq 124 ]]; then
+    echo "  docker system df timed out after ${DOCKER_DF_TIMEOUT}s"
+  elif [[ "${rc}" -ne 0 ]]; then
+    echo "  docker system df unavailable"
+  fi
 }
 
 print_preserved_containers() {
   echo "Preserved containers:"
-  docker ps -a \
+  docker_read ps -a \
     --filter "name=^/${KIND_CONTAINER_PREFIX}" \
     --filter "name=^/${CACHE_CONTAINER_NAME}$" \
     --format '  {{.Names}}	{{.Image}}	{{.Status}}' |
@@ -65,7 +94,7 @@ print_preserved_containers() {
 }
 
 stopped_container_ids_to_remove() {
-  docker ps -a \
+  docker_read ps -a \
     --filter "status=created" \
     --filter "status=exited" \
     --filter "status=dead" \
@@ -80,17 +109,17 @@ stopped_container_ids_to_remove() {
 used_image_ids() {
   local image_ref=""
 
-  docker ps -a --format '{{.Image}}' |
+  docker_read ps -a --format '{{.Image}}' |
     while IFS= read -r image_ref; do
       [[ -z "${image_ref}" ]] && continue
-      docker image inspect --format '{{.Id}}' "${image_ref}" 2>/dev/null || true
+      docker_read image inspect --format '{{.Id}}' "${image_ref}" 2>/dev/null || true
     done |
     sed 's/^sha256://' |
     LC_ALL=C sort -u
 }
 
 protected_image_ids() {
-  docker image ls --format '{{.ID}}	{{.Repository}}:{{.Tag}}' |
+  docker_read image ls --format '{{.ID}}	{{.Repository}}:{{.Tag}}' |
     awk -F '\t' -v protected_regex="${PROTECTED_IMAGE_REF_REGEX}" '
       $2 ~ protected_regex { print $1 }
     ' |
@@ -108,7 +137,7 @@ unused_image_rows() {
   used_image_ids >"${used_file}"
   protected_image_ids >"${protected_file}"
 
-  docker image ls --format '{{.ID}}	{{.Repository}}:{{.Tag}}	{{.Size}}' |
+  docker_read image ls --format '{{.ID}}	{{.Repository}}:{{.Tag}}	{{.Size}}' |
     awk -F '\t' -v used_file="${used_file}" -v protected_file="${protected_file}" '
       BEGIN {
         while ((getline line < used_file) > 0) {
@@ -139,7 +168,7 @@ print_stopped_container_plan() {
   local rows=""
 
   rows="$(
-    docker ps -a \
+    docker_read ps -a \
       --filter "status=created" \
       --filter "status=exited" \
       --filter "status=dead" \

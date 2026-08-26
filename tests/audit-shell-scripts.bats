@@ -5,17 +5,21 @@ setup() {
   setup_repo_root
   export AUDIT_SOURCE="${REPO_ROOT}/scripts/audit-shell-scripts.sh"
   export SHELL_CLI_SOURCE="${REPO_ROOT}/scripts/lib/shell-cli.sh"
+  # The audit sources timeout.sh to bound its probes, so the fixture repo needs
+  # it too or the audit dies before reporting anything.
+  export TIMEOUT_SOURCE="${REPO_ROOT}/scripts/lib/timeout.sh"
   export SHELL_CLI_POSIX_SOURCE="${REPO_ROOT}/scripts/lib/shell-cli-posix.sh"
   export TEST_REPO="${BATS_TEST_TMPDIR}/repo"
   mkdir -p "${TEST_REPO}/scripts/lib"
   cp "${AUDIT_SOURCE}" "${TEST_REPO}/scripts/audit-shell-scripts.sh"
   cp "${SHELL_CLI_SOURCE}" "${TEST_REPO}/scripts/lib/shell-cli.sh"
   cp "${SHELL_CLI_POSIX_SOURCE}" "${TEST_REPO}/scripts/lib/shell-cli-posix.sh"
+  cp "${TIMEOUT_SOURCE}" "${TEST_REPO}/scripts/lib/timeout.sh"
   chmod +x "${TEST_REPO}/scripts/audit-shell-scripts.sh"
   git -C "${TEST_REPO}" init -q
   git -C "${TEST_REPO}" config user.email "test@example.com"
   git -C "${TEST_REPO}" config user.name "Test User"
-  git -C "${TEST_REPO}" add scripts/audit-shell-scripts.sh scripts/lib/shell-cli.sh scripts/lib/shell-cli-posix.sh
+  git -C "${TEST_REPO}" add scripts/audit-shell-scripts.sh scripts/lib/shell-cli.sh scripts/lib/shell-cli-posix.sh scripts/lib/timeout.sh
 }
 
 write_tracked_file() {
