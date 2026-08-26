@@ -12,6 +12,8 @@ setup() {
   export BUN_CALLS="${BATS_TEST_TMPDIR}/bun-calls"
   export CURL_CALLS="${BATS_TEST_TMPDIR}/curl-calls"
   export CHILD_TERM_FLAG="${BATS_TEST_TMPDIR}/child-term"
+  export INSTALL_STARTED_AT="${BATS_TEST_TMPDIR}/install-started-at"
+  export CHILD_TERM_AT="${BATS_TEST_TMPDIR}/child-term-at"
   export HOME="${BATS_TEST_TMPDIR}/home"
   export PLAYWRIGHT_BROWSER_INSTALL_TIMEOUT_SECONDS=5
   export PLAYWRIGHT_BROWSER_INSTALL_RETRIES=2
@@ -48,9 +50,12 @@ case "$*" in
         : >"${PLAYWRIGHT_BROWSERS_PATH}/chromium_headless_shell-1208/INSTALLATION_COMPLETE"
         ;;
       timeout)
+        # Hi-res because the interesting quantity is under two seconds and
+        # BSD date has no %N. perl is already a dependency of the script.
+        perl -MTime::HiRes=time -e 'printf "%.3f", time' >"${INSTALL_STARTED_AT}"
         trap '' TERM
         (
-          trap 'printf child-term >"${CHILD_TERM_FLAG}"; exit 0' TERM
+          trap 'perl -MTime::HiRes=time -e '"'"'printf "%.3f", time'"'"' >"${CHILD_TERM_AT}"; printf child-term >"${CHILD_TERM_FLAG}"; exit 0' TERM
           while :; do sleep 1; done
         ) &
         wait
@@ -181,4 +186,63 @@ complete_cache() {
   [[ "${output}" == *"make playwright-install"* ]]
   [[ "${output}" == *"PLATFORM_PLAYWRIGHT_MODE=docker"* ]]
   [[ "${output}" == *"PLATFORM_PLAYWRIGHT_CHANNEL=chrome"* ]]
+}
+
+@test "install timeout waits the full budget before killing the process group" {
+  # Regression guard for a flake that hit the gate once parallel runs began.
+  #
+  # `date +%s` has one-second granularity, and the elapsed check used to run
+  # BEFORE the first sleep. If a second boundary fell between capturing the
+  # start time and the first poll, `now - start` was already 1, so a 1s budget
+  # fired immediately: the script announced "timed out after 1s" having waited
+  # essentially none of it, and killed the install stub before it could append
+  # its line to INSTALL_CALLS. The visible symptom was the neighbouring test
+  # asserting two recorded attempts and finding one, intermittently, which
+  # reads like load sensitivity and is not.
+  #
+  # Asserted as a lower bound on purpose. A busy machine can only make the gap
+  # longer, so unlike an equality on the attempt count this cannot flake under
+  # load -- which is the whole failure mode being fixed.
+  export INSTALL_MODE=timeout
+  export PLAYWRIGHT_BROWSER_INSTALL_TIMEOUT_SECONDS=1
+  export PLAYWRIGHT_BROWSER_INSTALL_RETRIES=1
+
+  # Force the boundary rather than wait for it. The defect needs a second tick
+  # to fall between the script capturing start_seconds and its first poll,
+  # which happens rarely enough in real time that a wall-clock test catches it
+  # in roughly none of eight runs -- measured, after a first draft of this test
+  # did exactly that. This date stub makes the crossing certain: the first call
+  # is the start capture, every later one is a second later.
+  export DATE_STUB_STATE="${BATS_TEST_TMPDIR}/date-calls"
+  cat >"${TEST_BIN}/date" <<'STUB'
+#!/bin/sh
+n=0
+if [ -r "${DATE_STUB_STATE}" ]; then read -r n <"${DATE_STUB_STATE}"; fi
+n=$((n + 1))
+printf '%s
+' "${n}" >"${DATE_STUB_STATE}"
+if [ "${n}" -eq 1 ]; then echo 1000; else echo 1001; fi
+STUB
+  chmod +x "${TEST_BIN}/date"
+
+  run "${SCRIPT}" --execute
+
+  [ "${status}" -ne 0 ]
+  [ -f "${INSTALL_STARTED_AT}" ]
+  [ -f "${CHILD_TERM_AT}" ]
+
+  local waited
+  waited="$(perl -e '
+    open(my $a, "<", $ARGV[0]) or die; my $started = <$a>;
+    open(my $b, "<", $ARGV[1]) or die; my $termed  = <$b>;
+    printf "%d", ($termed - $started) * 1000;
+  ' "${INSTALL_STARTED_AT}" "${CHILD_TERM_AT}")"
+
+  # 500ms, sitting between the two outcomes rather than near either. The
+  # measured gap is a real second of sleep minus the stub's own startup, which
+  # lands around 890-905ms; the defect this guards produces close to 0ms. A
+  # first draft of this test used 900ms and failed about half its runs -- the
+  # threshold was inside the distribution it was meant to sit outside, which is
+  # how you write a flake while fixing one.
+  [ "${waited}" -ge 500 ]
 }
