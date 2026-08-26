@@ -56,8 +56,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 preview() {
+  # ${#PATHS[@]} not ${#PATHS[@]:-0}: the length form takes no default, and the
+  # combination is a bad substitution rather than a fallback. It is safe on an
+  # empty array under `set -u` even on bash 3.2, which "${PATHS[@]}" is not --
+  # so the count is read here and the array only expanded once it is non-empty.
   shell_cli_print_dry_run_summary \
-    "would report cyclomatic complexity above ${MAX_COMPLEXITY} for ${#PATHS[@]:-0} path(s)"
+    "would report cyclomatic complexity above ${MAX_COMPLEXITY} for ${#PATHS[@]} path(s)"
 }
 
 main() {
