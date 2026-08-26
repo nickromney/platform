@@ -48,28 +48,31 @@ CHECK_WORKTREE_UNCHANGED ?= scripts/check-worktree-unchanged.sh
 CI_RECEIPT_SCRIPT ?= scripts/ci-receipt.sh
 RUN_CI_LINUX_SCRIPT ?= scripts/run-ci-linux.sh
 RUN_BATS_SUITE ?= scripts/run-bats-suite.sh
-# Serial by default, on the evidence rather than by preference.
+# Parallel by default, on the evidence rather than by preference.
 #
-# Three defects were fixed to make parallel viable: a concurrency test asserting
+# Four defects were fixed to make parallel viable: a concurrency test asserting
 # a wall-clock band while writing to a fixed /tmp path, a retry test with ~1s of
-# margin between a 1s timeout and a 2s sleep, and a sort assertion of ours that
-# did not expect the run to be split into two batches. Five files that mutate
-# state shared with the real repo run in a serial phase in run-bats-suite.sh.
+# margin between a 1s timeout and a 2s sleep, a sort assertion of ours that
+# did not expect the run to be split into two batches, and the apps-makefile
+# residual described below. Five files that mutate state shared with the real
+# repo run in a serial phase in run-bats-suite.sh.
 #
-# That got it from "six failures, never the same six" to 5 clean runs out of 6.
-# The sixth failed two tests in tests/apps-makefile.bats -- a file already in the
-# serial phase, which passes alone, and which does not fail when run beside
-# either its serial neighbours or the three files added just before it. So the
-# residual is load-related and not yet understood.
+# The apps-makefile residual was recorded here as "load-related and not yet
+# understood", on the strength of one failure in six. It was neither: it was two
+# races, and at -j 8 the first reproduced 6 times out of 6. Intermittency was
+# only ever a function of how many jobs the box happened to run. Tests shared
+# fixture wrapper paths under apps/ while teardown removed all of them, so one
+# test deleted another's fixture; and `make -C apps <target>` recurses into
+# every wrapper it finds at parse time, so a fixture belonging to a
+# faster-finishing test vanished mid-recursion. Unique names fix the first, a
+# mutex around the eight tests that publish a fixture fixes the second.
 #
-# One flake in six is why this stays off. The whole argument for the serial phase
-# was that a gate reporting different failures each run is worth less than a slow
-# one that does not; defaulting to auto on 5/6 would contradict it.
-#
-# Opt in with `make test-ci BATS_JOBS=auto` -- roughly 180-420s against 715s
-# serial, varying with what else is on the box. Diagnosing the apps-makefile
-# residual is what would let this flip.
-BATS_JOBS ?= off
+# 4 clean full-gate runs out of 4 after that, at 185-208s against 715s serial.
+# Fall back with `make test-ci BATS_JOBS=off` if a new flake appears; the
+# argument that a gate reporting different failures each run is worth less than
+# a slow one that does not has not changed, so a recurrence should send this
+# back to off until it is diagnosed rather than retried.
+BATS_JOBS ?= auto
 CI_WORKTREE_SNAPSHOT ?= $(CURDIR)/.run/worktree-status
 # Tests that depend only on the host toolchain: no cluster, no Docker, no
 # network. This is the subset that must also pass on macOS, where the stock awk
