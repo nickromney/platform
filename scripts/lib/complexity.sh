@@ -84,11 +84,13 @@ complexity_blank_quoted() {
   COMPLEXITY_BLANKED="${out}"
 }
 
-# Count decision points on one line of shell. The line must already have been
-# passed through complexity_blank_quoted, or an embedded awk program is counted
-# as though it were bash. The line must already have had
-# its comment stripped, or a `# && something` remark inflates the score.
-complexity_line_points() {
+# Count decision points on a line that has ALREADY been blanked and had its
+# comment stripped. Private, because getting that wrong returns a plausible
+# number rather than an error: an unblanked line silently counts whatever awk
+# or sed program it carries, and a line still holding its comment counts a
+# `# && something` remark. The public entry point below blanks for you, so the
+# only callers that have to hold this contract live in this file.
+_complexity_count_points() {
   local line="$1"
   local points=0
   local keyword="" pos=""
@@ -123,6 +125,14 @@ complexity_line_points() {
   printf '%s\n' "${points}"
 }
 
+# Count decision points on one line of shell, blanking quoted spans first.
+# Safe to call on raw source. Single-line use starts from whatever quote state
+# is current, which for a standalone call is none.
+complexity_line_points() {
+  complexity_blank_quoted "$1"
+  _complexity_count_points "${COMPLEXITY_BLANKED}"
+}
+
 # Cyclomatic complexity of the line range [start,end] of a file: one for the
 # entry path, plus every decision point inside it.
 complexity_score_range() {
@@ -146,7 +156,7 @@ complexity_score_range() {
     fi
     complexity_blank_quoted "${line}"
     stripped="$(mutation_strip_comment "${COMPLEXITY_BLANKED}")"
-    score=$((score + $(complexity_line_points "${stripped}")))
+    score=$((score + $(_complexity_count_points "${stripped}")))
   done <"${file}"
 
   printf '%s\n' "${score}"

@@ -119,35 +119,35 @@ blanked() {
   [ "${#output}" -eq 13 ]
 }
 
-@test "an operator inside quotes is not a branch once blanked" {
-  # complexity_line_points counts an already-blanked line by contract, so this
-  # asserts both halves: the raw line does count the operator, and blanking is
-  # what removes it. Asserting only the blanked half would let a mutant that
-  # never blanks anything pass, since most lines carry no quotes at all.
+@test "the public entry point blanks for you; the private counter does not" {
+  # This is the contract, pinned rather than described in a comment. Calling
+  # the raw counter on unblanked source returns a plausible number instead of
+  # an error -- 1 here, from an operator that is inside quotes and branches
+  # nothing. That is precisely why the raw counter is private and this public
+  # one blanks first. If someone later makes complexity_line_points stop
+  # blanking, this fails rather than quietly inflating every score in the repo.
   points 'echo "a && b"'
   [ "${status}" -eq 0 ]
-  [ "${output}" = "1" ]
-
-  run bash -c "
-    source '${LIB}'
-    complexity_blank_quoted 'echo \"a && b\"'
-    complexity_line_points \"\${COMPLEXITY_BLANKED}\"
-  "
-  [ "${status}" -eq 0 ]
   [ "${output}" = "0" ]
+
+  run bash -c "source '${LIB}'; _complexity_count_points 'echo \"a && b\"'"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "1" ]
 }
 
 @test "quote state carries from one line to the next" {
   # The defect this library was fixed for: an awk program opens on one line and
   # its `for` sits several lines later, where nothing on the line itself shows
-  # it is quoted. Feed the opening line first, then assert the follow-on line
-  # is treated as quoted rather than as shell.
+  # it is quoted.
+  #
+  # Uses the private counter deliberately. The public entry point blanks its
+  # own argument, which would re-enter the quote scanner and overwrite the very
+  # state under test -- the hazard that split these two functions apart.
   run bash -c "
     source '${LIB}'
     complexity_blank_quoted \"awk '\"
-    complexity_line_points \"\${COMPLEXITY_BLANKED}\" >/dev/null
     complexity_blank_quoted '  for (i = 0; i < 3; i++) {'
-    complexity_line_points \"\${COMPLEXITY_BLANKED}\"
+    _complexity_count_points \"\${COMPLEXITY_BLANKED}\"
   "
 
   [ "${status}" -eq 0 ]
@@ -155,13 +155,13 @@ blanked() {
 }
 
 @test "a closing quote returns the scanner to shell" {
-  # The mirror of the test above: without this, a suite could pass by treating
+  # The mirror of the test above: without it, a suite could pass by treating
   # everything after the first quote as forever-quoted.
   run bash -c "
     source '${LIB}'
     complexity_blank_quoted \"awk 'program'\"
     complexity_blank_quoted 'if true; then'
-    complexity_line_points \"\${COMPLEXITY_BLANKED}\"
+    _complexity_count_points \"\${COMPLEXITY_BLANKED}\"
   "
 
   [ "${status}" -eq 0 ]
