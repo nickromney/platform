@@ -1,0 +1,22 @@
+# Bats files that write into the real checkout and are deliberately neither
+# rewritten nor added to SERIAL_ONLY_FILES.
+#
+# The criterion in scripts/run-bats-suite.sh -- a test writing outside its own
+# BATS_TEST_TMPDIR -- is a proxy for the thing that actually matters, which is
+# whether another test can observe the write. A write to a uniquely named path
+# that nothing else reads is contained by naming, and serialising it would cost
+# concurrency to buy nothing. An entry here is that argument, made explicitly
+# and in one place, rather than left as an unexplained absence from the list.
+#
+# Every entry needs a reason. If you cannot write one, the file belongs in
+# SERIAL_ONLY_FILES or, better, its writes belong in BATS_TEST_TMPDIR.
+#
+# tests/idp-core-components.bats
+#   Writes .run/idp-core-components-test/. The location is load-bearing rather
+#   than careless: idp-environment.sh emits a relative `resources:` path only
+#   while the request directory sits under REPO_ROOT and an absolute one
+#   otherwise, and kubectl kustomize refuses absolute resource paths, so moving
+#   the directory into BATS_TEST_TMPDIR makes `kubectl kustomize` fail. The
+#   subdirectory is uniquely named, is gitignored, and is read by no other test,
+#   so no test can observe it.
+tests/idp-core-components.bats
