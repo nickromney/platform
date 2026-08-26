@@ -86,6 +86,20 @@ def apps_readme_go_app_coverage_contract_violations(repo_root: Path) -> tuple[st
     return tuple(violations)
 
 
+_JSDOC_TYPE_ANNOTATION = re.compile(r"/\*\*\s*@type\s*\{[^}]*\}\s*\*/")
+
+
+def _without_jsdoc_type_annotations(line: str) -> str:
+    """Drop JSDoc @type annotations before scanning a line for placeholder tokens.
+
+    `unknown` inside `/** @type {unknown} */` is TypeScript's top type, written
+    in the JSDoc form this repo type-checks with `deno check --check-js`. It is a
+    type name in an annotation, not a placeholder value that ships to a user, so
+    it is not what this contract is looking for.
+    """
+    return _JSDOC_TYPE_ANNOTATION.sub(" ", line)
+
+
 def lightweight_app_source_unknown_token_contract_violations(repo_root: Path) -> tuple[str, ...]:
     apps_root = repo_root / "apps"
     text_suffixes = {
@@ -111,7 +125,12 @@ def lightweight_app_source_unknown_token_contract_violations(repo_root: Path) ->
         if "backstage" in parts or ".gitea" in parts:
             continue
         for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-            if re.search(r"\bunknown\b|Unknown", line):
+            # \bUnknown\b, not bare Unknown. Without the boundaries the second
+            # alternative matched inside any identifier that merely contained
+            # the word, so a Go test named TestUnknownToolReturnsError was
+            # reported as a placeholder. The contract is about `unknown` shipping
+            # as a value, which is what the metadata sibling above checks for.
+            if re.search(r"\bunknown\b|\bUnknown\b", _without_jsdoc_type_annotations(line)):
                 violations.append(f"{relative.as_posix()}:{line_no}")
 
     return tuple(violations)

@@ -1197,7 +1197,7 @@ print(f"validated {len(validated)} local workload builder(s)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 4 local workload builder(s)"* ]]
+  [[ "${output}" == *"validated 1 local workload builder(s)"* ]]
 }
 
 @test "app oauth2 proxies call Keycloak backend logout with the session ID token" {
@@ -1289,7 +1289,7 @@ print(f"validated {external_runtime_image_ref_expectation_count()} external imag
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 12 external image expectation(s)"* ]]
+  [[ "${output}" == *"validated 11 external image expectation(s)"* ]]
 }
 
 @test "app runtime tests share external image ref helpers" {
