@@ -87,6 +87,7 @@ Score = killed / (killed + survived). Timeouts count as killed.
 | `shell-cli.sh` | 16 | 16 | 0 | 100% | `tests/shell-cli-lib.bats` |
 | `shell-cli-posix.sh` | 9 | 9 | 0 | 100% | `tests/shell-cli-posix-lib.bats` |
 | `compose-cli.sh` | 12 | 12 | 0 | 100% | `tests/compose-cli-lib.bats` |
+| `complexity.sh` | 9 | 9 | 0 | 100% | `tests/complexity-lib.bats` |
 
 ## Accepted equivalents
 
@@ -172,3 +173,11 @@ Every script in `scripts/lib/` now has an oracle and a score. What is left:
 1. Resolve the cache-dir substitution question above.
 2. Hold the line: a new function in `scripts/lib/` arrives with its own suite,
    and a re-mutation is what proves the suite is worth having.
+
+`complexity.sh` is the first script added under that rule. Its suite passed on
+the first run and still left three `BOUNDARY_CHECK` mutants alive, all of them
+real gaps rather than equivalents: every range test opened on a `name() {` line
+and closed on a bare `}`, so nothing exercised a decision on the first or last
+line of a range, and the blanking test never asserted the blanked string for an
+unterminated quote. Sixteen passing tests is not the same as sixteen tests that
+would notice.
