@@ -15,17 +15,47 @@
 setup() {
   source "$(git -C "$(dirname "${BATS_TEST_FILENAME}")" rev-parse --show-toplevel)/tests/test_helper.bash"
   setup_repo_root
+  # The library still comes from the real checkout; only the tree being
+  # fingerprinted is a fixture.
+  export SOURCE_REPO_ROOT="${REPO_ROOT}"
   # A locale that cannot plausibly be installed, so the assertion holds on any
   # host regardless of which locales it happens to have generated.
   export BROKEN_LOCALE="zz_ZZ.UTF-8"
+
+  # These tests used to fingerprint apps/shared/apphttp in the real checkout.
+  # That made them readers of a tree the rest of the suite writes to: the
+  # stability test hashes the same path twice and compares, so any concurrent
+  # create or delete under apps/ drifted the digest and failed the run. It
+  # passed alone and failed in a full gate, which is the signature. A fixture
+  # under BATS_TEST_TMPDIR is private to this test, so the comparison measures
+  # the locale and nothing else.
+  #
+  # The names are mixed-case so the fixture is shaped like the module it
+  # replaces. That is presentation, not coverage: BROKEN_LOCALE is by
+  # construction not installed, so its collation falls back to C and matches
+  # LANG=C exactly. These two locales cannot disagree about sort order, so
+  # neither this fixture nor the apphttp tree before it would catch an unpinned
+  # `sort` inside source_fingerprint_tag. Catching that needs an installed
+  # locale that collates differently -- en_US.UTF-8 orders these
+  # alpha/Beta/Gamma/go.mod/Makefile against C's
+  # Beta/Gamma/Makefile/alpha/go.mod -- and this file has to pass on hosts that
+  # have generated no locales at all, which is the whole reason it exists.
+  export FIXTURE_ROOT="${BATS_TEST_TMPDIR}/fingerprint-fixture"
+  export FIXTURE_MODULE="apps/shared/zzmodule"
+  mkdir -p "${FIXTURE_ROOT}/${FIXTURE_MODULE}"
+  printf 'package zzmodule\n' >"${FIXTURE_ROOT}/${FIXTURE_MODULE}/alpha.go"
+  printf 'package zzmodule\n' >"${FIXTURE_ROOT}/${FIXTURE_MODULE}/Beta.go"
+  printf 'package zzmodule\n' >"${FIXTURE_ROOT}/${FIXTURE_MODULE}/Gamma.go"
+  printf 'module platform.local/zzmodule\n' >"${FIXTURE_ROOT}/${FIXTURE_MODULE}/go.mod"
+  printf 'test:\n\t@true\n' >"${FIXTURE_ROOT}/${FIXTURE_MODULE}/Makefile"
 }
 
 @test "source fingerprinting emits no locale warnings on a host with an uninstalled LANG" {
   run env -u LC_ALL -u LANGUAGE LANG="${BROKEN_LOCALE}" bash -c "
     set -euo pipefail
-    export REPO_ROOT='${REPO_ROOT}'
-    source '${REPO_ROOT}/kubernetes/workflow/image-catalog-lib.sh'
-    source_fingerprint_tag apps/shared/apphttp >/dev/null
+    export REPO_ROOT='${FIXTURE_ROOT}'
+    source '${SOURCE_REPO_ROOT}/kubernetes/workflow/image-catalog-lib.sh'
+    source_fingerprint_tag '${FIXTURE_MODULE}' >/dev/null
   "
 
   [ "${status}" -eq 0 ]
@@ -38,10 +68,10 @@ setup() {
   # would disagree about whether an image needed rebuilding.
   run bash -c "
     set -euo pipefail
-    export REPO_ROOT='${REPO_ROOT}'
-    source '${REPO_ROOT}/kubernetes/workflow/image-catalog-lib.sh'
-    a=\"\$(LANG=C source_fingerprint_tag apps/shared/apphttp)\"
-    b=\"\$(LANG='${BROKEN_LOCALE}' source_fingerprint_tag apps/shared/apphttp)\"
+    export REPO_ROOT='${FIXTURE_ROOT}'
+    source '${SOURCE_REPO_ROOT}/kubernetes/workflow/image-catalog-lib.sh'
+    a=\"\$(LANG=C source_fingerprint_tag '${FIXTURE_MODULE}')\"
+    b=\"\$(LANG='${BROKEN_LOCALE}' source_fingerprint_tag '${FIXTURE_MODULE}')\"
     [ \"\${a}\" = \"\${b}\" ] || { echo \"digest drifted: \${a} vs \${b}\"; exit 1; }
     printf '%s\n' \"\${a}\"
   "
@@ -58,7 +88,7 @@ setup() {
   # instead would sweep .terragrunt-cache, which holds generated copies of these
   # same scripts and reports stale findings after any plan or apply.
   run bash -c "
-    cd '${REPO_ROOT}'
+    cd '${SOURCE_REPO_ROOT}'
     unchecked=0
     while IFS= read -r file; do
       [ -n \"\${file}\" ] || continue
