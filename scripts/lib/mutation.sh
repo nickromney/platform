@@ -307,3 +307,19 @@ mutation_generate_line_mutants() {
   [ -n "${MUTATION_RECORDS}" ] || return 0
   printf '%s' "${MUTATION_RECORDS}" | awk '!seen[$0]++'
 }
+
+# Every valid mutant must be recorded exactly once, as killed or as survived.
+# Returns non-zero when the books do not balance, so the caller can refuse to
+# report a score rather than compute one from whatever the files happen to hold.
+#
+# A real run reported "72 valid mutants, 16 killed, 6 survived": 22 accounted
+# for, 50 silently dropped, and a percentage derived from the 22 as though it
+# were the whole run. A wrong score is worse than no score here, because the
+# question being asked is whether the assertions bite.
+mutation_counts_reconcile() {
+  local killed="$1"
+  local survived="$2"
+  local valid="$3"
+
+  [ "$((killed + survived))" -eq "${valid}" ]
+}

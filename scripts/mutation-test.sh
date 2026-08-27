@@ -4,14 +4,24 @@ set -euo pipefail
 # Mutation testing runner for one bash script against its mapped bats suites.
 #
 # For every generated mutant: swap it over the working-tree file, run the
-# suite, restore immediately. An EXIT trap restores the original even on
-# Ctrl-C, so a killed run cannot leave a mutated script behind.
+# suite, restore immediately. INT and TERM restore and then exit; a plain EXIT
+# trap restores as the shell leaves.
+#
+# This comment used to promise that "a killed run cannot leave a mutated script
+# behind". It cannot promise that, and it no longer tries. SIGKILL runs no trap
+# at all, by design and in any program, so a hard kill mid-mutant leaves the
+# mutant on disk. What the traps buy is that INT and TERM stop the run instead
+# of restoring one file and mutating the next -- which is what they used to do.
+# If a run is killed hard, diff the target before trusting it.
 #
 # A mutant is killed when the suite fails or times out. Survivors are listed
 # with their diff so weak assertions can be strengthened where they are weak.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# Overridable so a run can be pointed at another checkout and keep its
+# bookkeeping there. Left unset this resolves to the runner's own repo, which is
+# what put a cross-repo run's killed.tsv and survived.tsv under this one.
+REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/lib/shell-cli.sh"
@@ -228,6 +238,24 @@ restore_target() {
   fi
 }
 
+# Restoring is not aborting, and the mutation loop needs both.
+#
+# restore_target returns, so a trap that only calls it hands control straight
+# back to the `while read id` loop, which copies the next mutant over the target
+# and carries on. Signalling a run therefore did nothing at all: measured on this
+# repo, SIGTERM after four mutants was followed by seven more and the run went to
+# completion. Whatever kills it for real then lands with a mutant on disk --
+# TERM followed by KILL three seconds later, which is what a supervisor or a tool
+# timeout does, left `[[ -n "${raw}" ]] || return 1` flipped to `&& return 1` in
+# scripts/lib/host-port-listeners.sh.
+#
+# So INT and TERM restore and then exit; EXIT stays a plain restore hook, since
+# by then the shell is already leaving. 130 is the conventional SIGINT status.
+on_interrupt() {
+  restore_target
+  exit 130
+}
+
 run_suite() {
   run_with_timeout "${TIMEOUT_SECS}" bats ${SUITES[@]+"${SUITES[@]}"} \
     >"${WORKDIR}/run.log" 2>&1
@@ -343,7 +371,8 @@ execute_run() {
 
   : >"${WORKDIR}/killed.tsv"
   : >"${WORKDIR}/survived.tsv"
-  trap restore_target EXIT INT TERM
+  trap restore_target EXIT
+  trap on_interrupt INT TERM
 
   local started
   started="$(date +%s)"
@@ -372,6 +401,28 @@ execute_run() {
   if ! cmp -s "${TARGET}" "${BACKUP}"; then
     restore_target
     die "target did not match backup after run; restored original"
+  fi
+
+  # Every valid mutant must have been recorded exactly once, as killed or as
+  # survived. Without this the score is computed from whatever the two files
+  # happen to hold and is printed with no indication that anything is missing:
+  # a real run reported "72 valid mutants, 16 killed, 6 survived" -- 22
+  # accounted for, 50 silently dropped -- and a score derived from the 22 as
+  # though it were the whole run. A wrong score is worse than no score here,
+  # because the entire question being asked is whether the assertions bite.
+  #
+  # Concurrent runs sharing a report directory are one way to get here:
+  # killed.tsv and survived.tsv are truncated at the start of the loop, so a
+  # second run resets the first one's bookkeeping underneath it. That needs the
+  # same --report-dir, which for the default means the same script stem, since
+  # the default is .run/mutation/<stem>. Cross-repo runs collide most easily,
+  # because REPO_ROOT decides whose .run/ is used.
+  local recorded_killed recorded_survived expected_valid
+  recorded_killed="$(wc -l <"${WORKDIR}/killed.tsv" | tr -d ' ')"
+  recorded_survived="$(wc -l <"${WORKDIR}/survived.tsv" | tr -d ' ')"
+  expected_valid="$(wc -l <"${WORKDIR}/valid_ids.txt" | tr -d ' ')"
+  if ! mutation_counts_reconcile "${recorded_killed}" "${recorded_survived}" "${expected_valid}"; then
+    die "bookkeeping does not reconcile: ${expected_valid} valid mutant(s) but $((recorded_killed + recorded_survived)) recorded (${recorded_killed} killed, ${recorded_survived} survived) in ${WORKDIR}. Refusing to report a score from partial results; a concurrent run sharing this report directory is the usual cause."
   fi
 
   local elapsed=$(( $(date +%s) - started ))
