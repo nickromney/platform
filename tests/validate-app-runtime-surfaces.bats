@@ -5,11 +5,82 @@ setup() {
   setup_repo_root
 }
 
-teardown() {
-  rm -rf "${REPO_ROOT}/apps/zz-test-dockerfile-runtime"
-  rm -rf "${REPO_ROOT}/apps/zz-test-compose-healthcheck"
-  rm -rf "${REPO_ROOT}/apps/zz-test-compose-hardening"
-  rm -rf "${REPO_ROOT}/apps/zz-test-sso-allowlist"
+# Four tests below used to plant fixture apps under apps/ in the real checkout
+# and then run a whole-tree scan over it. That made them writers of a tree more
+# than a dozen other files read, and the fixtures are mutually incompatible --
+# the healthcheck fixture is a Go app service that is deliberately not hardened,
+# while the hardening scan requires every Go app service to be hardened -- so
+# they also raced each other inside this one file. At bats -j 8 the "pin numeric
+# runtime users" and "hardened runtime settings" tests flip pass/fail run to run.
+#
+# Each test now uses two roots. The real checkout is only ever read, for the
+# "the repo complies" half. A sandbox holding nothing but fixtures carries the
+# "discovery works" half, which is what the fixture existed for.
+#
+# The sandbox has to contain real directories rather than symlinks to the real
+# apps/. service_dockerfile() calls Path.resolve(), and is_go_app_dockerfile()
+# then takes relative_to(repo_root.resolve()); a symlinked app resolves back to
+# the real checkout, falls outside the sandbox, raises ValueError and is skipped
+# silently. A mirror built that way would leave these contracts passing while
+# scanning nothing.
+write_go_app_fixture() {
+  local root="$1" name="$2" user_line="${3:-USER 65532:65532}"
+
+  mkdir -p "${root}/apps/${name}/app"
+  printf 'module platform.local/%s\n\ngo 1.26\n' "${name}" >"${root}/apps/${name}/app/go.mod"
+  cat >"${root}/apps/${name}/app/Dockerfile" <<EOF
+FROM dhi.io/static:20260413-alpine3.23
+COPY --chown=65532:65532 .run/zz-test /zz-test
+${user_line}
+ENTRYPOINT ["/zz-test"]
+EOF
+}
+
+# Adds a compose file beside a fixture written by write_go_app_fixture. The
+# service builds from ./app so iter_go_app_compose_services() recognises it as
+# a Go app service; extra_yaml carries whatever the calling contract asserts on.
+write_go_app_compose() {
+  local root="$1" name="$2" extra_yaml="$3"
+
+  cat >"${root}/apps/${name}/compose.yml" <<EOF
+services:
+  zz-test:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+${extra_yaml}
+EOF
+}
+
+# A browser app fixture: embedded web assets plus an oauth2-proxy service whose
+# --skip-auth-regex is the thing under test.
+write_sso_app_fixture() {
+  local root="$1" name="$2" skip_auth_regex="$3"
+
+  mkdir -p "${root}/apps/${name}/app/internal/app/web"
+  printf 'module platform.local/%s\n\ngo 1.26\n' "${name}" >"${root}/apps/${name}/app/go.mod"
+  touch "${root}/apps/${name}/app/internal/app/web/index.html"
+  touch "${root}/apps/${name}/app/internal/app/web/style.css"
+  cat >"${root}/apps/${name}/compose.yml" <<EOF
+services:
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2
+    command:
+      - --skip-auth-regex=${skip_auth_regex}
+EOF
+}
+
+# compose_hardening_contract_violations() does not only walk apps/: it also
+# reads the fixed paths named by _explicit_compose_hardening_expectations(),
+# which today is docker/compose/compose.yml alone. Against a bare sandbox it
+# raises FileNotFoundError rather than returning violations, so seed the real
+# file in. If that expectation set grows a path, this fails loudly on the
+# missing file instead of quietly passing.
+seed_explicit_compose_expectations() {
+  local root="$1"
+
+  mkdir -p "${root}/docker/compose"
+  cp "${REPO_ROOT}/docker/compose/compose.yml" "${root}/docker/compose/compose.yml"
 }
 
 @test "app runtime tests share compose service discovery helpers" {
@@ -677,22 +748,11 @@ PY
 }
 
 @test "repo-owned app Dockerfiles pin numeric runtime users" {
-  temp_app="${REPO_ROOT}/apps/zz-test-dockerfile-runtime"
-  rm -rf "${temp_app}"
-  mkdir -p "${temp_app}/app"
-  cat >"${temp_app}/app/go.mod" <<'EOF'
-module platform.local/zz-test-dockerfile-runtime
+  write_go_app_fixture "${BATS_TEST_TMPDIR}/good" zz-dockerfile-runtime "USER 65532:65532"
+  write_go_app_fixture "${BATS_TEST_TMPDIR}/bad" zz-dockerfile-runtime "USER root"
 
-go 1.26
-EOF
-  cat >"${temp_app}/app/Dockerfile" <<'EOF'
-FROM dhi.io/static:20260413-alpine3.23
-COPY --chown=65532:65532 .run/zz-test /zz-test
-USER 65532:65532
-ENTRYPOINT ["/zz-test"]
-EOF
-
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run env GOOD_ROOT="${BATS_TEST_TMPDIR}/good" BAD_ROOT="${BATS_TEST_TMPDIR}/bad" \
+    uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -701,49 +761,51 @@ from pathlib import Path
 from tests.app_contracts import dockerfile_runtime_user_contract_violations, dockerfile_runtime_user_validated_files
 
 repo_root = Path(os.environ["REPO_ROOT"])
+good = Path(os.environ["GOOD_ROOT"])
+bad = Path(os.environ["BAD_ROOT"])
 
 violations = dockerfile_runtime_user_contract_violations(repo_root)
 assert not violations, violations
 validated = dockerfile_runtime_user_validated_files(repo_root)
+assert validated, "no Go app Dockerfiles discovered in the checkout"
 
-print(f"validated {len(validated)} Dockerfile(s): {', '.join(validated)}")
+# Discovery: a compliant fixture is found and reported clean.
+discovered = dockerfile_runtime_user_validated_files(good)
+assert any("zz-dockerfile-runtime" in path for path in discovered), discovered
+assert not dockerfile_runtime_user_contract_violations(good)
+
+# Detection: without this half the contract could pass while catching nothing.
+breach = dockerfile_runtime_user_contract_violations(bad)
+assert breach, "USER root should be reported as a violation"
+assert "runtime USER should be 65532:65532" in breach[0], breach
+
+print(f"validated {len(validated)} Dockerfile(s); fixture discovery and detection verified")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"zz-test-dockerfile-runtime"* ]]
+  [[ "${output}" == *"fixture discovery and detection verified"* ]]
 }
 
 @test "compose app services use hardened runtime settings" {
-  temp_app="${REPO_ROOT}/apps/zz-test-compose-hardening"
-  rm -rf "${temp_app}"
-  mkdir -p "${temp_app}/app"
-  cat >"${temp_app}/app/go.mod" <<'EOF'
-module platform.local/zz-test-compose-hardening
-
-go 1.26
-EOF
-  cat >"${temp_app}/app/Dockerfile" <<'EOF'
-FROM dhi.io/static:20260413-alpine3.23
-COPY --chown=65532:65532 .run/zz-test /zz-test
-USER 65532:65532
-ENTRYPOINT ["/zz-test"]
-EOF
-  cat >"${temp_app}/compose.yml" <<'EOF'
-services:
-  zz-test:
-    build:
-      context: ./app
-      dockerfile: Dockerfile
-    read_only: true
+  write_go_app_fixture "${BATS_TEST_TMPDIR}/good" zz-compose-hardening
+  write_go_app_compose "${BATS_TEST_TMPDIR}/good" zz-compose-hardening \
+'    read_only: true
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
     tmpfs:
-      - /tmp:rw,noexec,nosuid,nodev,mode=1777
-EOF
+      - /tmp:rw,noexec,nosuid,nodev,mode=1777'
 
-  run uv run --isolated --with pyyaml python - <<'PY'
+  # Same service with the hardening stripped off.
+  write_go_app_fixture "${BATS_TEST_TMPDIR}/bad" zz-compose-hardening
+  write_go_app_compose "${BATS_TEST_TMPDIR}/bad" zz-compose-hardening '    read_only: false'
+
+  seed_explicit_compose_expectations "${BATS_TEST_TMPDIR}/good"
+  seed_explicit_compose_expectations "${BATS_TEST_TMPDIR}/bad"
+
+  run env GOOD_ROOT="${BATS_TEST_TMPDIR}/good" BAD_ROOT="${BATS_TEST_TMPDIR}/bad" \
+    uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -752,15 +814,25 @@ from pathlib import Path
 from tests.app_contracts import compose_hardening_contract_violations, compose_hardening_validated_services
 
 repo_root = Path(os.environ["REPO_ROOT"])
+good = Path(os.environ["GOOD_ROOT"])
+bad = Path(os.environ["BAD_ROOT"])
 
 violations = compose_hardening_contract_violations(repo_root)
 assert not violations, violations
 validated_services = compose_hardening_validated_services(repo_root)
-print(f"validated {len(validated_services)} compose service(s): {', '.join(validated_services)}")
+assert validated_services, "no Go app compose services discovered in the checkout"
+
+discovered = compose_hardening_validated_services(good)
+assert any("zz-compose-hardening/compose.yml:zz-test" in svc for svc in discovered), discovered
+
+breach = compose_hardening_contract_violations(bad)
+assert breach, "an unhardened Go app compose service should be reported"
+
+print(f"validated {len(validated_services)} compose service(s); fixture discovery and detection verified")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"zz-test-compose-hardening/compose.yml:zz-test"* ]]
+  [[ "${output}" == *"fixture discovery and detection verified"* ]]
 }
 
 @test "Go sentiment workload has a bounded laptop runtime profile and health probes" {
@@ -804,25 +876,19 @@ PY
 }
 
 @test "browser app compose SSO static allowlists match embedded asset names" {
-  temp_app="${REPO_ROOT}/apps/zz-test-sso-allowlist"
-  rm -rf "${temp_app}"
-  mkdir -p "${temp_app}/app/internal/app/web"
-  cat >"${temp_app}/app/go.mod" <<'EOF'
-module platform.local/zz-test-sso-allowlist
+  # Shaped for iter_browser_sso_compose_services(): an app/internal/app/web
+  # directory plus an oauth2-proxy service. The embedded asset names are what
+  # the allowlist is checked against, so style.css on disk must appear in the
+  # --skip-auth-regex.
+  write_sso_app_fixture "${BATS_TEST_TMPDIR}/good" zz-sso-allowlist \
+    '^/(style\.css|app-shell\.css|favicon\.svg|favicon\.ico)$'
+  # style.css is embedded but left out of the allowlist, so SSO would challenge
+  # an unauthenticated stylesheet fetch and the page would render bare.
+  write_sso_app_fixture "${BATS_TEST_TMPDIR}/bad" zz-sso-allowlist \
+    '^/(app-shell\.css|favicon\.svg|favicon\.ico)$'
 
-go 1.26
-EOF
-  touch "${temp_app}/app/internal/app/web/index.html"
-  touch "${temp_app}/app/internal/app/web/style.css"
-  cat >"${temp_app}/compose.yml" <<'EOF'
-services:
-  oauth2-proxy:
-    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2
-    command:
-      - --skip-auth-regex=^/(style\.css|app-shell\.css|favicon\.svg|favicon\.ico)$
-EOF
-
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run env GOOD_ROOT="${BATS_TEST_TMPDIR}/good" BAD_ROOT="${BATS_TEST_TMPDIR}/bad" \
+    uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -831,44 +897,43 @@ from pathlib import Path
 from tests.app_contracts import browser_sso_static_allowlist_contract_violations, browser_sso_static_allowlist_validated_apps
 
 repo_root = Path(os.environ["REPO_ROOT"])
+good = Path(os.environ["GOOD_ROOT"])
+bad = Path(os.environ["BAD_ROOT"])
 
 violations = browser_sso_static_allowlist_contract_violations(repo_root)
 assert not violations, violations
 validated = browser_sso_static_allowlist_validated_apps(repo_root)
+assert validated, "no browser SSO compose services discovered in the checkout"
 
-print(f"validated {len(validated)} browser app compose SSO static allowlist(s): {', '.join(validated)}")
+discovered = browser_sso_static_allowlist_validated_apps(good)
+assert "zz-sso-allowlist" in discovered, discovered
+assert not browser_sso_static_allowlist_contract_violations(good)
+
+breach = browser_sso_static_allowlist_contract_violations(bad)
+assert breach, "an allowlist omitting an embedded asset should be reported"
+assert any("style.css" in item for item in breach), breach
+
+print(f"validated {len(validated)} browser app compose SSO static allowlist(s); fixture discovery and detection verified")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"zz-test-sso-allowlist"* ]]
+  [[ "${output}" == *"fixture discovery and detection verified"* ]]
 }
 
 @test "Go app compose healthchecks do not require /bin/sh" {
-  temp_app="${REPO_ROOT}/apps/zz-test-compose-healthcheck"
-  rm -rf "${temp_app}"
-  mkdir -p "${temp_app}/app"
-  cat >"${temp_app}/app/go.mod" <<'EOF'
-module platform.local/zz-test-compose-healthcheck
+  write_go_app_fixture "${BATS_TEST_TMPDIR}/good" zz-compose-healthcheck
+  write_go_app_compose "${BATS_TEST_TMPDIR}/good" zz-compose-healthcheck \
+'    healthcheck:
+      test: ["CMD", "/zz-test", "healthcheck"]'
 
-go 1.26
-EOF
-  cat >"${temp_app}/app/Dockerfile" <<'EOF'
-FROM dhi.io/static:20260413-alpine3.23
-COPY --chown=65532:65532 .run/zz-test /zz-test
-USER 65532:65532
-ENTRYPOINT ["/zz-test"]
-EOF
-  cat >"${temp_app}/compose.yml" <<'EOF'
-services:
-  zz-test:
-    build:
-      context: ./app
-      dockerfile: Dockerfile
-    healthcheck:
-      test: ["CMD", "/zz-test", "healthcheck"]
-EOF
+  # The shell form this contract exists to keep out of the tree.
+  write_go_app_fixture "${BATS_TEST_TMPDIR}/bad" zz-compose-healthcheck
+  write_go_app_compose "${BATS_TEST_TMPDIR}/bad" zz-compose-healthcheck \
+'    healthcheck:
+      test: ["CMD-SHELL", "/bin/sh -c /zz-test healthcheck"]'
 
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run env GOOD_ROOT="${BATS_TEST_TMPDIR}/good" BAD_ROOT="${BATS_TEST_TMPDIR}/bad" \
+    uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -877,16 +942,26 @@ from pathlib import Path
 from tests.app_contracts import go_compose_healthcheck_contract_violations, go_compose_healthcheck_validated_services
 
 repo_root = Path(os.environ["REPO_ROOT"])
+good = Path(os.environ["GOOD_ROOT"])
+bad = Path(os.environ["BAD_ROOT"])
 
 violations = go_compose_healthcheck_contract_violations(repo_root)
 assert not violations, violations
 validated_services = go_compose_healthcheck_validated_services(repo_root)
+assert validated_services, "no Go app compose services discovered in the checkout"
 
-print(f"validated {len(validated_services)} shell-free Go healthchecks: {', '.join(validated_services)}")
+discovered = go_compose_healthcheck_validated_services(good)
+assert any("zz-compose-healthcheck/compose.yml:zz-test" in svc for svc in discovered), discovered
+assert not go_compose_healthcheck_contract_violations(good)
+
+breach = go_compose_healthcheck_contract_violations(bad)
+assert breach, "a CMD-SHELL healthcheck should be reported"
+
+print(f"validated {len(validated_services)} shell-free Go healthchecks; fixture discovery and detection verified")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"zz-test-compose-healthcheck/compose.yml:zz-test"* ]]
+  [[ "${output}" == *"fixture discovery and detection verified"* ]]
 }
 
 @test "sentiment compose frontend exposes API proxy diagnostics" {
@@ -1122,7 +1197,7 @@ print(f"validated {len(validated)} local workload builder(s)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 4 local workload builder(s)"* ]]
+  [[ "${output}" == *"validated 1 local workload builder(s)"* ]]
 }
 
 @test "app oauth2 proxies call Keycloak backend logout with the session ID token" {
@@ -1214,7 +1289,7 @@ print(f"validated {external_runtime_image_ref_expectation_count()} external imag
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 12 external image expectation(s)"* ]]
+  [[ "${output}" == *"validated 11 external image expectation(s)"* ]]
 }
 
 @test "app runtime tests share external image ref helpers" {
