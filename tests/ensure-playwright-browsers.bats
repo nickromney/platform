@@ -125,7 +125,32 @@ complete_cache() {
   [[ "${output}" == *"removing incomplete Playwright browser cache directory"* ]]
 }
 
-@test "install timeout kills process group, retries once, and fails loudly" {
+@test "install timeout retries to the configured limit and fails loudly" {
+  # Counted from the parent's output, not from the install stub's side effects.
+  #
+  # This used to assert `grep -c ... "${INSTALL_CALLS}" -eq 2`, which asks the
+  # child a question only the parent can answer. Recording an attempt requires
+  # the stub to fork, setsid, exec, start bash and append its line before the
+  # budget expires and the script kills the process group. That is a scheduling
+  # question, not a retry question, and on a contended box the chain overruns a
+  # one-second budget: the attempt goes unrecorded and the count reads 1.
+  #
+  # ensure-playwright-browsers.sh attributes this symptom to the elapsed check
+  # running before the first sleep and says it "reads like load sensitivity and
+  # is not". That fix was real, but the symptom returned in a full gate run
+  # afterwards with com.docker.backend holding 202% CPU on a 16GB box. Two
+  # independent causes; one had been found. Sleeping first makes the parent wait
+  # out the second, and cannot make the child get scheduled inside it.
+  #
+  # The timeout line is printed by the parent, once per timed-out attempt, and
+  # the parent is never the process being killed. So the budget stays at one
+  # second -- the tight budget is worth exercising alongside the retry path --
+  # and the assertion stops depending on a race it was never about.
+  #
+  # It is also strictly stronger than what it replaces. INSTALL_CALLS only shows
+  # the stub ran; this shows each attempt reached its timeout. The
+  # "failed after 2 attempt(s)" line below cannot carry that weight either, as
+  # the script prints max_attempts there rather than the attempts it made.
   export INSTALL_MODE=timeout
   export PLAYWRIGHT_BROWSER_INSTALL_TIMEOUT_SECONDS=1
   export PLAYWRIGHT_BROWSER_INSTALL_RETRIES=2
@@ -133,11 +158,35 @@ complete_cache() {
   run "${SCRIPT}" --execute
 
   [ "${status}" -ne 0 ]
-  [ "$(grep -c '^x playwright install chromium$' "${INSTALL_CALLS}")" -eq 2 ]
-  [ -f "${CHILD_TERM_FLAG}" ]
-  [[ "${output}" == *"timed out after 1s; killing process group"* ]]
+  [ "$(grep -c 'timed out after 1s; killing process group' <<<"${output}")" -eq 2 ]
+  # Nothing here reads INSTALL_CALLS. Even a lower bound on it would reintroduce
+  # the same dependency -- when the stub is killed before its first append the
+  # file does not exist at all -- and it would buy no coverage, because the
+  # parent announces the install below before ever launching it. That the
+  # install path was taken is a parent-side fact, so assert it parent-side.
+  [[ "${output}" == *"running bun x playwright install chromium with 1s timeout"* ]]
   [[ "${output}" == *"Playwright browser provisioning failed after 2 attempt(s)"* ]]
   [[ "${output}" == *"Remediation:"* ]]
+}
+
+@test "install timeout kills the process group of a running install" {
+  # Separated from the retry assertions above because it has a precondition they
+  # do not: a signal can only be observed by a child that is already running.
+  # The budget here is generous so that the install stub is certainly up when
+  # the timeout fires. That is a precondition of the thing being asserted, not a
+  # measurement -- nothing below is timed -- so stating it plainly beats folding
+  # it into a one-second test where the child may never be scheduled and the
+  # assertion silently becomes untestable.
+  export INSTALL_MODE=timeout
+  export PLAYWRIGHT_BROWSER_INSTALL_TIMEOUT_SECONDS=5
+  export PLAYWRIGHT_BROWSER_INSTALL_RETRIES=1
+
+  run "${SCRIPT}" --execute
+
+  [ "${status}" -ne 0 ]
+  [ -f "${CHILD_TERM_FLAG}" ]
+  [ "$(grep -c '^x playwright install chromium$' "${INSTALL_CALLS}")" -eq 1 ]
+  [[ "${output}" == *"timed out after 5s; killing process group"* ]]
 }
 
 @test "CDN preflight 200 proceeds to bun x install" {
