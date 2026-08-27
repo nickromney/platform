@@ -212,3 +212,24 @@ FIX
   [ "${status}" -eq 0 ]
   [ "${output}" = "st=0" ]
 }
+
+@test "mutation_counts_reconcile accepts books that balance" {
+  run bash -c "source '${LIB}'; mutation_counts_reconcile 16 6 22"
+  [ "${status}" -eq 0 ]
+
+  run bash -c "source '${LIB}'; mutation_counts_reconcile 0 0 0"
+  [ "${status}" -eq 0 ]
+}
+
+@test "mutation_counts_reconcile rejects a partially recorded run" {
+  # The shape a clobbered report directory leaves behind, and the number that
+  # went out as a score: 72 valid mutants with only 22 recorded. Status is
+  # checked as 1 rather than "not 0", because a missing function exits 127 and
+  # would satisfy a not-0 assertion without ever running the code under test.
+  run bash -c "source '${LIB}'; mutation_counts_reconcile 16 6 72"
+  [ "${status}" -eq 1 ]
+
+  # One lost record is still lost.
+  run bash -c "source '${LIB}'; mutation_counts_reconcile 15 6 22"
+  [ "${status}" -eq 1 ]
+}

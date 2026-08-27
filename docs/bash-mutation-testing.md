@@ -50,10 +50,32 @@ carry a second suite for nothing. Name the oracle explicitly for both
 ### Safety
 
 Mutants are applied to the working-tree file one at a time and restored after
-each run, under an `EXIT`/`INT`/`TERM` trap, so an interrupted run cannot leave
-a mutated script behind. The run refuses to start if the suite does not already
-pass on the unmutated script. Reports land in `.run/mutation/<stem>/`, which is
-git-ignored.
+each run. `INT` and `TERM` restore the original and then exit, so Ctrl-C stops
+the run; a plain `EXIT` trap restores as the shell leaves. The run refuses to
+start if the suite does not already pass on the unmutated script. Reports land
+in `.run/mutation/<stem>/`, which is git-ignored.
+
+This used to claim that "an interrupted run cannot leave a mutated script
+behind". It could not, and does not now. Two limits are worth knowing:
+
+- **`SIGKILL` leaves the mutant on disk.** No trap runs on `SIGKILL`, in this or
+  any program. A supervisor or tool timeout that sends `TERM` and then `KILL` a
+  few seconds later can land the `KILL` mid-mutant. If a run is killed hard,
+  `git diff` the target before trusting it.
+- **`INT`/`TERM` only became an abort recently.** Before that the trap restored
+  the file and returned, and the loop simply copied the next mutant over it, so
+  signalling a run did nothing at all. If you are on an older checkout, assume
+  a signalled run kept going.
+
+For anything you cannot afford to have mutated, run against a throwaway
+`git clone` rather than the live worktree, and `git diff` the script afterwards.
+
+The runner also refuses to print a score it cannot reconcile: if killed plus
+survived does not equal the number of valid mutants, it fails rather than
+reporting a percentage derived from partial bookkeeping. Concurrent runs sharing
+a `--report-dir` are the usual cause, since `killed.tsv` and `survived.tsv` are
+truncated when the loop starts. `REPO_ROOT` can be overridden to point a run at
+another checkout and keep its bookkeeping there.
 
 ## Operators
 
