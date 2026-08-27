@@ -92,9 +92,15 @@ jobs:
           cache-dependency-path: "**/go.mod"
 
       # Go and Node stay in the workflow: setup-go caches modules from nested
-      # go.mod files, and setup-node is what makes the installer's global npm
-      # packages land somewhere the job can write. Everything else is the
-      # shared installer.
+      # go.mod files, and setup-node provides the pinned Node the installer's
+      # npm packages are built against. Everything else is the shared installer.
+      #
+      # This used to say setup-node "is what makes the installer's global npm
+      # packages land somewhere the job can write". That was true until it was
+      # not: from 2026-08-26 every run of this job died with EACCES symlinking
+      # /usr/local/bin/markdownlint-cli2, exit 243, before make lint ran. The
+      # installer now sets its own npm prefix rather than depending on where
+      # the runner image happens to let this job write.
       - name: Install lint and Bats tools
         run: scripts/ci/install-ci-toolchain.sh --execute
 

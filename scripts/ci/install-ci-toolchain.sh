@@ -22,6 +22,28 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 INSTALL_DIR="${INSTALL_CI_TOOLCHAIN_PREFIX:-/usr/local/bin}"
 
+# npm global installs go to a prefix this job owns, not to the one npm inherits.
+#
+# `npm install --global` used to land in /usr/local on the GitHub runner and the
+# job could write there, which is what the comment in ci.yml means when it says
+# setup-node "makes the installer's global npm packages land somewhere the job
+# can write". That stopped being true: since 2026-08-26 every lint-and-hermetic
+# -bats run has died with EACCES symlinking
+# /usr/local/bin/markdownlint-cli2, exit 243, before make lint ever ran.
+#
+# Not fixed with sudo, for three reasons. sudo resets PATH through secure_path,
+# so `sudo npm` can be a different npm than the setup-node one and would install
+# under a different prefix and Node version. npm runs package lifecycle scripts,
+# and under sudo those get root and leave root-owned files behind. And
+# tests/ci-workflow.bats pins the form of these lines with
+# `grep -nE '^(uv tool install|npm install --global) '` to prove every tool is
+# version-pinned: prefixing them with sudo drops them out of that grep silently,
+# leaving the test green while it checks two fewer tools.
+NPM_PREFIX="${INSTALL_CI_TOOLCHAIN_NPM_PREFIX:-${HOME}/.npm-global}"
+export npm_config_prefix="${NPM_PREFIX}"
+PATH="${NPM_PREFIX}/bin:${PATH}"
+export PATH
+
 # shellcheck disable=SC2329 # invoked by name through the shell_cli_* helpers
 usage() {
   cat <<EOF
@@ -226,6 +248,10 @@ install_binary "${tmp_dir}/deno" deno
 
 if [[ -n "${GITHUB_PATH:-}" ]]; then
   echo "${HOME}/.local/bin" >>"${GITHUB_PATH}"
+  # The npm prefix needs the same handoff for the same reason .local/bin does:
+  # `make lint` and `make test-ci` are separate steps in separate shells, so a
+  # PATH exported here reaches the version checks below and nothing after them.
+  echo "${NPM_PREFIX}/bin" >>"${GITHUB_PATH}"
 fi
 
 bats --version
