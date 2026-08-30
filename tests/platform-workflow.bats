@@ -455,6 +455,75 @@ EOF
   done
 }
 
+@test "memory-constrained resource profiles drop the External Secrets CRD surface" {
+  # External Secrets Operator ships 24 CRDs (6 external-secrets.io + 18
+  # generators.external-secrets.io) to serve the two-object eso-demo teaching
+  # rung. At the measured ~5.9 MiB of kube-apiserver RSS per CRD that is ~142
+  # MiB of apiserver memory, so the memory-constrained profiles opt out.
+  for preset in minimal local-8gb; do
+    tfvars_file="${BATS_TEST_TMPDIR}/operator/kind-stage900-${preset}-eso.tfvars"
+
+    run "${SCRIPT}" preview --execute \
+      --variant kind \
+      --stage 900 \
+      --action plan \
+      --preset "resource-profile=${preset}" \
+      --tfvars-file "${tfvars_file}"
+
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *"enable_external_secrets = false"* ]]
+  done
+}
+
+@test "resource profiles that are not memory constrained keep External Secrets" {
+  # Guards the opposite direction: a mutant that hard-codes
+  # enable_external_secrets = false for every preset would break the stage 900
+  # secrets-lifecycle rung on roomier profiles.
+  for preset in default local-12gb; do
+    tfvars_file="${BATS_TEST_TMPDIR}/operator/kind-stage900-${preset}-eso.tfvars"
+
+    run "${SCRIPT}" preview --execute \
+      --variant kind \
+      --stage 900 \
+      --action plan \
+      --preset "resource-profile=${preset}" \
+      --tfvars-file "${tfvars_file}"
+
+    [ "${status}" -eq 0 ]
+    [[ "${output}" != *"enable_external_secrets"* ]]
+  done
+}
+
+@test "every preset overlay key is a declared terraform variable" {
+  run uv run --isolated python - <<'PYEOF'
+from __future__ import annotations
+
+import json
+import os
+import re
+from pathlib import Path
+
+repo_root = Path(os.environ["REPO_ROOT"])
+options = json.loads((repo_root / "kubernetes/workflow/options.json").read_text(encoding="utf-8"))
+variables_tf = (repo_root / "terraform/kubernetes/variables.tf").read_text(encoding="utf-8")
+
+declared = set(re.findall(r'^variable "([^"]+)" \{', variables_tf, re.M))
+assert "enable_external_secrets" in declared, "variables.tf parse produced no usable names"
+
+unknown = sorted(
+    {
+        key
+        for preset in options["presets"]
+        for key in preset.get("overlay", {})
+        if key not in declared
+    }
+)
+assert not unknown, f"preset overlay keys missing from variables.tf: {unknown}"
+PYEOF
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "platform workflow keeps app-of-apps in local-8gb unlike the local-idp profiles" {
   run "${SCRIPT}" preview --execute \
     --variant kind \
