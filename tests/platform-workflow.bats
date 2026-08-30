@@ -452,6 +452,10 @@ EOF
     [[ "${output}" == *"enable_victoria_logs = true"* ]]
     # Per-app SSO proxy fleet right-sized rather than consolidated.
     [[ "${output}" == *'oauth2_proxy_memory_request = "24Mi"'* ]]
+    # Shared SSO session store and metrics-server reserve for measured use
+    # (~5Mi and ~25Mi) instead of their roomier-cluster defaults.
+    [[ "${output}" == *'oauth2_proxy_session_store_memory_request = "24Mi"'* ]]
+    [[ "${output}" == *'metrics_server_memory_request = "100Mi"'* ]]
   done
 }
 

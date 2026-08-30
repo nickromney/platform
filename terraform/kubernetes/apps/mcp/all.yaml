@@ -112,7 +112,10 @@ spec:
           resources:
             requests:
               cpu: 50m
-              memory: 128Mi
+              # Measured steady state is ~10Mi; 48Mi is ~5x headroom. This is a
+              # reservation, not a cap - the 512Mi limit below is unchanged, so
+              # the server can still burst to 512Mi.
+              memory: 48Mi
               ephemeral-storage: 128Mi
             limits:
               cpu: 500m

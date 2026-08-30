@@ -50,7 +50,7 @@ spec:
         resources:
           requests:
             cpu: 100m
-            memory: 200Mi
+            memory: ${var.metrics_server_memory_request}
           limits:
             cpu: 250m
             memory: 300Mi
