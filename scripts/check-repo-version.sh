@@ -16,6 +16,7 @@ CHECK_VERSION_TIMEOUT_SECONDS="${CHECK_VERSION_TIMEOUT_SECONDS:-15}"
 CHECK_VERSION_NPM_MIN_RELEASE_AGE="${CHECK_VERSION_NPM_MIN_RELEASE_AGE:-7}"
 CHECK_VERSION_BUN_MIN_RELEASE_AGE="${CHECK_VERSION_BUN_MIN_RELEASE_AGE:-604800}"
 CHECK_VERSION_UV_EXCLUDE_NEWER="${CHECK_VERSION_UV_EXCLUDE_NEWER:-7 days}"
+CHECK_VERSION_VENDORED_ASSETS_MANIFEST="${CHECK_VERSION_VENDORED_ASSETS_MANIFEST:-${REPO_ROOT}/tools/platform-workflow-ui/vendored-assets.json}"
 CHECK_VERSION_FRONTEND_BUDGETS_FILE="${CHECK_VERSION_FRONTEND_BUDGETS_FILE:-}"
 CHECK_VERSION_FRONTEND_BUDGETS_REQUIRE_ARTIFACTS="${CHECK_VERSION_FRONTEND_BUDGETS_REQUIRE_ARTIFACTS:-0}"
 FAILURES=0
@@ -48,6 +49,8 @@ Checks:
   - the integrated apim-simulator package has coherent project metadata
   - the @social-5h3ll/5h3ll-ui CDN pins stay consistent across apps and track
     the newest npm release that satisfies the repo release-age gate
+  - vendored frontend bundles match their recorded sha256 and track the newest
+    release on their stable npm dist-tag line that clears the release-age gate
   - repo-local dependency age gates stay aligned across .npmrc, bunfig.toml,
     and uv-managed pyproject.toml files
   - optional frontend package-count, initial-page, and shipped-asset budgets when configured
@@ -66,6 +69,8 @@ Environment:
   CHECK_VERSION_GITHUB_API_BASE=...     Override the GitHub API base URL.
   CHECK_VERSION_NPM_REGISTRY_BASE=...   Override the npm registry base URL.
   CHECK_VERSION_TIMEOUT_SECONDS=...     HTTP timeout in seconds. Default: 15.
+  CHECK_VERSION_VENDORED_ASSETS_MANIFEST=...
+                                        Override the vendored frontend asset manifest.
   CHECK_VERSION_FRONTEND_BUDGETS_FILE=...
                                         Override the frontend budget definition file.
   CHECK_VERSION_FRONTEND_BUDGETS_REQUIRE_ARTIFACTS=1
@@ -410,6 +415,181 @@ PY
   fi
 }
 
+check_vendored_assets() {
+  section "Vendored Frontend Assets"
+
+  local output status=0
+  if output="$(
+    run_inline_python \
+      "${REPO_ROOT}" \
+      "${CHECK_VERSION_VENDORED_ASSETS_MANIFEST}" \
+      "${CHECK_VERSION_SKIP_UPSTREAM}" \
+      "${CHECK_VERSION_NPM_REGISTRY_BASE}" \
+      "${CHECK_VERSION_NPM_MIN_RELEASE_AGE}" \
+      "${CHECK_VERSION_TIMEOUT_SECONDS}" <<'PY'
+import hashlib
+import json
+import re
+import sys
+import urllib.request
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+repo_root = Path(sys.argv[1]).resolve()
+manifest_path = Path(sys.argv[2]).resolve()
+skip_upstream = sys.argv[3] == "1"
+registry_base = sys.argv[4].rstrip("/")
+min_release_age_days = int(sys.argv[5])
+timeout = int(sys.argv[6])
+
+if not manifest_path.is_file():
+    print(f"WARN\tno vendored asset manifest at {manifest_path}")
+    raise SystemExit(0)
+
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+assets = manifest.get("assets", [])
+if not assets:
+    print(f"WARN\t{manifest_path.relative_to(repo_root)} declares no vendored assets")
+    raise SystemExit(0)
+
+manifest_dir = manifest_path.parent
+failures = 0
+
+# The minified bundles we vendor carry their own version marker. Reading it back
+# out of the artifact is what stops the manifest and the shipped file drifting
+# apart after a hand-edited bump.
+embedded_version_pattern = re.compile(rb'version\s*:\s*"([0-9][0-9A-Za-z.+-]*)"')
+
+
+def display_path(path):
+    # Manifests may be redirected at a scratch copy during testing, so an asset
+    # outside the repo root must still label cleanly rather than raise.
+    try:
+        return path.relative_to(repo_root)
+    except ValueError:
+        return path
+
+
+def release_key(version):
+    if "-" in version:
+        return None
+    parts = version.split(".")
+    return tuple(int(part) for part in parts) if all(part.isdigit() for part in parts) else None
+
+
+def fetch_packument(package):
+    request = urllib.request.Request(
+        f"{registry_base}/{package}",
+        headers={
+            # The abbreviated packument omits the per-version "time" map needed
+            # for the release-age gate, so request the full document.
+            "Accept": "application/json",
+            "User-Agent": "platform-check-version",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.load(response)
+
+
+for asset in assets:
+    package = asset["package"]
+    pinned = asset["version"]
+    asset_path = (manifest_dir / asset["path"]).resolve()
+    label = f"{package}@{pinned}"
+
+    if not asset_path.is_file():
+        print(f"FAIL\t{label}: vendored file {asset['path']} is missing")
+        failures += 1
+        continue
+
+    rel = display_path(asset_path)
+    raw = asset_path.read_bytes()
+
+    actual_sha = hashlib.sha256(raw).hexdigest()
+    if actual_sha != asset["sha256"]:
+        print(f"FAIL\t{label}: {rel} sha256 {actual_sha} does not match the manifest pin {asset['sha256']}")
+        failures += 1
+        continue
+    print(f"OK\t{label}: {rel} matches the manifest sha256 pin")
+
+    embedded = embedded_version_pattern.search(raw)
+    if embedded is None:
+        print(f"WARN\t{label}: no embedded version marker found in {rel}")
+    elif embedded.group(1).decode() != pinned:
+        print(f"FAIL\t{label}: {rel} reports version {embedded.group(1).decode()}, but the manifest pins {pinned}")
+        failures += 1
+        continue
+    else:
+        print(f"OK\t{label}: embedded version marker in {rel} agrees with the manifest")
+
+    if skip_upstream:
+        print(f"WARN\t{package} upstream resolution skipped")
+        continue
+
+    try:
+        packument = fetch_packument(package)
+    except Exception as error:  # noqa: BLE001 - report and warn, matching action-pin behaviour
+        print(f"WARN\tcould not resolve {package} from {registry_base}: {error}")
+        continue
+
+    release_times = packument.get("time", {})
+    if not release_times:
+        print(f"WARN\t{package} packument from {registry_base} has no release timestamps")
+        continue
+
+    # Track the maintainer's stable line rather than the newest final release.
+    # htmx, for example, ships 4.x under the "next" dist-tag while "latest" is
+    # still 2.x; without this the check would demand a breaking major jump the
+    # moment 4.0.0 cleared the age gate.
+    dist_tags = packument.get("dist-tags", {})
+    latest_tag = dist_tags.get("latest")
+    latest_tag_key = release_key(latest_tag) if latest_tag else None
+    stable_major = latest_tag_key[0] if latest_tag_key else None
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=min_release_age_days)
+    mature = []
+    for version, stamp in release_times.items():
+        key = release_key(version)
+        if key is None:
+            continue
+        if stable_major is not None and key[0] != stable_major:
+            continue
+        released = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        if released <= cutoff:
+            mature.append((key, version))
+
+    if not mature:
+        print(f"WARN\tno {package} release is older than the {min_release_age_days}-day age gate yet")
+        continue
+
+    latest_key, latest = max(mature)
+    pinned_key = release_key(pinned)
+
+    if stable_major is not None and pinned_key is not None and pinned_key[0] != stable_major:
+        print(f"WARN\t{label} is off the {package} stable line; dist-tag latest is {latest_tag}")
+        continue
+
+    if pinned == latest:
+        print(f"OK\t{label} matches the newest {package} release past the {min_release_age_days}-day age gate")
+    elif pinned_key is not None and pinned_key > latest_key:
+        print(f"WARN\t{label} is newer than {latest}, the newest release past the {min_release_age_days}-day age gate")
+    else:
+        print(f"FAIL\t{label} is behind {latest}, the newest release past the {min_release_age_days}-day age gate")
+        failures += 1
+
+raise SystemExit(1 if failures else 0)
+PY
+  )"; then
+    status=0
+  else
+    status=$?
+  fi
+
+  emit_frontend_budget_lines "${output}"
+  if [[ "${status}" -ne 0 ]]; then
+    return
+  fi
+}
 check_npm_age_gates() {
   section "npm Age Gates"
 
@@ -917,6 +1097,7 @@ PY
 check_action_pins
 check_apim_simulator_vendor
 check_shell_ui_cdn_pin
+check_vendored_assets
 check_npm_age_gates
 check_bun_age_gates
 check_uv_age_gates

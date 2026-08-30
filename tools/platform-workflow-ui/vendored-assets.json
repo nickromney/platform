@@ -1,0 +1,14 @@
+{
+  "assets": [
+    {
+      "package": "htmx.org",
+      "registry": "npm",
+      "version": "2.0.10",
+      "path": "static/htmx.min.js",
+      "sha256": "71ea67185bfa8c98c39d31717c6fce5d852370fcdfd129db4543774d3145c0de",
+      "tarball": "https://registry.npmjs.org/htmx.org/-/htmx.org-2.0.10.tgz",
+      "tarball_sha256": "577ad40c1c94c9de47edb89e0aec78a8353d36024c50017eb53e02992a55e889",
+      "tarball_member": "package/dist/htmx.min.js"
+    }
+  ]
+}

@@ -1234,10 +1234,10 @@ resource "null_resource" "check_kind_cluster_health_after_oidc" {
     command     = "bash \"${local.stack_dir}/scripts/check-cluster-health-after-oidc.sh\" --execute"
     interpreter = ["/bin/bash", "-c"]
     environment = {
-      KUBECONFIG                     = local.kubeconfig_path_expanded
-      KIND_STAGE_TFVARS_FILE         = var.kind_stage_tfvars_file
-      KIND_TARGET_TFVARS_FILE        = var.kind_target_tfvars_file
-      KIND_OPERATOR_OVERRIDES_FILE   = var.kind_operator_overrides_file
+      KUBECONFIG                   = local.kubeconfig_path_expanded
+      KIND_STAGE_TFVARS_FILE       = var.kind_stage_tfvars_file
+      KIND_TARGET_TFVARS_FILE      = var.kind_target_tfvars_file
+      KIND_OPERATOR_OVERRIDES_FILE = var.kind_operator_overrides_file
     }
   }
 
@@ -1372,8 +1372,8 @@ spec:
 
         resources:
           requests:
-            cpu: 50m
-            memory: 64Mi
+            cpu: ${var.oauth2_proxy_cpu_request}
+            memory: ${var.oauth2_proxy_memory_request}
 
         livenessProbe:
           initialDelaySeconds: 10
@@ -1479,8 +1479,8 @@ spec:
 
         resources:
           requests:
-            cpu: 50m
-            memory: 64Mi
+            cpu: ${var.oauth2_proxy_cpu_request}
+            memory: ${var.oauth2_proxy_memory_request}
 
         livenessProbe:
           initialDelaySeconds: 10
@@ -1586,8 +1586,8 @@ spec:
 
         resources:
           requests:
-            cpu: 50m
-            memory: 64Mi
+            cpu: ${var.oauth2_proxy_cpu_request}
+            memory: ${var.oauth2_proxy_memory_request}
 
         livenessProbe:
           initialDelaySeconds: 10
@@ -1692,8 +1692,8 @@ spec:
 
         resources:
           requests:
-            cpu: 50m
-            memory: 64Mi
+            cpu: ${var.oauth2_proxy_cpu_request}
+            memory: ${var.oauth2_proxy_memory_request}
 
         livenessProbe:
           initialDelaySeconds: 10
@@ -1798,8 +1798,8 @@ spec:
 
         resources:
           requests:
-            cpu: 50m
-            memory: 64Mi
+            cpu: ${var.oauth2_proxy_cpu_request}
+            memory: ${var.oauth2_proxy_memory_request}
 
         livenessProbe:
           initialDelaySeconds: 10
@@ -1941,8 +1941,8 @@ spec:
 
         resources:
           requests:
-            cpu: 50m
-            memory: 64Mi
+            cpu: ${var.oauth2_proxy_cpu_request}
+            memory: ${var.oauth2_proxy_memory_request}
 
         livenessProbe:
           initialDelaySeconds: 10

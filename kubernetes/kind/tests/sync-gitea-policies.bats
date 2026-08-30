@@ -1718,3 +1718,54 @@ EOF
   [[ "${output}" == *"plugins: []"* ]]
   [[ "${output}" == *"initialDelaySeconds: 77"* ]]
 }
+
+uat_apps_prune_env() {
+  printf '%s' "ENABLE_SSO=false ENABLE_HEADLAMP=false ENABLE_POLICIES=false ENABLE_CERT_MANAGER=false ENABLE_GATEWAY_TLS=false ENABLE_ACTIONS_RUNNER=false ENABLE_APIM_SIMULATOR=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_GRAFANA=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false"
+}
+
+seed_dev_uat_apps() {
+  apps_dir="${BATS_TEST_TMPDIR}/argocd-apps"
+  mkdir -p "${apps_dir}"
+  touch \
+    "${apps_dir}/74-dev.application.yaml" \
+    "${apps_dir}/76-uat.application.yaml"
+}
+
+@test "app-of-apps render keeps dev and uat when uat apps are enabled" {
+  seed_dev_uat_apps
+
+  run bash -lc "export $(uat_apps_prune_env) ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=false ENABLE_UAT_APPS=true; source '${SCRIPT}'; prune_argocd_app_manifests '${apps_dir}'; find '${apps_dir}' -maxdepth 1 -type f -print"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"74-dev.application.yaml"* ]]
+  [[ "${output}" == *"76-uat.application.yaml"* ]]
+}
+
+@test "app-of-apps render drops only the uat workload sync when uat apps are disabled" {
+  seed_dev_uat_apps
+
+  run bash -lc "export $(uat_apps_prune_env) ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=false ENABLE_UAT_APPS=false; source '${SCRIPT}'; prune_argocd_app_manifests '${apps_dir}'; find '${apps_dir}' -maxdepth 1 -type f -print"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"74-dev.application.yaml"* ]]
+  [[ "${output}" != *"76-uat.application.yaml"* ]]
+}
+
+@test "app-of-apps render defaults to deploying uat apps when ENABLE_UAT_APPS is unset" {
+  seed_dev_uat_apps
+
+  run bash -lc "export $(uat_apps_prune_env) ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=false; unset ENABLE_UAT_APPS; source '${SCRIPT}'; prune_argocd_app_manifests '${apps_dir}'; find '${apps_dir}' -maxdepth 1 -type f -print"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"76-uat.application.yaml"* ]]
+}
+
+@test "app-of-apps render still prunes dev and uat together when no app repo is enabled" {
+  seed_dev_uat_apps
+
+  run bash -lc "export $(uat_apps_prune_env) ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_UAT_APPS=true; source '${SCRIPT}'; prune_argocd_app_manifests '${apps_dir}'; find '${apps_dir}' -maxdepth 1 -type f -print"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"74-dev.application.yaml"* ]]
+  [[ "${output}" != *"76-uat.application.yaml"* ]]
+}

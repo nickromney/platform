@@ -144,6 +144,7 @@ bool|ENABLE_CERT_MANAGER|enable_cert_manager|true
 bool|ENABLE_ACTIONS_RUNNER|enable_actions_runner|true
 bool|ENABLE_APP_REPO_SENTIMENT|enable_app_repo_sentiment|false
 bool|ENABLE_APP_REPO_SUBNETCALC|enable_app_repo_subnetcalc|false
+bool|ENABLE_UAT_APPS|enable_uat_apps|true
 bool|ENABLE_SUBNETCALC_APIM_GATEWAY|enable_subnetcalc_apim_gateway|true
 bool|ENABLE_APIM_SIMULATOR|enable_apim_simulator|false
 bool|ENABLE_AGENTGATEWAY_AI_GATEWAY|enable_agentgateway_ai_gateway|false
@@ -303,6 +304,7 @@ ENABLE_CERT_MANAGER="${ENABLE_CERT_MANAGER:-true}"
 ENABLE_ACTIONS_RUNNER="${ENABLE_ACTIONS_RUNNER:-true}"
 ENABLE_APP_REPO_SENTIMENT="${ENABLE_APP_REPO_SENTIMENT:-false}"
 ENABLE_APP_REPO_SUBNETCALC="${ENABLE_APP_REPO_SUBNETCALC:-false}"
+ENABLE_UAT_APPS="${ENABLE_UAT_APPS:-true}"
 ENABLE_SUBNETCALC_APIM_GATEWAY="${ENABLE_SUBNETCALC_APIM_GATEWAY:-true}"
 ENABLE_APIM_SIMULATOR="${ENABLE_APIM_SIMULATOR:-false}"
 ENABLE_AGENTGATEWAY_AI_GATEWAY="${ENABLE_AGENTGATEWAY_AI_GATEWAY:-false}"
@@ -1924,6 +1926,12 @@ prune_argocd_app_manifests() {
 
   if ! is_true "${ENABLE_APP_REPO_SENTIMENT}" && ! is_true "${ENABLE_APP_REPO_SUBNETCALC}"; then
     remove_if_present "${apps_dir}/74-dev.application.yaml"
+    remove_if_present "${apps_dir}/76-uat.application.yaml"
+  elif ! is_true "${ENABLE_UAT_APPS}"; then
+    # Drop only the uat workload sync. The uat workspace itself -- namespace,
+    # SSO proxies, gateway routes, OIDC redirect URIs, resource bounds -- is
+    # Terraform-owned, so it survives and stays ready to deploy into. Argo's
+    # resources-finalizer prunes the workloads it synced, not the namespace.
     remove_if_present "${apps_dir}/76-uat.application.yaml"
   fi
 

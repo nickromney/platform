@@ -431,3 +431,38 @@ EOF
   [ "${status}" -eq 2 ]
   [[ "${output}" == *"Stage '950-local-idp' has been removed; use --stage 900 --preset resource-profile=local-idp-16gb"* ]]
 }
+
+@test "platform workflow renders the local-8gb resource profile for kind and lima" {
+  for variant in kind lima; do
+    tfvars_file="${BATS_TEST_TMPDIR}/operator/${variant}-stage900-local-8gb.tfvars"
+
+    run "${SCRIPT}" preview --execute \
+      --variant "${variant}" \
+      --stage 900 \
+      --action plan \
+      --preset resource-profile=local-8gb \
+      --tfvars-file "${tfvars_file}"
+
+    [ "${status}" -eq 0 ]
+    # The uat workspace stays Terraform-owned; only the workload sync stops.
+    [[ "${output}" == *"enable_uat_apps = false"* ]]
+    # Metrics pair off, logging path deliberately retained.
+    [[ "${output}" == *"enable_prometheus = false"* ]]
+    [[ "${output}" == *"enable_grafana = false"* ]]
+    [[ "${output}" == *"enable_victoria_logs = true"* ]]
+    # Per-app SSO proxy fleet right-sized rather than consolidated.
+    [[ "${output}" == *'oauth2_proxy_memory_request = "24Mi"'* ]]
+  done
+}
+
+@test "platform workflow keeps app-of-apps in local-8gb unlike the local-idp profiles" {
+  run "${SCRIPT}" preview --execute \
+    --variant kind \
+    --stage 900 \
+    --action plan \
+    --preset resource-profile=local-8gb \
+    --tfvars-file "${BATS_TEST_TMPDIR}/operator/kind-stage900-local-8gb-appofapps.tfvars"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"enable_app_of_apps = false"* ]]
+}

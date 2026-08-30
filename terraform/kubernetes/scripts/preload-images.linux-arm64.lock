@@ -1,6 +1,6 @@
-quay.io/cilium/cilium:v1.20.0	quay.io/cilium/cilium@sha256:83d97d660cc13e78f6a45c144ac08b5425690dfabdb726fc1309303d7b05fc71
-quay.io/cilium/operator-generic:v1.20.0	quay.io/cilium/operator-generic@sha256:3704826ca7671fb1a4732350e937b46aa21087195454ad5a0f2007f8e61e885e
-quay.io/cilium/hubble-relay:v1.20.0	quay.io/cilium/hubble-relay@sha256:f25d02b31c302f26444efb3fc3caa42f619949c99fd7e635d448bc810819775b
+quay.io/cilium/cilium:v1.20.1	quay.io/cilium/cilium@sha256:ae9ea21f7427fe24bc6ea7247eb552157a1b0a431744045d3f641545ca71d11b
+quay.io/cilium/operator-generic:v1.20.1	quay.io/cilium/operator-generic@sha256:6c3885fc7b629099fdbe2a5c87869c86feb825fa18fae299eac0f61918d16ecf
+quay.io/cilium/hubble-relay:v1.20.1	quay.io/cilium/hubble-relay@sha256:59be0ae7d475ab9011a5e954618c0f27b5778b17140381425b308b55ba4917f4
 quay.io/cilium/hubble-ui-backend:v0.13.5	quay.io/cilium/hubble-ui-backend@sha256:326d275d38ac5d64c626943e6e1c68bd019f9b0a13d9994e320460e0391b099a
 quay.io/cilium/hubble-ui:v0.13.5	quay.io/cilium/hubble-ui@sha256:573ad7e0dc2180b844fdda80afbe6011e3b9d0cd2c33180ccb9b60bcd08fdb4b
 ghcr.io/nginx/nginx-gateway-fabric:2.5.1	ghcr.io/nginx/nginx-gateway-fabric@sha256:30172fc9bdebd145c250e81500b6112f989afd9956e0e7606f504bf16de28f88
@@ -18,7 +18,7 @@ quay.io/jetstack/cert-manager-controller:v1.21.1	quay.io/jetstack/cert-manager-c
 quay.io/jetstack/cert-manager-webhook:v1.21.1	quay.io/jetstack/cert-manager-webhook@sha256:f6ed5d53a40429c99a28b68ce0429f3d75ac9588403519c6772a76df35f37695
 quay.io/jetstack/cert-manager-cainjector:v1.21.1	quay.io/jetstack/cert-manager-cainjector@sha256:0c5930d51b9acc07b1d1f6befa46bdc3591fc52c0254f6209bf595eb5fdb3b7c
 quay.io/jetstack/cert-manager-startupapicheck:v1.21.1	quay.io/jetstack/cert-manager-startupapicheck@sha256:70a55b1c510c23e60767453633f925cef0434528e5130657f457d83769700863
-quay.io/prometheus/prometheus:v3.13.1	quay.io/prometheus/prometheus@sha256:2d61f37ba9f2185195dfad94ee500d7ac1986560bac79a77d0a6de182a5bf814
+quay.io/prometheus/prometheus:v3.14.0	quay.io/prometheus/prometheus@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0
 dhi.io/prometheus-config-reloader:0.89.0-debian13	dhi.io/prometheus-config-reloader@sha256:a0ad1abcfcb0aef00e751ebf9cd3e637867f08dbadcd8d76433af2348a30d929
 dhi.io/alertmanager:0.31.1-debian13	dhi.io/alertmanager@sha256:c0567187e62874a4b66a24fee447023064022dc8e3b043d63f30c64c5fb2a4a8
 dhi.io/kube-state-metrics:2.18.0-debian13	dhi.io/kube-state-metrics@sha256:166ad3f90e306f2bfe6cb09996943fa2bac4ed1bfe629e0f04d70e3d8bd82349
@@ -26,7 +26,7 @@ dhi.io/node-exporter:1.10.2-debian13	dhi.io/node-exporter@sha256:33f1b8a72523154
 docker.io/victoriametrics/victoria-logs:v1.52.0	docker.io/victoriametrics/victoria-logs@sha256:dd437a2ab011dca91f1591f9d70bc741f74ac43f34c1587192f48af058bc7dfc
 quay.io/kiwigrid/k8s-sidecar:2.5.0	quay.io/kiwigrid/k8s-sidecar@sha256:3062615be9970f548de2e0b471911b1101f19fcf41ee6aaf2b2812a91170a1c2
 docker.io/grafana/grafana:12.3.1	docker.io/grafana/grafana@sha256:62c1a430ef163ae4a8b3713874dbd1fc1d0e179168f236946e5420df5597207c
-ghcr.io/headlamp-k8s/headlamp:v0.44.0	ghcr.io/headlamp-k8s/headlamp@sha256:8f25d3df7a102376f11f761dd8260b6a56301fb97f2a886f9646655eb5872999
+ghcr.io/headlamp-k8s/headlamp:v0.45.0	ghcr.io/headlamp-k8s/headlamp@sha256:db3f0e0fc58d358d41daa3fe7fc852437552c7ee873c3645470f7b86a8e0db49
 node:lts-alpine	node@sha256:0e6f1567e269207c28295276928277a030139cbc5a0fb7d5bd2674f0401a9082
 registry.k8s.io/metrics-server/metrics-server:v0.8.1	registry.k8s.io/metrics-server/metrics-server@sha256:9ece07f21cfaf3c2398bd4e0de1f127cfad23ec40d29ceffd8323b4f34744eb8
 ghcr.io/external-secrets/external-secrets:v2.7.0	ghcr.io/external-secrets/external-secrets@sha256:aae662d00de21684d8288da1b92f495a094aed607570f205af31ebb821b60d79
@@ -41,7 +41,7 @@ docker.io/redis:8.2.7-alpine	docker.io/redis@sha256:2322055b54f74ab399ef319077ec
 docker.io/clickhouse/clickhouse-server:25.5.11	docker.io/clickhouse/clickhouse-server@sha256:6b9260b83a6d5ca33af2fa2efffdfba97de9402e745e7b301dad12b248654dac
 cgr.dev/chainguard/minio:latest	cgr.dev/chainguard/minio@sha256:8000140b02a9ee212834107332eada7e80ec1326b97418d66f36ec4b9bf14ca3
 cgr.dev/chainguard/busybox:latest	cgr.dev/chainguard/busybox@sha256:503c9edbe0a71b01aca0305cf7520c825b2dfb56c7992ccf4e93d842b668681d
-otel/opentelemetry-collector-contrib:0.156.0	otel/opentelemetry-collector-contrib@sha256:75cebcccda72f780677626a324a02e0754f7b082ca982ec6033144c4d532d18f
+otel/opentelemetry-collector-contrib:0.158.0	otel/opentelemetry-collector-contrib@sha256:c5918f78992ee73b0d6f0e599423ac5ec52dd5d9726733114d6eca53d5a32ed5
 mcr.microsoft.com/playwright:v1.58.2-noble	mcr.microsoft.com/playwright@sha256:68f1c3dca663d0e8331e8af4681b0b315eca7de1bd7fa934aac0accbeb9f8323
 docker:29.4.3-cli	docker@sha256:123027172e3a9aa0dd5b5b622c58fa62b187c071c8e0f32da25229074ca457d4
 gitea/act_runner:0.4.1	gitea/act_runner@sha256:56cc968b104b34c72bf7a564d78b60fb2e5a531a9c0783e03ef6328a5d33bb45

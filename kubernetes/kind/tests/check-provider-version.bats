@@ -108,11 +108,11 @@ EOF
   [ "${status}" -eq 0 ]
 
   for expected in \
-    'version     = "2.4.0"' \
+    'version     = "2.4.1"' \
     'constraints = "~> 2.4"' \
     'version     = "2.9.0"' \
     'constraints = "~> 2.9"' \
-    'version     = "3.3.0"' \
+    'version     = "3.3.1"' \
     'constraints = "~> 3.3"' \
     'version     = "3.9.0"' \
     'constraints = "~> 3.9"' \

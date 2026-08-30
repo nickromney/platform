@@ -401,3 +401,136 @@ EOF
   [[ "${output}" == *"@social-5h3ll/5h3ll-ui CDN pins are not synchronized across the repo"* ]]
   [[ "${output}" == *"version check(s) failed."* ]]
 }
+
+write_vendored_asset_fixture() {
+  local version="$1"
+  local manifest_version="$2"
+  local sha_override="${3:-}"
+  local asset_dir="${FIXTURE_ROOT}/tools/vendor-demo"
+  local asset_file="${asset_dir}/static/demo.min.js"
+  local sha
+
+  mkdir -p "${asset_dir}/static"
+  printf 'var demo=function(){"use strict";const Q={config:{version:"%s"}};return Q}();\n' "${version}" >"${asset_file}"
+
+  if [[ -n "${sha_override}" ]]; then
+    sha="${sha_override}"
+  else
+    sha="$(shasum -a 256 "${asset_file}" | awk '{print $1}')"
+  fi
+
+  cat >"${asset_dir}/vendored-assets.json" <<EOF
+{
+  "assets": [
+    {
+      "package": "demo-lib",
+      "registry": "npm",
+      "version": "${manifest_version}",
+      "path": "static/demo.min.js",
+      "sha256": "${sha}",
+      "tarball": "https://registry.example.invalid/demo-lib/-/demo-lib-${manifest_version}.tgz",
+      "tarball_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "tarball_member": "package/dist/demo.min.js"
+    }
+  ]
+}
+EOF
+}
+
+write_vendored_packument() {
+  local latest="$1"
+  local recent
+  recent="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  mkdir -p "${NPM_FIXTURES}"
+  cat >"${NPM_FIXTURES}/demo-lib" <<EOF
+{
+  "dist-tags": {"latest": "${latest}", "next": "4.0.0"},
+  "time": {
+    "created": "2026-01-01T00:00:00Z",
+    "modified": "${recent}",
+    "1.2.2": "2026-02-01T00:00:00Z",
+    "1.2.3": "2026-03-01T00:00:00Z",
+    "4.0.0": "2026-04-01T00:00:00Z",
+    "4.1.0": "${recent}"
+  }
+}
+EOF
+}
+
+run_vendored_asset_check() {
+  run env \
+    CHECK_VERSION_REPO_ROOT="${FIXTURE_ROOT}" \
+    CHECK_VERSION_WORKFLOW_FILE="${FIXTURE_ROOT}/.github/workflows/release.yml" \
+    CHECK_VERSION_GITHUB_API_BASE="file://${GITHUB_FIXTURES}" \
+    CHECK_VERSION_NPM_REGISTRY_BASE="file://${NPM_FIXTURES}" \
+    CHECK_VERSION_VENDORED_ASSETS_MANIFEST="${FIXTURE_ROOT}/tools/vendor-demo/vendored-assets.json" \
+    "${SCRIPT}" --execute
+}
+
+@test "check-version passes when a vendored asset matches its manifest and the stable line" {
+  write_vendored_asset_fixture "1.2.3" "1.2.3"
+  write_vendored_packument "1.2.3"
+
+  run_vendored_asset_check
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"demo-lib@1.2.3: tools/vendor-demo/static/demo.min.js matches the manifest sha256 pin"* ]]
+  [[ "${output}" == *"embedded version marker in tools/vendor-demo/static/demo.min.js agrees with the manifest"* ]]
+  [[ "${output}" == *"demo-lib@1.2.3 matches the newest demo-lib release past the 7-day age gate"* ]]
+  [[ "${output}" == *"All version checks passed."* ]]
+}
+
+@test "check-version fails when a vendored asset does not match its recorded sha256" {
+  write_vendored_asset_fixture "1.2.3" "1.2.3" "0000000000000000000000000000000000000000000000000000000000000000"
+  write_vendored_packument "1.2.3"
+
+  run_vendored_asset_check
+
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"does not match the manifest pin"* ]]
+  [[ "${output}" == *"version check(s) failed."* ]]
+}
+
+@test "check-version fails when a vendored bundle reports a different version than the manifest" {
+  write_vendored_asset_fixture "1.2.2" "1.2.3"
+  write_vendored_packument "1.2.3"
+
+  run_vendored_asset_check
+
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"reports version 1.2.2, but the manifest pins 1.2.3"* ]]
+  [[ "${output}" == *"version check(s) failed."* ]]
+}
+
+@test "check-version fails when a vendored asset is behind its stable line" {
+  write_vendored_asset_fixture "1.2.2" "1.2.2"
+  write_vendored_packument "1.2.3"
+
+  run_vendored_asset_check
+
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"demo-lib@1.2.2 is behind 1.2.3, the newest release past the 7-day age gate"* ]]
+  [[ "${output}" == *"version check(s) failed."* ]]
+}
+
+@test "check-version ignores a newer major published outside the latest dist-tag" {
+  write_vendored_asset_fixture "1.2.3" "1.2.3"
+  write_vendored_packument "1.2.3"
+
+  run_vendored_asset_check
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"is behind 4.0.0"* ]]
+  [[ "${output}" == *"demo-lib@1.2.3 matches the newest demo-lib release past the 7-day age gate"* ]]
+}
+
+@test "check-version warns when the stable dist-tag moves to a newer major line" {
+  write_vendored_asset_fixture "1.2.3" "1.2.3"
+  write_vendored_packument "4.0.0"
+
+  run_vendored_asset_check
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"demo-lib@1.2.3 is off the demo-lib stable line; dist-tag latest is 4.0.0"* ]]
+}
