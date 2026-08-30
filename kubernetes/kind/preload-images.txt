@@ -5,10 +5,10 @@
 # (localhost:30090/platform/subnetcalc-*, localhost:30090/platform/sentiment-*).
 # Those are built inside the cluster and cannot be pre-pulled.
 
-# --- Cilium (chart 1.20.0) ---
-quay.io/cilium/cilium:v1.20.0
-quay.io/cilium/operator-generic:v1.20.0
-quay.io/cilium/hubble-relay:v1.20.0
+# --- Cilium (chart 1.20.1) ---
+quay.io/cilium/cilium:v1.20.1
+quay.io/cilium/operator-generic:v1.20.1
+quay.io/cilium/hubble-relay:v1.20.1
 quay.io/cilium/hubble-ui-backend:v0.13.5
 quay.io/cilium/hubble-ui:v0.13.5
 
@@ -37,8 +37,8 @@ quay.io/jetstack/cert-manager-webhook:v1.21.1
 quay.io/jetstack/cert-manager-cainjector:v1.21.1
 quay.io/jetstack/cert-manager-startupapicheck:v1.21.1
 
-# --- Prometheus (chart 29.20.0) ---
-quay.io/prometheus/prometheus:v3.13.1
+# --- Prometheus (chart 29.27.0) ---
+quay.io/prometheus/prometheus:v3.14.0
 dhi.io/prometheus-config-reloader:0.89.0-debian13
 dhi.io/alertmanager:0.31.1-debian13
 dhi.io/kube-state-metrics:2.18.0-debian13
@@ -51,8 +51,8 @@ docker.io/victoriametrics/victoria-logs:v1.52.0
 quay.io/kiwigrid/k8s-sidecar:2.5.0
 docker.io/grafana/grafana:12.3.1
 
-# --- Headlamp (chart 0.44.0) ---
-ghcr.io/headlamp-k8s/headlamp:v0.44.0
+# --- Headlamp (chart 0.45.0) ---
+ghcr.io/headlamp-k8s/headlamp:v0.45.0
 node:lts-alpine
 
 # --- Metrics Server (chart 3.13.1) ---
@@ -79,8 +79,8 @@ docker.io/clickhouse/clickhouse-server:25.5.11
 cgr.dev/chainguard/minio:latest
 cgr.dev/chainguard/busybox:latest
 
-# --- OpenTelemetry Collector (chart 0.165.0) ---
-otel/opentelemetry-collector-contrib:0.156.0
+# --- OpenTelemetry Collector (chart 0.170.0) ---
+otel/opentelemetry-collector-contrib:0.158.0
 
 # --- Playwright E2E ---
 mcr.microsoft.com/playwright:v1.58.2-noble

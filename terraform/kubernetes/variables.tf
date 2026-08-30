@@ -19,7 +19,7 @@ variable "worker_count" {
 variable "node_image" {
   description = "Kind node image."
   type        = string
-  default     = "kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5"
+  default     = "kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed"
 }
 
 variable "kind_api_server_port" {
@@ -413,7 +413,7 @@ variable "public_demo_allow_actions_runner_host_mounts" {
 variable "cilium_version" {
   description = "Cilium chart version."
   type        = string
-  default     = "1.20.0"
+  default     = "1.20.1"
 }
 
 variable "argocd_chart_version" {
@@ -461,13 +461,13 @@ variable "gitea_chart_version" {
 variable "prometheus_chart_version" {
   description = "Prometheus chart version (prometheus-community/prometheus)."
   type        = string
-  default     = "29.20.0"
+  default     = "29.27.0"
 }
 
 variable "prometheus_image_tag" {
   description = "Prometheus container image tag."
   type        = string
-  default     = "v3.13.1"
+  default     = "v3.14.0"
 }
 
 variable "grafana_chart_version" {
@@ -515,19 +515,19 @@ variable "grafana_sidecar_image_tag" {
 variable "grafana_victoria_logs_plugin_version" {
   description = "VictoriaLogs Grafana datasource plugin release version used for prebaked local Grafana images."
   type        = string
-  default     = "0.29.0"
+  default     = "0.31.0"
 }
 
 variable "grafana_victoria_logs_plugin_sha256" {
   description = "SHA-256 checksum for the VictoriaLogs Grafana datasource plugin archive used for prebaked local Grafana images."
   type        = string
-  default     = "cd3651502586c09d36fe17b02443dc95f1169536105348d4503cb1b919324470"
+  default     = "595a8af0b06f850a93735ed377d84d4dd09e52f96e35b5cfae8a1864f223a0c9"
 }
 
 variable "grafana_victoria_logs_plugin_url" {
   description = "VictoriaLogs Grafana datasource plugin bundle URL for chart-managed runtime installs. Leave empty when the plugin is already baked into the Grafana image."
   type        = string
-  default     = "https://github.com/VictoriaMetrics/victorialogs-datasource/releases/download/v0.29.0/victoriametrics-logs-datasource-v0.29.0.zip;victoriametrics-logs-datasource"
+  default     = "https://github.com/VictoriaMetrics/victorialogs-datasource/releases/download/v0.31.0/victoriametrics-logs-datasource-v0.31.0.zip;victoriametrics-logs-datasource"
 }
 
 variable "argo_rollouts_gatewayapi_plugin_version" {
@@ -567,7 +567,7 @@ variable "victoria_logs_chart_version" {
 variable "headlamp_chart_version" {
   description = "Headlamp chart version."
   type        = string
-  default     = "0.44.0"
+  default     = "0.45.0"
 }
 
 variable "metrics_server_chart_version" {
@@ -643,6 +643,18 @@ variable "oauth2_proxy_chart_version" {
   default     = "10.7.0"
 }
 
+variable "oauth2_proxy_memory_request" {
+  description = "Memory request for each oauth2-proxy instance. One proxy is deployed per protected app, so this is multiplied across the SSO fleet; measured steady-state use is ~5Mi. Lower it on memory-constrained profiles."
+  type        = string
+  default     = "64Mi"
+}
+
+variable "oauth2_proxy_cpu_request" {
+  description = "CPU request for each oauth2-proxy instance. Multiplied across the per-app SSO proxy fleet in the same way as oauth2_proxy_memory_request."
+  type        = string
+  default     = "50m"
+}
+
 variable "oauth2_proxy_session_store_image" {
   description = "Redis-compatible image used for oauth2-proxy server-side session storage."
   type        = string
@@ -652,7 +664,7 @@ variable "oauth2_proxy_session_store_image" {
 variable "opentelemetry_collector_chart_version" {
   description = "OpenTelemetry Collector chart version (open-telemetry/opentelemetry-collector)."
   type        = string
-  default     = "0.165.0"
+  default     = "0.170.0"
 }
 
 # -----------------------------------------------------------------------------
@@ -904,6 +916,12 @@ variable "enable_app_repo_subnetcalc" {
   description = "Seed the monorepo app apps/subnetcalc into in-cluster Gitea as a standalone repo (enables Gitea Actions pipelines)."
   type        = bool
   default     = false
+}
+
+variable "enable_uat_apps" {
+  description = "Auto-deploy the sample workloads into the uat namespace via the 76-uat Argo Application. Set false on memory-constrained profiles to keep the uat workspace (namespace, SSO proxies, gateway routes, resource bounds) while leaving it empty and ready to deploy into on demand."
+  type        = bool
+  default     = true
 }
 
 variable "enable_subnetcalc_apim_gateway" {

@@ -177,14 +177,14 @@ EOF
 }
 
 @test "check-version reports the Grafana VictoriaLogs plugin version from Terraform defaults" {
-  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \"\$(tf_default_from_variables grafana_victoria_logs_plugin_version)\" \"\$(tf_default_from_variables grafana_victoria_logs_plugin_sha256)\"; CLUSTER_OK=1; print_observed_latest_row 'grafana victorialogs plugin' \"\$(normalize_semver_like_tag \"\$(tf_default_from_variables grafana_victoria_logs_plugin_version)\")\" 'v0.29.0' 'codebase' 'release tag'"
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \"\$(tf_default_from_variables grafana_victoria_logs_plugin_version)\" \"\$(tf_default_from_variables grafana_victoria_logs_plugin_sha256)\"; CLUSTER_OK=1; print_observed_latest_row 'grafana victorialogs plugin' \"\$(normalize_semver_like_tag \"\$(tf_default_from_variables grafana_victoria_logs_plugin_version)\")\" 'v0.31.0' 'codebase' 'release tag'"
 
   [ "${status}" -eq 0 ]
   [ "${#lines[@]}" -eq 3 ]
-  [ "${lines[0]}" = "0.29.0" ]
+  [ "${lines[0]}" = "0.31.0" ]
   [[ "${lines[1]}" =~ ^[0-9a-f]{64}$ ]]
-  [[ "${lines[2]}" == *$'grafana victorialogs plugin\tv0.29.0\tv0.29.0\t'* ]]
-  [[ "${lines[2]}" == *"latest release tag (v0.29.0)"* ]]
+  [[ "${lines[2]}" == *$'grafana victorialogs plugin\tv0.31.0\tv0.31.0\t'* ]]
+  [[ "${lines[2]}" == *"latest release tag (v0.31.0)"* ]]
 }
 
 @test "check-version reports Gitea chart image override as the code tag" {

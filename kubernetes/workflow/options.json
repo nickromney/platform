@@ -456,6 +456,7 @@
         "default",
         "minimal",
         "local-12gb",
+        "local-8gb",
         "local-idp-16gb",
         "local-idp-12gb",
         "airplane"
@@ -554,6 +555,30 @@
       ],
       "overlay": {
         "enable_backstage": false
+      }
+    },
+    {
+      "id": "local-8gb",
+      "group": "resource_profile",
+      "label": "Local 8 GB",
+      "variants": [
+        "kind",
+        "lima"
+      ],
+      "overlay": {
+        "enable_backstage": false,
+        "enable_uat_apps": false,
+        "enable_prometheus": false,
+        "enable_grafana": false,
+        "enable_victoria_logs": true,
+        "enable_otel_gateway": true,
+        "enable_headlamp": false,
+        "enable_hubble": false,
+        "enable_progressive_delivery": false,
+        "argocd_applicationset_enabled": false,
+        "argocd_notifications_enabled": false,
+        "oauth2_proxy_memory_request": "24Mi",
+        "oauth2_proxy_cpu_request": "25m"
       }
     },
     {
