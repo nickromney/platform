@@ -580,7 +580,9 @@
         "argocd_applicationset_enabled": false,
         "argocd_notifications_enabled": false,
         "oauth2_proxy_memory_request": "24Mi",
-        "oauth2_proxy_cpu_request": "25m"
+        "oauth2_proxy_cpu_request": "25m",
+        "oauth2_proxy_session_store_memory_request": "24Mi",
+        "metrics_server_memory_request": "100Mi"
       }
     },
     {

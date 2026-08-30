@@ -582,6 +582,12 @@ variable "metrics_server_image_tag" {
   default     = "v0.8.1"
 }
 
+variable "metrics_server_memory_request" {
+  description = "Memory request for metrics-server. Its footprint scales with node and pod count, so the 200Mi default is kept for roomier clusters; on a two-node local cluster measured steady state is ~25Mi. This reserves scheduler capacity only - the 300Mi limit is unchanged."
+  type        = string
+  default     = "200Mi"
+}
+
 variable "external_secrets_chart_version" {
   description = "External Secrets Operator chart version (external-secrets/external-secrets). Assumed current stable; verify upstream before release."
   type        = string
@@ -653,6 +659,12 @@ variable "oauth2_proxy_cpu_request" {
   description = "CPU request for each oauth2-proxy instance. Multiplied across the per-app SSO proxy fleet in the same way as oauth2_proxy_memory_request."
   type        = string
   default     = "50m"
+}
+
+variable "oauth2_proxy_session_store_memory_request" {
+  description = "Memory request for the shared oauth2-proxy Redis session store. Measured steady-state use is ~5Mi against a 128Mi limit; the limit is the burst boundary, this value only reserves scheduler capacity. Lower it on memory-constrained profiles."
+  type        = string
+  default     = "64Mi"
 }
 
 variable "oauth2_proxy_session_store_image" {

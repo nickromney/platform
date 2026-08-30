@@ -155,7 +155,7 @@ spec:
           resources:
             requests:
               cpu: 25m
-              memory: 64Mi
+              memory: ${var.oauth2_proxy_session_store_memory_request}
             limits:
               cpu: 100m
               memory: 128Mi

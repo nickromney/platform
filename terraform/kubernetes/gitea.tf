@@ -143,14 +143,22 @@ ${var.expose_admin_nodeports ? "            nodePort: ${var.gitea_ssh_node_port}
           global:
             valkey:
               password: changeme
-          master:
+          primary:
+            # Chart key is primary, not master: the vendored valkey subchart has
+            # no master.* key at all, so the previous master: block was inert and
+            # the chart's resourcesPreset: nano won (100m/128Mi requests). Setting
+            # primary.resources overrides that preset. Limits are pinned to the
+            # exact nano values so only the reservation moves; measured steady
+            # state is ~6Mi, so 64Mi is ~10x headroom.
             resources:
               requests:
                 cpu: 25m
                 memory: 64Mi
+                ephemeral-storage: 50Mi
               limits:
-                cpu: 100m
-                memory: 128Mi
+                cpu: 150m
+                memory: 192Mi
+                ephemeral-storage: 2Gi
         extraVolumes:
           - name: gitea-custom-templates
             configMap:
