@@ -540,6 +540,7 @@
       ],
       "overlay": {
         "enable_backstage": false,
+        "enable_external_secrets": false,
         "enable_prometheus": false,
         "enable_grafana": false,
         "enable_victoria_logs": false
@@ -568,6 +569,7 @@
       "overlay": {
         "enable_backstage": false,
         "enable_uat_apps": false,
+        "enable_external_secrets": false,
         "enable_prometheus": false,
         "enable_grafana": false,
         "enable_victoria_logs": true,
