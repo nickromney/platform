@@ -1,0 +1,30 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: platform-gateway
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/name: platform-gateway
+spec:
+  # Cilium implements Gateway API through its own L7 Envoy proxy, so there is no
+  # NginxProxy parametersRef and none of the nginx.org listener options. TLS
+  # hardening that SnippetsPolicy provided under NGF has no direct equivalent
+  # here and is a deliberate, recorded loss in this cutover.
+  gatewayClassName: cilium
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - group: ""
+            kind: Secret
+            name: platform-gateway-tls
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              platform-gateway-access: "true"

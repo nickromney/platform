@@ -1769,3 +1769,81 @@ seed_dev_uat_apps() {
   [[ "${output}" != *"74-dev.application.yaml"* ]]
   [[ "${output}" != *"76-uat.application.yaml"* ]]
 }
+
+seed_platform_gateway_app() {
+  repo_dir="${BATS_TEST_TMPDIR}/policy-repo"
+  gateway_dir="${repo_dir}/apps/platform-gateway"
+  mkdir -p "${gateway_dir}"
+  touch \
+    "${gateway_dir}/namespace.yaml" \
+    "${gateway_dir}/gateway.yaml" \
+    "${gateway_dir}/gateway-cilium.yaml" \
+    "${gateway_dir}/gateway-service.yaml" \
+    "${gateway_dir}/nginxproxy.yaml" \
+    "${gateway_dir}/proxysettingspolicy-oauth-response-buffers.yaml" \
+    "${gateway_dir}/tls-hardening.yaml" \
+    "${gateway_dir}/agent-tls-bootstrap.yaml"
+  printf 'gatewayClassName: cilium\n' >"${gateway_dir}/gateway-cilium.yaml"
+  printf 'gatewayClassName: nginx\n' >"${gateway_dir}/gateway.yaml"
+  cat >"${gateway_dir}/kustomization.yaml" <<'EOF'
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: platform-gateway
+resources:
+  - namespace.yaml
+  - agent-tls-bootstrap.yaml
+  - gateway.yaml
+  - gateway-service.yaml
+  - nginxproxy.yaml
+  - proxysettingspolicy-oauth-response-buffers.yaml
+  - tls-hardening.yaml
+EOF
+}
+
+@test "platform gateway render keeps the NGINX shape when cilium gateway api is off" {
+  seed_platform_gateway_app
+
+  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=false; source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; cat '${gateway_dir}/gateway.yaml'; find '${gateway_dir}' -maxdepth 1 -type f -print"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"gatewayClassName: nginx"* ]]
+  [[ "${output}" == *"nginxproxy.yaml"* ]]
+  [[ "${output}" == *"tls-hardening.yaml"* ]]
+  [[ "${output}" == *"agent-tls-bootstrap.yaml"* ]]
+  # The Cilium variant is staged in the source tree but must not reach a
+  # NGINX-mode policy repo, where it would be an unreferenced stray manifest.
+  [[ "${output}" != *"gateway-cilium.yaml"* ]]
+}
+
+@test "platform gateway render swaps to the cilium gateway and drops NGF-only resources" {
+  seed_platform_gateway_app
+
+  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true; source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; cat '${gateway_dir}/gateway.yaml'; find '${gateway_dir}' -maxdepth 1 -type f -print"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"gatewayClassName: cilium"* ]]
+  [[ "${output}" != *"gatewayClassName: nginx"* ]]
+  [[ "${output}" == *"namespace.yaml"* ]]
+  # Six of the seven resources are NGF-coupled and cannot survive the cutover.
+  [[ "${output}" != *"nginxproxy.yaml"* ]]
+  [[ "${output}" != *"proxysettingspolicy-oauth-response-buffers.yaml"* ]]
+  [[ "${output}" != *"tls-hardening.yaml"* ]]
+  [[ "${output}" != *"gateway-service.yaml"* ]]
+  [[ "${output}" != *"agent-tls-bootstrap.yaml"* ]]
+  [[ "${output}" != *"gateway-cilium.yaml"* ]]
+}
+
+@test "platform gateway render prunes NGF-only entries from the kustomization" {
+  seed_platform_gateway_app
+
+  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true; source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; cat '${gateway_dir}/kustomization.yaml'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"- gateway.yaml"* ]]
+  [[ "${output}" == *"- namespace.yaml"* ]]
+  [[ "${output}" != *"- nginxproxy.yaml"* ]]
+  [[ "${output}" != *"- tls-hardening.yaml"* ]]
+  [[ "${output}" != *"- gateway-service.yaml"* ]]
+  [[ "${output}" != *"- agent-tls-bootstrap.yaml"* ]]
+  [[ "${output}" != *"- proxysettingspolicy-oauth-response-buffers.yaml"* ]]
+}

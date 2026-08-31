@@ -217,6 +217,96 @@ Note `referencegrants` at v1beta1 is also what the repo's own manifests pin
 (`ReferenceGrant apiVersion pinned to gateway.networking.k8s.io/v1beta1` is
 asserted by `check-component-version.sh`), so moving it is not just a CRD swap.
 
+## RESOLVED (2026-08-31): the CRD blocker, and a validated data path
+
+The blocker above is fixed, and the Cilium data path is proven. Both were
+verified on the live two-node cluster rather than reasoned about.
+
+### Root cause, in the operator's own words
+
+`cilium-operator` runs its Gateway API preflight exactly once, at startup, in
+`gateway-api.initGatewayAPIController`. On the v1.4.1 bundle it logged:
+
+```
+Required GatewayAPI resources are not found, please refer to docs for installation instructions
+  CRD "tlsroutes.gateway.networking.k8s.io" does not have version "v1"
+  CRD "referencegrants.gateway.networking.k8s.io" does not have version "v1"
+```
+
+Cilium 1.20 requires those two at `v1`. No Gateway API release at or below
+v1.4.1 serves them there. v1.5.1 and v1.6.1 both do, and both keep the legacy
+versions served alongside, so existing pinned manifests keep working.
+
+`apps/nginx-gateway-fabric-crds/gateway-api-crds.yaml` is now the **v1.6.1
+experimental** bundle (20825 -> 24120 lines, 13 CRDs). After applying it and
+restarting the operator, the served versions are `tlsroutes: v1 v1alpha2
+v1alpha3` and `referencegrants: v1 v1beta1`, and:
+
+```
+NAME           CONTROLLER                                   ACCEPTED
+cilium         io.cilium/gateway-controller                 True
+```
+
+Because the preflight is startup-only, **the operator must be restarted after
+the CRDs land** or the GatewayClass stays `Accepted=Unknown / Waiting for
+controller` indefinitely. That is a real upgrade-ordering hazard, not a
+one-off.
+
+### The data path works, end to end
+
+A throwaway Gateway (`gatewayClassName: cilium`, HTTP listener, HTTPRoute to an
+agnhost backend) reached `Accepted=True` / `Programmed=True`, Cilium created a
+`CiliumEnvoyConfig`, and traffic flowed:
+
+```
+HTTP/1.1 200 OK
+server: envoy
+probe-677cfcd9fd-pdc8j
+```
+
+Envoy bound on the control-plane node; the backend pod was on the worker. So
+this is genuine cross-node L7 proxying through Cilium's Envoy, not a
+same-node shortcut. Cilium Gateway API is viable here.
+
+Note the host-network listener bound on the control plane only. That is what we
+want -- it is the node carrying kind's `extraPortMappings` -- but it is
+incidental rather than enforced, so pin it with
+`cilium_gateway_api_host_network_node_labels` rather than relying on it.
+
+### What the cutover still costs
+
+The platform-gateway app is six-sevenths NGF-coupled. Only `namespace.yaml`
+survives untouched; `gateway.yaml` is rewritten and these five are deleted:
+
+| Resource | Why it cannot survive |
+| --- | --- |
+| `nginxproxy.yaml` | `gateway.nginx.org` NginxProxy, referenced by `infrastructure.parametersRef` |
+| `tls-hardening.yaml` | `gateway.nginx.org/v1alpha1` SnippetsPolicy |
+| `proxysettingspolicy-oauth-response-buffers.yaml` | NGF ProxySettingsPolicy |
+| `gateway-service.yaml` | NodePort `platform-gateway-nginx`; host-network Envoy needs no Service |
+| `agent-tls-bootstrap.yaml` | RBAC bootstrapping `platform-gateway-nginx-agent-tls` for the NGINX agent |
+
+`render_platform_gateway_for_cilium` in `sync-gitea-policies.sh` now performs
+exactly that swap, gated on `cilium_gateway_api`, and prunes the NGF Argo
+application so the two implementations cannot fight over one Gateway.
+
+**Two capability losses are real and unmitigated.** The SnippetsPolicy TLS
+hardening (ssl-protocols, prefer-server-ciphers) and the OAuth response-buffer
+tuning have no Cilium equivalent in this shape. Whoever finishes the cutover
+must either reproduce them through `CiliumGatewayClassConfig`/Envoy settings or
+consciously accept weaker TLS settings than the NGF path enforces today.
+
+Beyond the app itself, roughly 25 files still reference the NGF identity --
+`check-gateway-urls.sh`, `check-gateway-stack.sh`, `check-cluster-health.sh`,
+`gateway-bootstrap.tf`, the `nginx-gateway-hardened` and
+`azure-auth-nginx-gateway-ingress` Cilium policies, the subnetcalc canary patch,
+`tests/app_contracts.py`, and several bats suites. The hardened-policy files
+matter most: they select the NGF pods by label, and a host-network Envoy
+presents the **host** identity instead, which those policies already admit. That
+is likely to make the ingress path simpler than it is today, but it must be
+proven with `cilium-dbg monitor --type drop`, not assumed -- assuming it is the
+exact mistake recorded in ADR 0012.
+
 ## Suggested sequence
 
 1. **Prove host-network mode in isolation.** Enable
