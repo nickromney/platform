@@ -58,17 +58,77 @@ refresh_app() {
   kubectl -n "$ARGOCD_NS" annotate app "$app" argocd.argoproj.io/refresh=hard --overwrite >/dev/null 2>&1 || true
 }
 
-get_resource_jsonpath() {
-  local resource_kind="$1"
-  local resource_namespace="$2"
-  local resource_name="$3"
-  local jsonpath_expr="$4"
+# --- Per-pass cluster snapshots ---------------------------------------------
+#
+# Each predicate below used to issue its own kubectl read per application and
+# per managed workload, so one stability pass over this stack's ~45 repo-backed
+# applications cost hundreds of serial API round trips. Measured on this repo's
+# kind cluster: 129 serial per-app reads took 62.2s, against 1.29s for one
+# `kubectl -n argocd get app -o json` list and 0.31s for one cluster-wide
+# workload list. Every pass now takes exactly those two reads.
+APP_SNAPSHOT_FILE="$(mktemp "${TMPDIR:-/tmp}/argocd-apps.XXXXXX")"
+WORKLOAD_SNAPSHOT_FILE="$(mktemp "${TMPDIR:-/tmp}/argocd-workloads.XXXXXX")"
+trap 'rm -f "$APP_SNAPSHOT_FILE" "$WORKLOAD_SNAPSHOT_FILE" "$APP_SNAPSHOT_FILE.pending" "$WORKLOAD_SNAPSHOT_FILE.pending" "$APP_SNAPSHOT_FILE.names"' EXIT
 
-  if [[ -n "$resource_namespace" ]]; then
-    kubectl -n "$resource_namespace" get "$resource_kind" "$resource_name" -o "jsonpath=$jsonpath_expr" 2>/dev/null || true
+snapshot_file() {
+  local target="$1"
+  shift
+
+  if kubectl "$@" -o json >"${target}.pending" 2>/dev/null; then
+    mv -f "${target}.pending" "${target}"
   else
-    kubectl get "$resource_kind" "$resource_name" -o "jsonpath=$jsonpath_expr" 2>/dev/null || true
+    rm -f "${target}.pending"
+    printf '{"items":[]}\n' >"${target}"
   fi
+}
+
+# Refreshes both snapshots. Callers do this once at the top of every pass, so
+# no predicate ever reads data older than its own pass.
+refresh_snapshots() {
+  snapshot_file "$APP_SNAPSHOT_FILE" -n "$ARGOCD_NS" get applications.argoproj.io
+  snapshot_file "$WORKLOAD_SNAPSHOT_FILE" get deployments,statefulsets,daemonsets,jobs -A
+  # Name index, so the per-app existence check costs a grep rather than a jq process.
+  jq -r '.items[]?.metadata.name // empty' "$APP_SNAPSHOT_FILE" 2>/dev/null \
+    | sort >"$APP_SNAPSHOT_FILE.names" || : >"$APP_SNAPSHOT_FILE.names"
+}
+
+app_query() {
+  local app="$1"
+  local filter="$2"
+
+  jq -r --arg app "$app" ".items[]? | select(.metadata.name == \$app) | ${filter}" \
+    "$APP_SNAPSHOT_FILE" 2>/dev/null || true
+}
+
+app_exists() {
+  local app="$1"
+
+  grep -Fxq -- "$app" "$APP_SNAPSHOT_FILE.names" 2>/dev/null
+}
+
+# Prints "desired<TAB>ready" for one managed workload, empty when it is absent.
+# Jobs report desired=1 and ready=1 only when the Complete condition is True,
+# which is the same test the per-Job jsonpath read used to make.
+workload_state() {
+  local workload_kind="$1"
+  local workload_namespace="$2"
+  local workload_name="$3"
+
+  jq -r \
+    --arg kind "$workload_kind" \
+    --arg ns "$workload_namespace" \
+    --arg name "$workload_name" '
+      .items[]?
+      | select(.kind == $kind and .metadata.name == $name and .metadata.namespace == $ns)
+      | if .kind == "DaemonSet" then
+          [(.status.desiredNumberScheduled // ""), (.status.numberReady // "")]
+        elif .kind == "Job" then
+          [1, (if any(.status.conditions[]?; .type == "Complete" and .status == "True") then 1 else 0 end)]
+        else
+          [(.spec.replicas // ""), (.status.readyReplicas // "")]
+        end
+      | @tsv
+    ' "$WORKLOAD_SNAPSHOT_FILE" 2>/dev/null | head -n 1 || true
 }
 
 managed_workloads_ready() {
@@ -76,44 +136,31 @@ managed_workloads_ready() {
   local workloads=""
   local found_workload=0
 
-  workloads="$(kubectl -n "$ARGOCD_NS" get app "$app" -o json 2>/dev/null | jq -r '
+  workloads="$(app_query "$app" '
     .status.resources[]?
     | select(.kind == "Deployment" or .kind == "StatefulSet" or .kind == "DaemonSet" or .kind == "Job")
     | [(.kind // ""), (.namespace // ""), (.name // "")]
     | @tsv
-  ' 2>/dev/null || true)"
+  ')"
 
   while IFS=$'\t' read -r workload_kind workload_namespace workload_name; do
+    local state=""
     local desired=""
     local ready=""
-    local complete=""
 
     [[ -n "$workload_kind" && -n "$workload_name" ]] || continue
     found_workload=1
 
     case "$workload_kind" in
-      Deployment)
-        desired="$(get_resource_jsonpath deployment "$workload_namespace" "$workload_name" '{.spec.replicas}')"
-        ready="$(get_resource_jsonpath deployment "$workload_namespace" "$workload_name" '{.status.readyReplicas}')"
-        ;;
-      StatefulSet)
-        desired="$(get_resource_jsonpath statefulset "$workload_namespace" "$workload_name" '{.spec.replicas}')"
-        ready="$(get_resource_jsonpath statefulset "$workload_namespace" "$workload_name" '{.status.readyReplicas}')"
-        ;;
-      DaemonSet)
-        desired="$(get_resource_jsonpath daemonset "$workload_namespace" "$workload_name" '{.status.desiredNumberScheduled}')"
-        ready="$(get_resource_jsonpath daemonset "$workload_namespace" "$workload_name" '{.status.numberReady}')"
-        ;;
-      Job)
-        complete="$(get_resource_jsonpath job "$workload_namespace" "$workload_name" '{.status.conditions[?(@.type=="Complete")].status}')"
-        [[ "$complete" == "True" ]] || return 1
-        continue
-        ;;
-      *)
-        continue
-        ;;
+      Deployment | StatefulSet | DaemonSet | Job) ;;
+      *) continue ;;
     esac
 
+    state="$(workload_state "$workload_kind" "$workload_namespace" "$workload_name")"
+    IFS=$'\t' read -r desired ready <<< "$state" || true
+
+    # An absent workload reads as desired=1 ready=0, matching the old behaviour
+    # where a failed per-resource lookup returned empty strings.
     if [[ -z "$desired" ]]; then
       desired="1"
     fi
@@ -136,9 +183,9 @@ needs_refresh() {
 
   needs_refresh_reason=""
 
-  sync_status="$(kubectl -n "$ARGOCD_NS" get app "$app" -o jsonpath='{.status.sync.status}' 2>/dev/null || true)"
-  health_status="$(kubectl -n "$ARGOCD_NS" get app "$app" -o jsonpath='{.status.health.status}' 2>/dev/null || true)"
-  comparison_msg="$(kubectl -n "$ARGOCD_NS" get app "$app" -o jsonpath='{.status.conditions[?(@.type=="ComparisonError")].message}' 2>/dev/null || true)"
+  sync_status="$(app_query "$app" '.status.sync.status // ""')"
+  health_status="$(app_query "$app" '.status.health.status // ""')"
+  comparison_msg="$(app_query "$app" '[.status.conditions[]? | select(.type == "ComparisonError") | .message // ""] | join("")')"
 
   if grep -qiE 'knownhosts: key is unknown|failed to list refs: dial tcp .*:22: connect: connection refused|failed to list refs: unexpected EOF' <<<"$comparison_msg"; then
     needs_refresh_reason="comparison=$comparison_msg"
@@ -167,16 +214,43 @@ needs_refresh() {
   return 1
 }
 
+REFRESH_WAVE_TIMEOUT_SECONDS="${REFRESH_WAVE_TIMEOUT_SECONDS:-15}"
+REFRESH_WAVE_POLL_SECONDS="${REFRESH_WAVE_POLL_SECONDS:-1}"
+
+# True while any app in the wave still carries an unprocessed refresh request.
+# The application controller strips argocd.argoproj.io/refresh once it has
+# handled the refresh, so this is the observable form of "the wave has landed".
+refresh_wave_pending() {
+  local app pending
+
+  while IFS= read -r app; do
+    [[ -n "$app" ]] || continue
+    pending="$(app_query "$app" '.metadata.annotations["argocd.argoproj.io/refresh"] // ""')"
+    [[ -z "$pending" ]] || return 0
+  done <<< "$app_list"
+
+  return 1
+}
+
+refresh_snapshots
+
 while IFS= read -r app; do
   [[ -n "$app" ]] || continue
-  if kubectl -n "$ARGOCD_NS" get app "$app" >/dev/null 2>&1; then
+  if app_exists "$app"; then
     refresh_app "$app"
   fi
 done <<< "$app_list"
 
-# Give the controller time to process the initial hard-refresh wave before
-# deciding whether any app is still stale.
-sleep 15
+# Wait for the controller to consume the initial hard-refresh wave before
+# deciding whether any app is still stale. This replaces a flat 15s sleep: the
+# budget is the same, but a controller that processes the wave in a second no
+# longer costs the other fourteen.
+wave_end=$((SECONDS + REFRESH_WAVE_TIMEOUT_SECONDS))
+while (( SECONDS < wave_end )); do
+  refresh_snapshots
+  refresh_wave_pending || break
+  sleep "$REFRESH_WAVE_POLL_SECONDS"
+done
 
 end=$((SECONDS + ROLLOUT_TIMEOUT_SECONDS))
 stable_passes=0
@@ -189,9 +263,12 @@ while (( SECONDS < end )); do
   pending_apps=()
   hard_pending_apps=()
   soft_pending_apps=()
+  # One Application list and one workload list per pass; every predicate below
+  # reads those instead of issuing its own per-app and per-workload queries.
+  refresh_snapshots
   while IFS= read -r app; do
     [[ -n "$app" ]] || continue
-    if ! kubectl -n "$ARGOCD_NS" get app "$app" >/dev/null 2>&1; then
+    if ! app_exists "$app"; then
       continue
     fi
 

@@ -79,7 +79,7 @@ mcr.microsoft.com/playwright:v1.58.2-noble
 # --- Gitea Actions Runner ---
 docker:29.4.3-cli
 gitea/act_runner:0.4.1
-kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5
+kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
 
 # --- Build base images (used in COPY --from during docker build) ---
 ghcr.io/astral-sh/uv:0.10.4

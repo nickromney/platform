@@ -45,7 +45,7 @@ otel/opentelemetry-collector-contrib:0.158.0	otel/opentelemetry-collector-contri
 mcr.microsoft.com/playwright:v1.58.2-noble	mcr.microsoft.com/playwright@sha256:68f1c3dca663d0e8331e8af4681b0b315eca7de1bd7fa934aac0accbeb9f8323
 docker:29.4.3-cli	docker@sha256:123027172e3a9aa0dd5b5b622c58fa62b187c071c8e0f32da25229074ca457d4
 gitea/act_runner:0.4.1	gitea/act_runner@sha256:56cc968b104b34c72bf7a564d78b60fb2e5a531a9c0783e03ef6328a5d33bb45
-kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5	kindest/node@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5
+kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed	kindest/node@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
 ghcr.io/astral-sh/uv:0.10.4	ghcr.io/astral-sh/uv@sha256:2c51f61a7cfbd85154b74cd3466bcd2aa2a382c08585c1c4bae0ca311cbab7fe
 dhi.io/golang:1.26-alpine3.23-dev	dhi.io/golang@sha256:aa896535643a265e924b30efbcdb461d5c0003b6879ebabf59b27360e2619059
 dhi.io/static:20260413-alpine3.23	dhi.io/static@sha256:9729cb7cc7394d8fa1bd07ac69c8cbbf103bc7b135ec75016504f4d0aa84fcc2
