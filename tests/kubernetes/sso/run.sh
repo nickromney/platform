@@ -68,8 +68,39 @@ tfvar_value() {
   fi
 }
 
+# Operator facts are written by the last apply and, per the repo contract, take
+# priority over tfvars. They matter here because operator override files such as
+# .run/operator/<profile>.tfvars are not on STAGE_TFVARS_FILES, so a profile that
+# disables an app is invisible to tfvar_value and the suite tries to exercise a
+# workload that was never deployed.
+OPERATOR_FACTS_FILE="${OPERATOR_FACTS_FILE:-${REPO_ROOT}/terraform/kubernetes/.run/${SSO_E2E_TARGET:-kind}/operator-facts.json}"
+
+operator_fact_value() {
+  local key="$1"
+
+  [ -f "${OPERATOR_FACTS_FILE}" ] || return 1
+  command -v jq >/dev/null 2>&1 || return 1
+
+  local value
+  value="$(jq -r --arg key "${key}" '
+    if has($key) and (.[$key] != null) then (.[$key] | tostring) else empty end
+  ' "${OPERATOR_FACTS_FILE}" 2>/dev/null)"
+
+  [ -n "${value}" ] || return 1
+  echo "${value}"
+}
+
 tfvar_bool() {
-  tfvar_value "$1" "$2"
+  local key="$1"
+  local default_value="$2"
+  local value
+
+  if value="$(operator_fact_value "${key}")"; then
+    echo "${value}"
+    return 0
+  fi
+
+  tfvar_value "${key}" "${default_value}"
 }
 
 require_tool() {
