@@ -564,6 +564,51 @@ deployment_pods_need_early_recycle() {
   return 1
 }
 
+# `kubectl rollout status` reports readiness of the *current rollout*, not of the
+# workload. Once a Deployment's Progressing condition latches to
+# ProgressDeadlineExceeded it fails permanently, even at full availability, and
+# only a fresh rollout clears it. Ask the object what it actually is instead.
+deployment_is_fully_available() {
+  local namespace="${1}"
+  local deploy_name="${2}"
+  local desired="" state=""
+
+  state="$(
+    kubectl -n "${namespace}" get deploy "${deploy_name}" -o jsonpath='{.spec.replicas}/{.status.observedGeneration}/{.metadata.generation}/{.status.updatedReplicas}/{.status.readyReplicas}/{.status.availableReplicas}' 2>/dev/null || true
+  )"
+  [[ -n "${state}" ]] || return 1
+
+  local spec_replicas observed generation updated ready available
+  IFS='/' read -r spec_replicas observed generation updated ready available <<<"${state}"
+
+  desired="${spec_replicas:-0}"
+  [[ "${desired}" =~ ^[0-9]+$ ]] || return 1
+  (( desired > 0 )) || return 1
+
+  # An out-of-date observedGeneration means the controller has not yet acted on
+  # the latest spec, so availability numbers below refer to the previous spec.
+  [[ "${observed:-0}" =~ ^[0-9]+$ && "${generation:-0}" =~ ^[0-9]+$ ]] || return 1
+  (( observed >= generation )) || return 1
+
+  [[ "${updated:-0}" == "${desired}" ]] || return 1
+  [[ "${ready:-0}" == "${desired}" ]] || return 1
+  [[ "${available:-0}" == "${desired}" ]] || return 1
+
+  return 0
+}
+
+deployment_progress_deadline_exceeded() {
+  local namespace="${1}"
+  local deploy_name="${2}"
+  local reason
+
+  reason="$(
+    kubectl -n "${namespace}" get deploy "${deploy_name}" -o jsonpath='{range .status.conditions[?(@.type=="Progressing")]}{.reason}{end}' 2>/dev/null || true
+  )"
+
+  [[ "${reason}" == "ProgressDeadlineExceeded" ]]
+}
+
 wait_for_deployment_rollout_with_early_recycle() {
   local namespace="${1}"
   local deploy_name="${2}"
@@ -578,6 +623,19 @@ wait_for_deployment_rollout_with_early_recycle() {
   while (( SECONDS < end )); do
     if kubectl -n "${namespace}" rollout status "deploy/${deploy_name}" --timeout=10s >/dev/null 2>&1; then
       ok "${description} ready"
+      return 0
+    fi
+
+    if deployment_is_fully_available "${namespace}" "${deploy_name}"; then
+      ok "${description} ready (fully available; rollout status is reporting a stale rollout)"
+      return 0
+    fi
+
+    # This never clears itself, so waiting out the timeout is pure dead time.
+    if [[ "${recycled}" -eq 0 ]] && deployment_progress_deadline_exceeded "${namespace}" "${deploy_name}"; then
+      recycled=1
+      warn "${description} latched ProgressDeadlineExceeded; recycling now rather than waiting for the timeout"
+      recycle_deployment_pods "${namespace}" "${deploy_name}" "${timeout_seconds}" "${description}" || return 1
       return 0
     fi
 
