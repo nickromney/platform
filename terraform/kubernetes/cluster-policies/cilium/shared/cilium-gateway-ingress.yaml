@@ -1,0 +1,187 @@
+# Backend ingress for the Cilium Gateway API data path. Rendered only when
+# cilium_gateway_api is enabled; the NGINX Gateway Fabric path does not use it.
+#
+# Cilium terminates Gateway API traffic in its own Envoy rather than in a pod,
+# and that Envoy presents the reserved:ingress identity -- not host, and not a
+# platform-gateway pod identity. Measured on a two-node kind cluster, a Cilium
+# Gateway reaching oauth2-proxy produced:
+#
+#   Policy denied ... identity ingress->48344: 10.244.0.166 -> 10.244.1.224:4180
+#
+# So every backend the gateway serves needs an explicit fromEntities: ingress
+# rule. Each document below mirrors, one for one, an egress allowance that
+# platform-gateway-hardened grants the NGINX gateway pods. The nginx-gateway
+# control plane is deliberately absent: it does not exist in this mode.
+#
+# These are scoped per backend rather than written as a single empty
+# endpointSelector, so the Cilium Envoy is admitted only where the NGINX
+# gateway was already allowed to go.
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: cilium-gateway-ingress-argocd
+spec:
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": argocd
+      "k8s:app.kubernetes.io/name": argocd-server
+  ingress:
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: cilium-gateway-ingress-gitea
+spec:
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": gitea
+      "k8s:app.kubernetes.io/name": gitea
+  ingress:
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: cilium-gateway-ingress-apim
+spec:
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": apim
+      "k8s:app.kubernetes.io/name": subnetcalc-apim-simulator
+      "k8s:tier": gateway
+  ingress:
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: cilium-gateway-ingress-agentgateway
+spec:
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": agentgateway-system
+  ingress:
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+            - port: "8080"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: cilium-gateway-ingress-auth-proxies
+spec:
+  endpointSelector:
+    matchLabels:
+      "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
+      "k8s:app.kubernetes.io/component": authentication-proxy
+  ingress:
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "4180"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: cilium-gateway-ingress-applications
+spec:
+  endpointSelector:
+    matchLabels:
+      "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": application
+  ingress:
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: cilium-gateway-ingress-keycloak
+spec:
+  endpointSelector:
+    matchLabels:
+      "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
+      "k8s:app.kubernetes.io/name": keycloak
+  ingress:
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: cilium-gateway-ingress-headlamp
+spec:
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": headlamp
+  ingress:
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "4466"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: cilium-gateway-ingress-hubble-ui
+spec:
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": kube-system
+      "k8s:k8s-app": hubble-ui
+  ingress:
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8081"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: cilium-gateway-ingress-policy-reporter
+spec:
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": policy-reporter
+  ingress:
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
