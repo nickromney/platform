@@ -94,6 +94,15 @@ fi
 
 operator_facts_load
 
+CILIUM_GATEWAY_API="$(operator_facts_bool cilium_gateway_api false 2>/dev/null || echo false)"
+# Cilium publishes cilium-gateway-<gateway-name>; NGF names its NodePort Service
+# after the Gateway with an -nginx suffix.
+if [[ "${CILIUM_GATEWAY_API}" == "true" ]]; then
+  PLATFORM_GATEWAY_SERVICE="cilium-gateway-platform-gateway"
+else
+  PLATFORM_GATEWAY_SERVICE="platform-gateway-nginx"
+fi
+
 array_contains() {
   local needle="$1"
   shift || true
@@ -160,8 +169,8 @@ print_debug_context() {
   DEBUG_PRINTED=1
   echo ""
   echo "Debug context (service/pods/labels):"
-  kubectl -n platform-gateway get svc platform-gateway-nginx -o wide || true
-  selector=$(kubectl -n platform-gateway get svc platform-gateway-nginx -o jsonpath='{.spec.selector}' 2>/dev/null || true)
+  kubectl -n platform-gateway get svc ${PLATFORM_GATEWAY_SERVICE} -o wide || true
+  selector=$(kubectl -n platform-gateway get svc ${PLATFORM_GATEWAY_SERVICE} -o jsonpath='{.spec.selector}' 2>/dev/null || true)
   if [[ -n "${selector}" ]]; then
     echo "Service selector: ${selector}"
   fi
@@ -175,9 +184,9 @@ print_debug_context() {
   echo "Pods labeled for gateway-name=platform-gateway (all namespaces):"
   kubectl get pods -A -l gateway.networking.k8s.io/gateway-name=platform-gateway -o wide --show-labels || true
   echo ""
-  echo "EndpointSlices for platform-gateway-nginx:"
-  kubectl -n platform-gateway get endpointslices -l kubernetes.io/service-name=platform-gateway-nginx -o wide || true
-  endpoints_detail=$(kubectl -n platform-gateway get endpointslices -l kubernetes.io/service-name=platform-gateway-nginx -o jsonpath='{range .items[*].endpoints[*]}{.addresses[0]}{" ready="}{.conditions.ready}{" serving="}{.conditions.serving}{" terminating="}{.conditions.terminating}{"\n"}{end}' 2>/dev/null || true)
+  echo "EndpointSlices for ${PLATFORM_GATEWAY_SERVICE}:"
+  kubectl -n platform-gateway get endpointslices -l kubernetes.io/service-name=${PLATFORM_GATEWAY_SERVICE} -o wide || true
+  endpoints_detail=$(kubectl -n platform-gateway get endpointslices -l kubernetes.io/service-name=${PLATFORM_GATEWAY_SERVICE} -o jsonpath='{range .items[*].endpoints[*]}{.addresses[0]}{" ready="}{.conditions.ready}{" serving="}{.conditions.serving}{" terminating="}{.conditions.terminating}{"\n"}{end}' 2>/dev/null || true)
   if [[ -n "${endpoints_detail}" ]]; then
     echo "EndpointSlice details:"
     echo "${endpoints_detail}"
@@ -468,7 +477,21 @@ kubectl get nodes >/dev/null 2>&1 || fail "kubectl cannot reach the cluster"
 ok "kubectl can reach the cluster"
 
 echo ""
-echo "Gateway controller (nginx-gateway):"
+if [[ "${CILIUM_GATEWAY_API}" == "true" ]]; then
+  # Cilium has no gateway deployment: Envoy runs inside the cilium-agent
+  # DaemonSet, so the GatewayClass is the thing that says the controller is live.
+  echo "Gateway controller (cilium):"
+  gwc_accepted=$(kubectl get gatewayclass cilium -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}' 2>/dev/null || true)
+  if [[ "${gwc_accepted}" == "True" ]]; then
+    ok "cilium GatewayClass Accepted=True"
+  else
+    fail_soft "cilium GatewayClass Accepted=$(reported_or_not "${gwc_accepted}")"
+  fi
+else
+  echo "Gateway controller (nginx-gateway):"
+fi
+
+if [[ "${CILIUM_GATEWAY_API}" != "true" ]]; then
 if kubectl -n nginx-gateway get deploy nginx-gateway >/dev/null 2>&1; then
   desired=$(kubectl -n nginx-gateway get deploy nginx-gateway -o jsonpath='{.spec.replicas}' 2>/dev/null || true)
   ready=$(kubectl -n nginx-gateway get deploy nginx-gateway -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)
@@ -479,6 +502,7 @@ if kubectl -n nginx-gateway get deploy nginx-gateway >/dev/null 2>&1; then
   fi
 else
   fail_soft "nginx-gateway deployment missing in namespace nginx-gateway"
+fi
 fi
 
 echo ""
@@ -505,25 +529,25 @@ else
 fi
 
 echo ""
-echo "Gateway Service (platform-gateway-nginx):"
-if kubectl -n platform-gateway get svc platform-gateway-nginx >/dev/null 2>&1; then
-  node_port=$(kubectl -n platform-gateway get svc platform-gateway-nginx -o jsonpath='{.spec.ports[?(@.port==443)].nodePort}' 2>/dev/null || true)
+echo "Gateway Service (${PLATFORM_GATEWAY_SERVICE}):"
+if kubectl -n platform-gateway get svc ${PLATFORM_GATEWAY_SERVICE} >/dev/null 2>&1; then
+  node_port=$(kubectl -n platform-gateway get svc ${PLATFORM_GATEWAY_SERVICE} -o jsonpath='{.spec.ports[?(@.port==443)].nodePort}' 2>/dev/null || true)
   if [[ -n "${node_port}" ]]; then
     ok "NodePort: ${node_port}"
   else
-    fail_soft "NodePort not found on service platform-gateway-nginx"
+    fail_soft "NodePort not found on service ${PLATFORM_GATEWAY_SERVICE}"
   fi
-  endpoints=$(kubectl -n platform-gateway get endpoints platform-gateway-nginx -o jsonpath='{range .subsets[*].addresses[*]}{.ip}{" "}{end}' 2>/dev/null || true)
+  endpoints=$(kubectl -n platform-gateway get endpoints ${PLATFORM_GATEWAY_SERVICE} -o jsonpath='{range .subsets[*].addresses[*]}{.ip}{" "}{end}' 2>/dev/null || true)
   if [[ -n "${endpoints}" ]]; then
     ok "Endpoints: ${endpoints}"
   else
-    fail_soft "No endpoints for service platform-gateway-nginx"
+    fail_soft "No endpoints for service ${PLATFORM_GATEWAY_SERVICE}"
     if [[ "${EXTENDED}" -eq 1 ]]; then
       print_debug_context
     fi
   fi
 else
-  fail_soft "Service platform-gateway-nginx missing in namespace platform-gateway"
+  fail_soft "Service ${PLATFORM_GATEWAY_SERVICE} missing in namespace platform-gateway"
   if [[ "${EXTENDED}" -eq 1 ]]; then
     print_debug_context
   fi
