@@ -574,7 +574,6 @@
         "enable_alertmanager": false,
         "enable_grafana": false,
         "enable_headlamp": false,
-        "enable_hubble": false,
         "enable_progressive_delivery": false,
         "argocd_applicationset_enabled": false,
         "argocd_notifications_enabled": false,

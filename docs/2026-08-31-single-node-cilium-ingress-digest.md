@@ -107,13 +107,51 @@ The real defect is in the policy: **the platform gateway does not admit `world`
 on its listener port**, and only works on two nodes because the cross-node hop
 SNATs the source to a node identity first.
 
+## The fix, and what it did and did not solve
+
+The policies were changed to match their own stated intent -- `world` admitted on
+the gateway's :443 and on gitea's published NodePorts, nothing wider. Results:
+
+- `gitea :30090` from the host on a **single node**: HTTP 000 -> **200**
+- no policy drops recorded for any request, on either topology
+- **two-node** stage-900 apply with the fix: `exit=0`, `subnetcalc.dev` still 302
+
+So the identity problem is solved and the fix is topology-independent, which was
+the requirement.
+
+Single-node is still not serviceable, for a **different** reason. The gateway's
+TLS handshake over the host 443 mapping resets:
+
+```text
+curl:  Connected to 127.0.0.1 port 443 -> TLS Client hello -> Recv failure: Connection reset by peer
+nginx: client closed connection while SSL handshaking, client: 10.244.0.69
+```
+
+The connection reaches nginx and the handshake begins. Plain HTTP on gitea's
+NodePort succeeds on the same cluster, so it is specific to the TLS flight.
+eth0 inside the kind node has **MTU 65535** and the Cilium interfaces 65520
+(Docker Desktop's jumbo virtual networking), so the leading hypothesis is that the
+large certificate flight does not survive the path to the host while small packets
+do. **Untested.** Pinning Cilium's MTU to 1500 is the obvious first experiment.
+
+## A process lesson that cost real time
+
+`kubectl apply` of a fixed CiliumClusterwideNetworkPolicy was **silently reverted
+by Argo self-heal** within seconds -- `selfHeal=true`, synced from the in-cluster
+Gitea repo, not the working tree. The endpoint kept showing the old policy and the
+fix looked like it had failed. Policy changes only count once they go through
+`make -C kubernetes/kind gitea-sync AUTO_APPROVE=1`, or a full rebuild.
+
 ## If picking this up again
 
-- The remaining question is narrow: why does Docker Desktop's forward into the
-  container miss the BPF NodePort when both `172.18.0.2:30070` and
-  `127.0.0.1:30070` work from inside that same container?
-- Cilium knobs worth reading first: `devices`, socket-LB
-  (`bpf.lbSockHostnsOnly`), and `nodePort.directRoutingDevice`.
+- The remaining question is narrow and is **not** about identity or the port
+  forward, both of which are now understood: why does the TLS handshake reset over
+  the host 443 mapping when plain HTTP on another NodePort succeeds?
+- Test MTU first. Pin Cilium's MTU to 1500 and retry; the 65535/65520 mismatch
+  against the host path is the leading explanation.
+- Cilium Gateway API in host-network mode may make this moot by removing the
+  NodePort hop entirely. See
+  [cilium-ingress-next-steps](./plans/cilium-ingress-next-steps.md).
 - Hubble is the right tool and `local-8gb` disables it. Enable
   `enable_hubble = true` for the debug run.
 - Do not chase this for memory. Single-node measured ~117 Mi of actual saving;

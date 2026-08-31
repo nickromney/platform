@@ -31,6 +31,27 @@ This surfaced when `worker_count = 0` was trialled for memory reasons. A
 single-node cluster must remove the control-plane taint or nothing schedules, so
 workloads land on the port-mapped node and the cross-node hop disappears.
 
+## Resolution
+
+The policies were fixed to match their own stated intent. `platform-gateway-hardened`
+now admits `world` **scoped to :443 only**, and `gitea-hardened` gained a separate
+`world` rule scoped to its published NodePorts (3000, 22, 2222) rather than
+widening its existing unrestricted host/remote-node rule.
+
+This is additive and topology-independent: single-node's `world` source becomes
+admitted, two-node's node-identity source is untouched. Verified both ways --
+`gitea :30090` from the host on a single node went from HTTP 000 to **200**, no
+policy drops are recorded for any request, and a two-node stage-900 apply with the
+fix completed `exit=0` with `subnetcalc.dev` still returning 302.
+
+Single-node is still not fully serviceable, but for a **different and unrelated**
+reason: the gateway's TLS handshake over the host 443 mapping resets
+(`client closed connection while SSL handshaking` in nginx, `Recv failure` in
+curl) while plain HTTP on gitea's NodePort succeeds. eth0 inside the kind node has
+MTU 65535 and the Cilium interfaces 65520, so the leading hypothesis is that the
+large TLS certificate flight does not survive the path to the host while small
+packets do. That is untested.
+
 ## Decision
 
 Treat the two-node topology as a **load-bearing precondition of the hardened
