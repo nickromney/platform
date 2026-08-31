@@ -238,6 +238,7 @@ export TF_VAR_kind_stack_dir := $(abspath $(STACK_DIR))
 export TF_VAR_kind_config_path := $(abspath $(STACK_DIR))/kind-config.yaml
 export TF_VAR_kind_operator_overrides_file := $(KIND_OPERATOR_OVERRIDES_FILE)
 export TF_VAR_platform_tfvars_file := $(PLATFORM_TFVARS)
+export TF_VAR_kind_profile_tfvars_file := $(if $(strip $(KIND_PROFILE_TFVARS)),$(abspath $(KIND_PROFILE_TFVARS)))
 .PHONY: help
 help:
 	@echo "kind demo (Docker + kind + Cilium + Argo CD + Gitea + Grafana/Prometheus/VictoriaLogs)"

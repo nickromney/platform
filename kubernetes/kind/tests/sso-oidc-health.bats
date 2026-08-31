@@ -110,3 +110,78 @@ setup() {
 
   [ "${status}" -eq 0 ]
 }
+
+# The post-OIDC health check runs from a Terraform local-exec, so it assembles
+# its own --var-file list rather than inheriting the Makefile's. Any tfvars
+# source missing from that list is invisible to the check, and an app the
+# operator profile disables then reads as missing rather than as not requested.
+setup_after_oidc_harness() {
+  after_oidc_script="${REPO_ROOT}/terraform/kubernetes/scripts/check-cluster-health-after-oidc.sh"
+  work="${BATS_TEST_TMPDIR}"
+
+  for f in stage target profile platform operator; do
+    printf '# %s\n' "$f" >"${work}/${f}.tfvars"
+  done
+
+  # Stands in for check-cluster-health.sh and records the arguments it was given.
+  cat >"${work}/fake-health.sh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$@" >"${ARGS_OUT}"
+exit 0
+EOF
+  chmod +x "${work}/fake-health.sh"
+}
+
+@test "the post-OIDC health check passes the operator profile tfvars" {
+  setup_after_oidc_harness
+
+  run env \
+    HEALTH_SCRIPT="${work}/fake-health.sh" \
+    ARGS_OUT="${work}/args.txt" \
+    KUBECONFIG="${work}/kubeconfig" \
+    KIND_STAGE_TFVARS_FILE="${work}/stage.tfvars" \
+    KIND_TARGET_TFVARS_FILE="${work}/target.tfvars" \
+    KIND_PROFILE_TFVARS_FILE="${work}/profile.tfvars" \
+    PLATFORM_TFVARS="${work}/platform.tfvars" \
+    KIND_OPERATOR_OVERRIDES_FILE="${work}/operator.tfvars" \
+    bash "${after_oidc_script}" --execute
+
+  [ "${status}" -eq 0 ]
+  run cat "${work}/args.txt"
+  [[ "${output}" == *"profile.tfvars"* ]]
+}
+
+@test "the post-OIDC health check orders the profile between target and platform" {
+  setup_after_oidc_harness
+
+  env \
+    HEALTH_SCRIPT="${work}/fake-health.sh" \
+    ARGS_OUT="${work}/args.txt" \
+    KUBECONFIG="${work}/kubeconfig" \
+    KIND_STAGE_TFVARS_FILE="${work}/stage.tfvars" \
+    KIND_TARGET_TFVARS_FILE="${work}/target.tfvars" \
+    KIND_PROFILE_TFVARS_FILE="${work}/profile.tfvars" \
+    PLATFORM_TFVARS="${work}/platform.tfvars" \
+    KIND_OPERATOR_OVERRIDES_FILE="${work}/operator.tfvars" \
+    bash "${after_oidc_script}" --execute
+
+  # Later files win, so the order is the precedence the Makefile builds.
+  run bash -c "grep -n 'tfvars' '${work}/args.txt' | tr '\n' ' '"
+  [[ "${output}" =~ stage.*target.*profile.*platform.*operator ]]
+}
+
+@test "the post-OIDC health check omits tfvars sources that are not set" {
+  setup_after_oidc_harness
+
+  run env \
+    HEALTH_SCRIPT="${work}/fake-health.sh" \
+    ARGS_OUT="${work}/args.txt" \
+    KUBECONFIG="${work}/kubeconfig" \
+    KIND_STAGE_TFVARS_FILE="${work}/stage.tfvars" \
+    bash "${after_oidc_script}" --execute
+
+  [ "${status}" -eq 0 ]
+  run cat "${work}/args.txt"
+  [[ "${output}" == *"stage.tfvars"* ]]
+  [[ "${output}" != *"profile.tfvars"* ]]
+}
