@@ -131,6 +131,49 @@ Working as designed:
 - **The existing NGINX path is unaffected**: `subnetcalc.dev` still returns 302
   with kube-proxy replacement and Gateway API both on.
 
+### It is safe: the whole stack still passes
+
+With `kubeProxyReplacement` and `gatewayAPI` both enabled on two nodes, stage 900
+applied `exit=0` and the platform is fully functional:
+
+- `check-gateway-urls`: **60 OK / 0 FAIL**
+- `check-sso-e2e`: **exit 0, 13 passed / 0 failed**, including both cross-app
+  sign-out tests
+- memory 6.15 GiB of the 8.72 GiB limit, against a 5.60 GiB baseline -- so the
+  Cilium stack costs about **+0.55 GiB**, mostly cilium-envoy
+
+That is the reassuring half: turning this on does not destabilise anything, so
+the migration can proceed incrementally without holding the platform hostage.
+
+### The cost: kube-proxy replacement makes apply 12.5x slower at one step
+
+| build | `recover_kind_cluster_after_oidc_restart` |
+| --- | --- |
+| two-node, no KPR | **2m49s** |
+| two-node, **with KPR** | **35m08s** |
+| single-node, no KPR | 2m46s |
+
+Total stage-900 apply went from 12.5 min to **59.1 min**, and essentially all of
+the difference is that one step. It is clearly attributable to kube-proxy
+replacement rather than topology, since single-node without KPR matches the
+baseline.
+
+The likely mechanism: the apiserver restarts for OIDC reconfiguration, and with
+kube-proxy gone Cilium must re-reach it via `k8sServiceHost` before the
+`kubernetes` Service is programmed again. Anything needing the API stalls until
+Cilium recovers, presumably behind a retry backoff.
+
+This matters more than it looks. Kube-proxy replacement is a **hard prerequisite**
+for Cilium Gateway API, so this cost is not optional -- it is the price of
+entry, paid on every apply. Worth investigating before committing:
+
+- does `k8sServiceHost` pointing at the container name (rather than an IP) slow
+  re-resolution after the restart?
+- would ordering OIDC reconfiguration before Cilium, or reversing the restart
+  order, avoid the stall entirely?
+- is the recovery loop's backoff simply too coarse for a restart that actually
+  completes in seconds?
+
 ### The blocker: Gateway API CRD versions
 
 The GatewayClass sits at `Accepted=Unknown`, `reason=Pending`,
