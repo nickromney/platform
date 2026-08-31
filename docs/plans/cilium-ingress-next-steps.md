@@ -109,6 +109,71 @@ port mappings**. In this repo that is the control-plane, which carries a
 `NoSchedule` taint -- fine, because Envoy runs in the cilium agent/cilium-envoy
 DaemonSets which tolerate it, but it is the opposite of where workloads land.
 
+## What a first build actually produced (2026-08-31, two-node)
+
+Built with `cilium_kube_proxy_replacement = true`, `cilium_gateway_api = true`
+and the host-network node selector pinned to the control plane. Results:
+
+Working as designed:
+
+- kind created **both** port mappings -- `30070/tcp -> 443` (NGINX) and
+  `443/tcp -> 8443` (Cilium host-network listener). The parallel-migration model
+  holds.
+- kube-proxy DaemonSet absent; `kube-proxy-replacement = true`.
+- A **`cilium` GatewayClass appears** (`io.cilium/gateway-controller`) alongside
+  `nginx` and `agentgateway`.
+- `cilium-config` carries what was intended:
+  `enable-gateway-api=true`, `enable-l7-proxy=true`,
+  `gateway-api-hostnetwork-enabled=true`, and
+  `gateway-api-hostnetwork-nodelabelselector=kubernetes.io/hostname=kind-local-control-plane`.
+- The operator confirms host networking is live:
+  *"Gateway API host networking is enabled, externalTrafficPolicy will be ignored."*
+- **The existing NGINX path is unaffected**: `subnetcalc.dev` still returns 302
+  with kube-proxy replacement and Gateway API both on.
+
+### The blocker: Gateway API CRD versions
+
+The GatewayClass sits at `Accepted=Unknown`, `reason=Pending`,
+`"Waiting for controller"`, and the operator says why:
+
+```text
+Required GatewayAPI resources are not found
+CRD "tlsroutes.gateway.networking.k8s.io" does not have version "v1"
+CRD "referencegrants.gateway.networking.k8s.io" does not have version "v1"
+```
+
+Cilium 1.20's controller requires **v1** for the full required set. The bundle
+this repo installs for NGINX Gateway Fabric
+(`apps/nginx-gateway-fabric-crds`, Gateway API **v1.4.1, experimental channel**)
+serves:
+
+| CRD | installed | Cilium 1.20 needs |
+| --- | --- | --- |
+| httproutes | v1, v1beta1 | v1 -- ok |
+| grpcroutes | v1 | v1 -- ok |
+| backendtlspolicies | v1, v1alpha3 | v1 -- ok |
+| **tlsroutes** | **v1alpha2, v1alpha3** | **v1 -- missing** |
+| **referencegrants** | **v1beta1** | **v1 -- missing** |
+
+So the controller never claims the class and no Gateway can be programmed. This
+is the first thing to solve, and it is a **shared-CRD** problem: NGINX Gateway
+Fabric and Cilium both consume the same cluster-scoped bundle, so the version
+has to satisfy both at once. Options, in the order worth trying:
+
+1. Find a Gateway API bundle version whose `tlsroutes` and `referencegrants`
+   are served at v1 and which NGINX Gateway Fabric 2.5.1 still accepts. Check
+   Cilium's own documented Gateway API version requirement for 1.20 first --
+   it pins a specific release.
+2. Let Cilium install and own the Gateway API CRDs, and check whether NGF
+   tolerates that bundle. Riskier, because ownership of a cluster-scoped
+   resource then moves.
+3. If no single bundle satisfies both, the parallel-migration plan does not
+   work and this becomes a cutover, which changes the risk calculus entirely.
+
+Note `referencegrants` at v1beta1 is also what the repo's own manifests pin
+(`ReferenceGrant apiVersion pinned to gateway.networking.k8s.io/v1beta1` is
+asserted by `check-component-version.sh`), so moving it is not just a CRD swap.
+
 ## Suggested sequence
 
 1. **Prove host-network mode in isolation.** Enable
