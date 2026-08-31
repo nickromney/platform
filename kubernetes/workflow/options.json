@@ -573,8 +573,6 @@
         "enable_external_secrets": false,
         "enable_prometheus": false,
         "enable_grafana": false,
-        "enable_victoria_logs": true,
-        "enable_otel_gateway": true,
         "enable_headlamp": false,
         "enable_hubble": false,
         "enable_progressive_delivery": false,

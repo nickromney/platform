@@ -446,10 +446,14 @@ EOF
     [ "${status}" -eq 0 ]
     # The uat workspace stays Terraform-owned; only the workload sync stops.
     [[ "${output}" == *"enable_uat_apps = false"* ]]
-    # Metrics pair off, logging path deliberately retained.
+    # Metrics pair off. The logging path is retained, but deliberately NOT by
+    # affirming it here -- stage 900 enables victoria-logs, and the otel gateway
+    # follows from enable_otel_gateway_effective, which ORs in victoria-logs.
+    # Affirming either would force it on at stage 100 and trip a check block.
     [[ "${output}" == *"enable_prometheus = false"* ]]
     [[ "${output}" == *"enable_grafana = false"* ]]
-    [[ "${output}" == *"enable_victoria_logs = true"* ]]
+    [[ "${output}" != *"enable_victoria_logs"* ]]
+    [[ "${output}" != *"enable_otel_gateway"* ]]
     # Per-app SSO proxy fleet right-sized rather than consolidated.
     [[ "${output}" == *'oauth2_proxy_memory_request = "24Mi"'* ]]
     # Shared SSO session store and metrics-server reserve for measured use
@@ -586,4 +590,27 @@ PYEOF
   run jq -r '.warnings | join("|")' <<<"${preview_json}"
   [ "${status}" -eq 0 ]
   [[ "${output}" != *"sets worker_count"* ]]
+}
+
+@test "the local-8gb profile only reduces, so it cannot force a capability on at an earlier stage" {
+  # local-8gb is layered over every stage, not just 900. Affirming `enable_x = true`
+  # in the overlay forces x on at stage 100 too, where its dependencies are not yet
+  # satisfied, and trips the check blocks in variables.tf (for example
+  # enable_victoria_logs_requires_argocd). Reductions and sizings are safe at any
+  # stage; affirmations are not. Capabilities this profile keeps come from the stage
+  # tfvars, or from an effective-value OR such as enable_otel_gateway_effective.
+  run uv run --isolated python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+options = json.loads((Path(os.environ["REPO_ROOT"]) / "kubernetes/workflow/options.json").read_text())
+overlay = next(p for p in options["presets"] if p["id"] == "local-8gb")["overlay"]
+affirmed = sorted(k for k, v in overlay.items() if k.startswith("enable_") and v is True)
+assert not affirmed, f"local-8gb must not enable capabilities: {affirmed}"
+print(f"validated {len(overlay)} local-8gb overlay key(s), none affirming")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"none affirming"* ]]
 }
