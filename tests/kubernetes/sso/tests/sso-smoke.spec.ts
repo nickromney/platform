@@ -44,6 +44,17 @@ const INCLUDE_BACKSTAGE = isEnabled('SSO_E2E_ENABLE_BACKSTAGE', true)
 const INCLUDE_MCP = isEnabled('SSO_E2E_ENABLE_MCP', true)
 const INCLUDE_SENTIMENT = isEnabled('SSO_E2E_ENABLE_SENTIMENT', true)
 const INCLUDE_SUBNETCALC = isEnabled('SSO_E2E_ENABLE_SUBNETCALC', true)
+// enable_uat_apps keeps the uat workspace -- namespace, SSO proxies, gateway routes --
+// while dropping the workload sync, so the uat hosts still answer with an SSO redirect but
+// have no app behind them. Without this the uat targets fail on a deliberately empty
+// namespace and, being first in the list, take the rest of the suite down with them.
+const INCLUDE_UAT_APPS = isEnabled('SSO_E2E_ENABLE_UAT_APPS', true)
+// Six grafana targets and one hubble target had no gate at all, so a profile that
+// turns either off failed the suite on a surface it deliberately never deployed --
+// and because Playwright stops at the first failure, that took every later test
+// with it. Both default true so the full stage-900 profile is unchanged.
+const INCLUDE_GRAFANA = isEnabled('SSO_E2E_ENABLE_GRAFANA', true)
+const INCLUDE_HUBBLE = isEnabled('SSO_E2E_ENABLE_HUBBLE', true)
 const VERIFY_APP_ACTIONS = isEnabled('SSO_E2E_VERIFY_APP_ACTIONS', true)
 const VERIFY_AUTH_CHAT_MODEL = isEnabled('SSO_E2E_VERIFY_AUTH_CHAT_MODEL', false)
 const BASE_SCHEME = process.env.SSO_E2E_SCHEME || 'https'
@@ -133,6 +144,9 @@ const BASE_TARGETS: Target[] = [
 ]
 
 function filterTargetByEnabledApps(target: Target) {
+  if (target.segment === 'uat' && !INCLUDE_UAT_APPS) return false
+  if (target.name.startsWith('grafana-')) return INCLUDE_GRAFANA
+  if (target.name.startsWith('hubble-')) return INCLUDE_HUBBLE
   if (target.name.startsWith('sentiment-')) return INCLUDE_SENTIMENT
   if (target.name.startsWith('subnetcalc-')) return INCLUDE_SUBNETCALC
   return true
@@ -178,7 +192,7 @@ if (INCLUDE_MCP) {
   })
 }
 
-if (INCLUDE_MCP && INCLUDE_VICTORIA_LOGS) {
+if (INCLUDE_GRAFANA && INCLUDE_MCP && INCLUDE_VICTORIA_LOGS) {
   TARGETS.push({
     name: 'grafana-platform-namespace-health',
     url: absolutePlatformUrl('grafana.admin', '/d/platform-namespace-health/platform-namespace-health?orgId=1&from=now-6h&to=now&timezone=browser&refresh=30s'),
@@ -195,7 +209,7 @@ if (INCLUDE_MCP && INCLUDE_VICTORIA_LOGS) {
   })
 }
 
-if (INCLUDE_BACKSTAGE && INCLUDE_VICTORIA_LOGS) {
+if (INCLUDE_GRAFANA && INCLUDE_BACKSTAGE && INCLUDE_VICTORIA_LOGS) {
   TARGETS.push({
     name: 'grafana-backstage-observability',
     url: absolutePlatformUrl('grafana.admin', '/d/backstage-observability/backstage-observability?orgId=1&from=now-6h&to=now&timezone=browser&refresh=30s'),
