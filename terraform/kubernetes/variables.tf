@@ -101,6 +101,12 @@ variable "kind_target_tfvars_file" {
   default     = ""
 }
 
+variable "platform_tfvars_file" {
+  description = "Absolute path to the operator/profile tfvars file (PLATFORM_TFVARS). Post-apply health checks rebuild their expectations from the same tfvars the apply used, so without this any profile-level toggle -- enable_uat_apps, for example -- is invisible to them and they assert a shape the apply never built."
+  type        = string
+  default     = ""
+}
+
 variable "kind_operator_overrides_file" {
   description = "Absolute path to the rendered kind operator overrides tfvars file."
   type        = string
