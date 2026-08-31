@@ -1877,3 +1877,126 @@ EOF
   [[ "${output}" != *"cilium-gateway-ingress.yaml"* ]]
   [[ "${output}" == *"argocd-hardened.yaml"* ]]
 }
+
+seed_gateway_routes() {
+  repo_dir="${BATS_TEST_TMPDIR}/policy-repo"
+  routes_dir="${repo_dir}/apps/platform-gateway-routes"
+  mkdir -p "${routes_dir}"
+
+  cat >"${routes_dir}/httproute-argocd.yaml" <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: argocd
+  namespace: gateway-routes
+spec:
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: SnippetsFilter
+            name: admin-allowlist
+      backendRefs:
+        - name: oauth2-proxy-argocd
+          port: 4180
+EOF
+
+  cat >"${routes_dir}/httproute-keycloak.yaml" <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: keycloak
+  namespace: gateway-routes
+spec:
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: SnippetsFilter
+            name: keycloak-admin
+      backendRefs:
+        - name: keycloak
+          port: 8080
+EOF
+
+  touch "${routes_dir}/snippetsfilter-admin-allowlist.yaml"
+  cat >"${routes_dir}/kustomization.yaml" <<'EOF'
+resources:
+  - httproute-argocd.yaml
+  - httproute-keycloak.yaml
+  - snippetsfilter-admin-allowlist.yaml
+EOF
+}
+
+@test "cilium route render replaces the NGINX ExtensionRef with a core Gateway API filter" {
+  seed_gateway_routes
+
+  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true ADMIN_ROUTE_ALLOWLIST_CIDRS=; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; cat '${routes_dir}/httproute-argocd.yaml'"
+
+  [ "${status}" -eq 0 ]
+  # The CRD does not exist in this mode, so any surviving ExtensionRef would put
+  # the route into ResolvedRefs=False.
+  [[ "${output}" != *"ExtensionRef"* ]]
+  [[ "${output}" != *"gateway.nginx.org"* ]]
+  [[ "${output}" == *"ResponseHeaderModifier"* ]]
+  # Dropping these while the route kept working would be a silent regression.
+  [[ "${output}" == *"Strict-Transport-Security"* ]]
+  [[ "${output}" == *"X-Content-Type-Options"* ]]
+  [[ "${output}" == *"Referrer-Policy"* ]]
+  [[ "${output}" == *'value: "DENY"'* ]]
+  [[ "${output}" == *"oauth2-proxy-argocd"* ]]
+}
+
+@test "cilium route render keeps same-origin framing for keycloak admin" {
+  seed_gateway_routes
+
+  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true ADMIN_ROUTE_ALLOWLIST_CIDRS=; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; cat '${routes_dir}/httproute-keycloak.yaml'"
+
+  [ "${status}" -eq 0 ]
+  # Keycloak admin uses same-origin iframes for its browser storage check, so
+  # DENY here would break the admin console.
+  [[ "${output}" == *'value: "SAMEORIGIN"'* ]]
+  [[ "${output}" != *'value: "DENY"'* ]]
+}
+
+@test "cilium route render drops the SnippetsFilter manifests and kustomization entries" {
+  seed_gateway_routes
+
+  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true ADMIN_ROUTE_ALLOWLIST_CIDRS=; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; find '${routes_dir}' -maxdepth 1 -type f -print; cat '${routes_dir}/kustomization.yaml'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"snippetsfilter-admin-allowlist.yaml"* ]]
+  [[ "${output}" == *"httproute-argocd.yaml"* ]]
+}
+
+@test "cilium route render refuses to silently drop a configured admin allowlist" {
+  seed_gateway_routes
+
+  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true ADMIN_ROUTE_ALLOWLIST_CIDRS='10.0.0.0/8'; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'"
+
+  # There is no core Gateway API equivalent of the NGINX IP allowlist, so
+  # rendering the routes without it would quietly widen admin access.
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"ADMIN_ROUTE_ALLOWLIST_CIDRS"* ]]
+}
+
+@test "the NGINX path leaves the routes and their filters untouched" {
+  seed_gateway_routes
+
+  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=false; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; cat '${routes_dir}/httproute-argocd.yaml'; find '${routes_dir}' -maxdepth 1 -type f -print"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"ExtensionRef"* ]]
+  [[ "${output}" == *"snippetsfilter-admin-allowlist.yaml"* ]]
+  [[ "${output}" != *"ResponseHeaderModifier"* ]]
+}

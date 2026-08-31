@@ -1916,6 +1916,54 @@ render_platform_gateway_for_cilium() {
   remove_kustomization_entry "${kustomization}" "gateway-cilium.yaml"
 }
 
+# NGINX Gateway Fabric's SnippetsFilter has no Cilium equivalent, and the routes
+# reference it by ExtensionRef. Left alone, the CRD is absent and every admin
+# route goes ResolvedRefs=False, so the routes have to be rewritten as well as
+# the filters removed.
+#
+# Those filters were carrying two different things. The security headers are
+# reproducible in core Gateway API as a ResponseHeaderModifier, so they are
+# translated rather than dropped -- losing HSTS and the framing controls while
+# the routes kept working would be a silent security regression. The IP
+# allowlist has no core equivalent at all, so a configured allowlist is a hard
+# failure rather than a quiet downgrade.
+render_gateway_routes_for_cilium() {
+  local repo_dir="$1"
+  local routes_dir frame_options route_file base
+
+  is_true "${ENABLE_CILIUM_GATEWAY_API}" || return 0
+
+  if [[ -n "${ADMIN_ROUTE_ALLOWLIST_CIDRS}" ]]; then
+    fail "ADMIN_ROUTE_ALLOWLIST_CIDRS is set, but the Cilium Gateway path has no equivalent of the NGINX SnippetsFilter allowlist. Refusing to render admin routes without the IP restriction they are configured to have."
+  fi
+
+  for routes_dir in "${repo_dir}/apps/platform-gateway-routes" "${repo_dir}/apps/platform-gateway-routes-sso"; do
+    [[ -d "${routes_dir}" ]] || continue
+
+    for route_file in "${routes_dir}"/snippetsfilter-*.yaml; do
+      [[ -e "${route_file}" ]] || continue
+      base="$(basename "${route_file}")"
+      remove_if_present "${route_file}"
+      remove_kustomization_entry "${routes_dir}/kustomization.yaml" "${base}"
+    done
+
+    for route_file in "${routes_dir}"/httproute-*.yaml; do
+      [[ -e "${route_file}" ]] || continue
+      grep -q "kind: SnippetsFilter" "${route_file}" || continue
+
+      # Keycloak admin needs same-origin framing for its browser storage check;
+      # every other route keeps the gateway default of DENY.
+      frame_options="DENY"
+      if grep -q "name: keycloak-admin" "${route_file}"; then
+        frame_options="SAMEORIGIN"
+      fi
+
+      FRAME_OPTIONS="${frame_options}" LC_ALL=C perl -0pi \
+        "${SCRIPT_DIR}/rewrite-gateway-route-filters.pl" "${route_file}"
+    done
+  done
+}
+
 prune_argocd_app_manifests() {
   local apps_dir="$1"
   local otel_gateway_enabled="false"
@@ -2164,6 +2212,9 @@ render_gateway_route_admin_allowlist() {
   local cidr
 
   [[ -d "${routes_dir}" ]] || return 0
+  # render_gateway_routes_for_cilium removes this filter and rewrites the routes
+  # that referenced it; regenerating it here would put it straight back.
+  is_true "${ENABLE_CILIUM_GATEWAY_API}" && return 0
 
   if [[ -n "${ADMIN_ROUTE_ALLOWLIST_CIDRS}" ]]; then
     IFS=',' read -r -a cidrs <<< "${ADMIN_ROUTE_ALLOWLIST_CIDRS}"
@@ -2571,6 +2622,7 @@ render_policy_repo_tree() {
   rewrite_image_owner "${repo_dir}/apps/dev/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/uat/all.yaml"
   render_platform_gateway_for_cilium "${repo_dir}"
+  render_gateway_routes_for_cilium "${repo_dir}"
   prune_argocd_app_manifests "${repo_dir}/apps/argocd-apps"
   mkdir -p "${vendor_root}"
   rewrite_external_argocd_apps_to_vendored_charts "${repo_dir}/apps/argocd-apps" "${vendor_root}"
