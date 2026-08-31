@@ -239,14 +239,8 @@ variable "enable_cilium_node_encryption" {
   default     = false
 }
 
-variable "cilium_gateway_api_host_port" {
-  description = "Host port mapped to container port 443 for the Cilium Gateway API host-network listener. Kept distinct from gateway_https_host_port so a Cilium Gateway can run in parallel with the NGINX one during migration; kind bakes port mappings at cluster creation, so both must be declared up front."
-  type        = number
-  default     = 8443
-}
-
 variable "cilium_gateway_api" {
-  description = "Let Cilium implement Gateway API through its L7 (Envoy) proxy, creating a `cilium` GatewayClass alongside the existing nginx and agentgateway ones. Requires cilium_kube_proxy_replacement. On kind this also needs host-network mode, because Cilium's Gateway controller otherwise creates a LoadBalancer service and kind has no provider. Routes move by parentRefs, so this can run in parallel with NGINX Gateway Fabric rather than replacing it in one step."
+  description = "Let Cilium implement Gateway API through its L7 (Envoy) proxy, creating a `cilium` GatewayClass alongside the existing nginx and agentgateway ones. Requires cilium_kube_proxy_replacement. On kind this also needs host-network mode, because Cilium's Gateway controller otherwise creates a LoadBalancer service and kind has no provider. This is a cutover, not a parallel run: the platform Gateway, its NGF-only resources, and the host 443 mapping all switch together, because host 443 can only point at one container port and Cilium binds 443 directly rather than through a NodePort."
   type        = bool
   default     = false
 }
