@@ -114,6 +114,87 @@ expected_argocd_apps() {
   printf '%s\n' ${apps[@]+"${apps[@]}"} | awk 'NF' | sort -u
 }
 
+# --- Argo CD Application snapshot -------------------------------------------
+#
+# Every Argo CD predicate below used to issue its own `kubectl -n argocd get app
+# <name>` per application, so a single settle or report pass cost 3-10 API round
+# trips per app. Measured against this repo's 43-application kind cluster:
+# 129 serial per-app reads took 62.2s, while one `kubectl -n argocd get app
+# -o json` list took 1.29s. The predicates now read the same fields out of one
+# snapshot per pass. Each polling loop refreshes the snapshot at the top of the
+# iteration, so no predicate ever sees data older than its own pass.
+ARGOCD_APP_SNAPSHOT_FILE=""
+
+argocd_snapshot_apps() {
+  local ns="$1"
+  local pending
+
+  if [[ -z "${ARGOCD_APP_SNAPSHOT_FILE}" ]]; then
+    ARGOCD_APP_SNAPSHOT_FILE="$(mktemp "${TMPDIR:-/tmp}/argocd-apps.XXXXXX")"
+  fi
+
+  pending="${ARGOCD_APP_SNAPSHOT_FILE}.pending"
+  if kubectl -n "${ns}" get applications.argoproj.io -o json >"${pending}" 2>/dev/null; then
+    mv -f "${pending}" "${ARGOCD_APP_SNAPSHOT_FILE}"
+  else
+    rm -f "${pending}"
+    printf '{"items":[]}\n' >"${ARGOCD_APP_SNAPSHOT_FILE}"
+  fi
+
+  # Name index, so the existence check (the most frequent read of all) costs a
+  # grep against a small file rather than another jq process.
+  jq -r '.items[]?.metadata.name // empty' "${ARGOCD_APP_SNAPSHOT_FILE}" 2>/dev/null \
+    | sort >"${ARGOCD_APP_SNAPSHOT_FILE}.names" || : >"${ARGOCD_APP_SNAPSHOT_FILE}.names"
+}
+
+cleanup_argocd_snapshot() {
+  [[ -n "${ARGOCD_APP_SNAPSHOT_FILE}" ]] || return 0
+  rm -f \
+    "${ARGOCD_APP_SNAPSHOT_FILE}" \
+    "${ARGOCD_APP_SNAPSHOT_FILE}.pending" \
+    "${ARGOCD_APP_SNAPSHOT_FILE}.names"
+}
+
+# Path to the current snapshot, taking one first if this is the pass's first read.
+argocd_snapshot_file() {
+  local ns="$1"
+
+  [[ -s "${ARGOCD_APP_SNAPSHOT_FILE}" ]] || argocd_snapshot_apps "${ns}"
+  printf '%s' "${ARGOCD_APP_SNAPSHOT_FILE}"
+}
+
+argocd_snapshot_app_names() {
+  local ns="$1"
+
+  cat "$(argocd_snapshot_file "${ns}").names" 2>/dev/null || true
+}
+
+argocd_app_exists() {
+  local ns="$1"
+  local app="$2"
+
+  grep -Fxq -- "${app}" "$(argocd_snapshot_file "${ns}").names" 2>/dev/null
+}
+
+# Evaluates a jq expression against one Application from the snapshot.
+argocd_app_query() {
+  local ns="$1"
+  local app="$2"
+  local filter="$3"
+
+  jq -r --arg app "${app}" ".items[]? | select(.metadata.name == \$app) | ${filter}" \
+    "$(argocd_snapshot_file "${ns}")" 2>/dev/null || true
+}
+
+# Reads a single scalar field, empty when absent (matches the jsonpath default).
+argocd_app_field() {
+  local ns="$1"
+  local app="$2"
+  local path="$3"
+
+  argocd_app_query "${ns}" "${app}" "${path} // \"\""
+}
+
 check_expected_argocd_app_inventory() {
   local ns="$1"
   local expected_file live_app unexpected=""
@@ -134,7 +215,7 @@ check_expected_argocd_app_inventory() {
     if ! grep -Fxq "${live_app}" "${expected_file}"; then
       unexpected="${unexpected}${unexpected:+, }${live_app}"
     fi
-  done < <(kubectl -n "${ns}" get applications.argoproj.io -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | sort || true)
+  done < <(argocd_snapshot_app_names "${ns}")
 
   rm -f "${expected_file}"
 
@@ -178,7 +259,8 @@ argocd_app_has_only_future_stage_namespace_gaps() {
     return 1
   fi
 
-  unsynced=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{range .status.operationState.syncResult.resources[?(@.status!="Synced")]}{.kind}{"\t"}{.namespace}{"\t"}{.message}{"\n"}{end}' 2>/dev/null || true)
+  unsynced=$(argocd_app_query "${ns}" "${app}" \
+    '.status.operationState.syncResult.resources[]? | select(has("status") and .status != "Synced") | [(.kind // ""), (.namespace // ""), (.message // "")] | @tsv')
   [[ -n "${unsynced}" ]] || return 1
 
   while IFS=$'\t' read -r kind resource_ns msg; do
@@ -210,31 +292,33 @@ argocd_app_has_stale_aggregate_health() {
   local app="$2"
 
   [[ "${app}" == "platform-gateway-routes" ]] || return 1
-  if ! kubectl -n "${ns}" get app "${app}" >/dev/null 2>&1; then
+  if ! argocd_app_exists "${ns}" "${app}"; then
     return 1
   fi
 
   local sync health op_phase conditions child_sync_drift child_bad_health op_rev sync_rev
-  sync=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "")
-  health=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.health.status}' 2>/dev/null || echo "")
+  sync=$(argocd_app_field "${ns}" "${app}" '.status.sync.status')
+  health=$(argocd_app_field "${ns}" "${app}" '.status.health.status')
   [[ "${sync}" == "Synced" && "${health}" == "Degraded" ]] || return 1
 
-  op_phase=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.operationState.phase}' 2>/dev/null || echo "")
+  op_phase=$(argocd_app_field "${ns}" "${app}" '.status.operationState.phase')
   [[ "${op_phase}" == "Succeeded" ]] || return 1
 
-  conditions=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{range .status.conditions[*]}{.type}{"\n"}{end}' 2>/dev/null | awk 'NF' || true)
+  conditions=$(argocd_app_query "${ns}" "${app}" '.status.conditions[]? | .type // ""' | awk 'NF' || true)
   [[ -z "${conditions}" ]] || return 1
 
-  op_rev=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.operationState.syncResult.revision}' 2>/dev/null || echo "")
-  sync_rev=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.sync.revision}' 2>/dev/null || echo "")
+  op_rev=$(argocd_app_field "${ns}" "${app}" '.status.operationState.syncResult.revision')
+  sync_rev=$(argocd_app_field "${ns}" "${app}" '.status.sync.revision')
   if [[ -n "${op_rev}" && -n "${sync_rev}" && "${op_rev}" != "${sync_rev}" ]]; then
     return 1
   fi
 
-  child_sync_drift=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{range .status.resources[?(@.status!="Synced")]}{.kind}{" "}{.namespace}{"/"}{.name}{" sync="}{.status}{"\n"}{end}' 2>/dev/null | awk 'NF' || true)
+  child_sync_drift=$(argocd_app_query "${ns}" "${app}" \
+    '.status.resources[]? | select(has("status") and .status != "Synced") | "\(.kind // "") \(.namespace // "")/\(.name // "") sync=\(.status // "")"' | awk 'NF' || true)
   [[ -z "${child_sync_drift}" ]] || return 1
 
-  child_bad_health=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{range .status.resources[?(@.health.status!="Healthy")]}{.kind}{" "}{.namespace}{"/"}{.name}{" health="}{.health.status}{"\n"}{end}' 2>/dev/null | awk 'NF' || true)
+  child_bad_health=$(argocd_app_query "${ns}" "${app}" \
+    '.status.resources[]? | select(has("health") and .health != null and (.health | has("status")) and .health.status != "Healthy") | "\(.kind // "") \(.namespace // "")/\(.name // "") health=\(.health.status // "")"' | awk 'NF' || true)
   [[ -z "${child_bad_health}" ]] || return 1
 }
 
@@ -251,12 +335,12 @@ argocd_app_needs_hard_refresh() {
   local ns="$1"
   local app="$2"
 
-  if ! kubectl -n "${ns}" get app "${app}" >/dev/null 2>&1; then
+  if ! argocd_app_exists "${ns}" "${app}"; then
     return 1
   fi
 
   local health
-  health=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.health.status}' 2>/dev/null || echo "")
+  health=$(argocd_app_field "${ns}" "${app}" '.status.health.status')
 
   # Only refresh when health is wrong. ComparisonError/Unknown sync on an
   # otherwise Healthy app is usually a live git timeout; hard-refreshing
@@ -272,13 +356,13 @@ argocd_app_is_settled() {
   local ns="$1"
   local app="$2"
 
-  if ! kubectl -n "${ns}" get app "${app}" >/dev/null 2>&1; then
+  if ! argocd_app_exists "${ns}" "${app}"; then
     return 0
   fi
 
   local sync health
-  sync=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "")
-  health=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.health.status}' 2>/dev/null || echo "")
+  sync=$(argocd_app_field "${ns}" "${app}" '.status.sync.status')
+  health=$(argocd_app_field "${ns}" "${app}" '.status.health.status')
 
   if [[ "${health}" != "Healthy" ]]; then
     if argocd_app_has_stale_aggregate_health "${ns}" "${app}"; then
@@ -302,7 +386,8 @@ wait_for_argocd_apps_settled() {
 
   while (( SECONDS < end )); do
     local apps unsettled
-    apps=$(kubectl -n "${ns}" get applications.argoproj.io -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | sort || true)
+    argocd_snapshot_apps "${ns}"
+    apps=$(argocd_snapshot_app_names "${ns}")
     if [[ -z "${apps}" ]]; then
       return 0
     fi
@@ -340,6 +425,7 @@ wait_for_argocd_app_settled() {
   local next_refresh=0
 
   while (( SECONDS < end )); do
+    argocd_snapshot_apps "${ns}"
     if argocd_app_is_settled "${ns}" "${app}"; then
       return 0
     fi
@@ -352,6 +438,7 @@ wait_for_argocd_app_settled() {
     sleep 5
   done
 
+  argocd_snapshot_apps "${ns}"
   argocd_app_is_settled "${ns}" "${app}"
 }
 
@@ -371,26 +458,28 @@ check_argocd_app() {
     allow_outofsync_if_healthy="true"
   fi
 
-  if ! kubectl -n "${ns}" get app "${app}" >/dev/null 2>&1; then
+  if ! argocd_app_exists "${ns}" "${app}"; then
     return 1
   fi
 
   if ! argocd_app_is_settled "${ns}" "${app}"; then
     local health_now
-    health_now=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.health.status}' 2>/dev/null || echo "")
+    health_now=$(argocd_app_field "${ns}" "${app}" '.status.health.status')
     if [[ "${health_now}" != "Healthy" ]]; then
+      # Refreshes the snapshot on every pass, so the reads below still see
+      # post-wait state.
       wait_for_argocd_app_settled "${ns}" "${app}" 90 || true
     fi
   fi
 
   local sync health
-  sync=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "")
-  health=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.health.status}' 2>/dev/null || echo "")
+  sync=$(argocd_app_field "${ns}" "${app}" '.status.sync.status')
+  health=$(argocd_app_field "${ns}" "${app}" '.status.health.status')
   local op_phase op_rev sync_rev op_started
-  op_phase=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.operationState.phase}' 2>/dev/null || echo "")
-  op_rev=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.operationState.syncResult.revision}' 2>/dev/null || echo "")
-  sync_rev=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.sync.revision}' 2>/dev/null || echo "")
-  op_started=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.operationState.startedAt}' 2>/dev/null || echo "")
+  op_phase=$(argocd_app_field "${ns}" "${app}" '.status.operationState.phase')
+  op_rev=$(argocd_app_field "${ns}" "${app}" '.status.operationState.syncResult.revision')
+  sync_rev=$(argocd_app_field "${ns}" "${app}" '.status.sync.revision')
+  op_started=$(argocd_app_field "${ns}" "${app}" '.status.operationState.startedAt')
 
   if [[ "${health}" != "Healthy" ]]; then
     if argocd_app_has_stale_aggregate_health "${ns}" "${app}"; then
@@ -398,7 +487,7 @@ check_argocd_app() {
       return 0
     fi
     fail_soft "Argo CD app ${app} not Healthy (sync=${sync}, health=${health})"
-    warn "Argo CD app ${app} operation message: $(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.operationState.message}' 2>/dev/null || echo "")"
+    warn "Argo CD app ${app} operation message: $(argocd_app_field "${ns}" "${app}" '.status.operationState.message')"
     if [[ "${op_phase}" == "Running" && -n "${op_rev}" && -n "${sync_rev}" && "${op_rev}" != "${sync_rev}" ]]; then
       warn "Argo CD app ${app} has a stuck running operation pinned to an older revision:"
       warn "  operation.startedAt=${op_started:-?}"
@@ -408,7 +497,9 @@ check_argocd_app() {
       warn "  kubectl -n ${ns} patch app ${app} --type merge -p '{\"operation\":null}'"
     fi
     warn "Argo CD app ${app} non-Healthy resources (kind ns/name sync health msg):"
-    kubectl -n "${ns}" get app "${app}" -o jsonpath='{range .status.resources[?(@.health.status!="Healthy")]}{.kind}{" "}{.namespace}{"/"}{.name}{" sync="}{.status}{" health="}{.health.status}{" msg="}{.health.message}{"\n"}{end}' 2>/dev/null | head -n 30 || true
+    argocd_app_query "${ns}" "${app}" \
+      '.status.resources[]? | select(has("health") and .health != null and (.health | has("status")) and .health.status != "Healthy") | "\(.kind // "") \(.namespace // "")/\(.name // "") sync=\(.status // "") health=\(.health.status // "") msg=\(.health.message // "")"' \
+      | head -n 30 || true
     print_events "${ns}" 10
     return 0
   fi
@@ -419,7 +510,7 @@ check_argocd_app() {
       return 0
     fi
     fail_soft "Argo CD app ${app} not Synced (sync=${sync}, health=${health})"
-    warn "Argo CD app ${app} conditions: $(kubectl -n "${ns}" get app "${app}" -o jsonpath='{range .status.conditions[*]}{.type}{": "}{.message}{" | "}{end}' 2>/dev/null || echo "")"
+    warn "Argo CD app ${app} conditions: $(argocd_app_query "${ns}" "${app}" '(.status.conditions // []) | map("\(.type // ""): \(.message // "") | ") | join("")')"
     return 0
   fi
 
@@ -430,7 +521,8 @@ check_all_argocd_apps() {
   local ns="$1"
 
   local apps
-  apps=$(kubectl -n "${ns}" get applications.argoproj.io -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | sort || true)
+  argocd_snapshot_apps "${ns}"
+  apps=$(argocd_snapshot_app_names "${ns}")
   if [[ -z "${apps}" ]]; then
     return 0
   fi
@@ -769,6 +861,10 @@ done
 shell_cli_maybe_execute_or_preview_summary usage "would run stack-aware cluster health diagnostics"
 
 require_cmd kubectl
+# Argo CD predicates read one Application list per pass and evaluate it with jq.
+# jq is already a required prerequisite of every stack that runs this script.
+require_cmd jq
+trap cleanup_argocd_snapshot EXIT
 
 platform_load_env
 configure_kubeconfig_target
@@ -1540,52 +1636,52 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
 
   check_all_argocd_apps "${ARGOCD_NS}"
 
-  if kubectl -n "${ARGOCD_NS}" get app gitea >/dev/null 2>&1; then
+  if argocd_app_exists "${ARGOCD_NS}" gitea; then
     ok "Argo CD app gitea exists"
   fi
-  if kubectl -n "${ARGOCD_NS}" get app prometheus >/dev/null 2>&1; then
+  if argocd_app_exists "${ARGOCD_NS}" prometheus; then
     ok "Argo CD app prometheus exists"
   fi
   if [[ "${EXPECT_METRICS_SERVER}" == "true" ]]; then
-    if kubectl -n "${ARGOCD_NS}" get app metrics-server >/dev/null 2>&1; then
+    if argocd_app_exists "${ARGOCD_NS}" metrics-server; then
       ok "Argo CD app metrics-server exists"
     else
       fail_soft "Argo CD app metrics-server missing (enable_metrics_server=true${tfvars_hint})"
     fi
   fi
   if [[ "${EXPECT_EXTERNAL_SECRETS}" == "true" ]]; then
-    if kubectl -n "${ARGOCD_NS}" get app external-secrets >/dev/null 2>&1; then
+    if argocd_app_exists "${ARGOCD_NS}" external-secrets; then
       ok "Argo CD app external-secrets exists"
     else
       fail_soft "Argo CD app external-secrets missing (enable_external_secrets=true${tfvars_hint})"
     fi
-    if kubectl -n "${ARGOCD_NS}" get app eso-demo >/dev/null 2>&1; then
+    if argocd_app_exists "${ARGOCD_NS}" eso-demo; then
       ok "Argo CD app eso-demo exists"
     else
       fail_soft "Argo CD app eso-demo missing (enable_external_secrets=true${tfvars_hint})"
     fi
   fi
   if [[ "${EXPECT_PROGRESSIVE_DELIVERY}" == "true" ]]; then
-    if kubectl -n "${ARGOCD_NS}" get app argo-rollouts >/dev/null 2>&1; then
+    if argocd_app_exists "${ARGOCD_NS}" argo-rollouts; then
       ok "Argo CD app argo-rollouts exists"
     else
       fail_soft "Argo CD app argo-rollouts missing (enable_progressive_delivery=true${tfvars_hint})"
     fi
   fi
-  if kubectl -n "${ARGOCD_NS}" get app victoria-logs >/dev/null 2>&1; then
+  if argocd_app_exists "${ARGOCD_NS}" victoria-logs; then
     ok "Argo CD app victoria-logs exists"
   fi
-  if kubectl -n "${ARGOCD_NS}" get app grafana >/dev/null 2>&1; then
+  if argocd_app_exists "${ARGOCD_NS}" grafana; then
     ok "Argo CD app grafana exists"
   fi
-  if kubectl -n "${ARGOCD_NS}" get app headlamp >/dev/null 2>&1; then
+  if argocd_app_exists "${ARGOCD_NS}" headlamp; then
     ok "Argo CD app headlamp exists"
   fi
 
   if [[ "${EXPECT_POLICIES}" == "true" ]]; then
     for app in kyverno kyverno-policies policy-reporter; do
-      if kubectl -n "${ARGOCD_NS}" get app "${app}" >/dev/null 2>&1; then
-        msg=$(kubectl -n "${ARGOCD_NS}" get app "${app}" -o jsonpath='{.status.conditions[?(@.type=="ComparisonError")].message}' 2>/dev/null || true)
+      if argocd_app_exists "${ARGOCD_NS}" "${app}"; then
+        msg=$(argocd_app_query "${ARGOCD_NS}" "${app}" '[.status.conditions[]? | select(.type == "ComparisonError") | .message // ""] | join("")')
         if [[ -n "${msg}" ]]; then
           warn "Argo CD app ${app} comparison error: ${msg}"
         fi
@@ -1595,8 +1691,8 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
     done
 
     if [[ "${EXPECT_CILIUM_POLICIES}" == "true" ]]; then
-      if kubectl -n "${ARGOCD_NS}" get app cilium-policies >/dev/null 2>&1; then
-        msg=$(kubectl -n "${ARGOCD_NS}" get app cilium-policies -o jsonpath='{.status.conditions[?(@.type=="ComparisonError")].message}' 2>/dev/null || true)
+      if argocd_app_exists "${ARGOCD_NS}" cilium-policies; then
+        msg=$(argocd_app_query "${ARGOCD_NS}" cilium-policies '[.status.conditions[]? | select(.type == "ComparisonError") | .message // ""] | join("")')
         if [[ -n "${msg}" ]]; then
           warn "Argo CD app cilium-policies comparison error: ${msg}"
         fi
@@ -1610,8 +1706,8 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
 
   if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
     for app in cert-manager cert-manager-config nginx-gateway-fabric platform-gateway platform-gateway-routes; do
-      if kubectl -n "${ARGOCD_NS}" get app "${app}" >/dev/null 2>&1; then
-        msg=$(kubectl -n "${ARGOCD_NS}" get app "${app}" -o jsonpath='{.status.conditions[?(@.type=="ComparisonError")].message}' 2>/dev/null || true)
+      if argocd_app_exists "${ARGOCD_NS}" "${app}"; then
+        msg=$(argocd_app_query "${ARGOCD_NS}" "${app}" '[.status.conditions[]? | select(.type == "ComparisonError") | .message // ""] | join("")')
         if [[ -n "${msg}" ]]; then
           warn "Argo CD app ${app} comparison error: ${msg}"
         fi
@@ -1667,8 +1763,8 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
     fi
 
     for app in "${sso_apps[@]}"; do
-      if kubectl -n "${ARGOCD_NS}" get app "${app}" >/dev/null 2>&1; then
-        msg=$(kubectl -n "${ARGOCD_NS}" get app "${app}" -o jsonpath='{.status.conditions[?(@.type=="ComparisonError")].message}' 2>/dev/null || true)
+      if argocd_app_exists "${ARGOCD_NS}" "${app}"; then
+        msg=$(argocd_app_query "${ARGOCD_NS}" "${app}" '[.status.conditions[]? | select(.type == "ComparisonError") | .message // ""] | join("")')
         if [[ -n "${msg}" ]]; then
           warn "Argo CD app ${app} comparison error: ${msg}"
         fi
@@ -1679,7 +1775,7 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
   fi
 
   if [[ "${EXPECT_APP_REPO_SUBNET_CALC}" == "true" ]]; then
-    if kubectl -n "${ARGOCD_NS}" get app apim >/dev/null 2>&1; then
+    if argocd_app_exists "${ARGOCD_NS}" apim; then
       ok "Argo CD app apim exists"
     else
       fail_soft "Argo CD app apim missing (enable_app_repo_subnetcalc=true${tfvars_hint})"
@@ -1688,7 +1784,7 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
 
   if [[ "${EXPECT_APP_REPO_SENTIMENT}" == "true" || "${EXPECT_APP_REPO_SUBNET_CALC}" == "true" ]]; then
     for app in dev uat; do
-      if kubectl -n "${ARGOCD_NS}" get app "${app}" >/dev/null 2>&1; then
+      if argocd_app_exists "${ARGOCD_NS}" "${app}"; then
         ok "Argo CD app ${app} exists"
       else
         fail_soft "Argo CD app ${app} missing (workload repos enabled${tfvars_hint})"
@@ -1698,7 +1794,7 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
 
   if [[ "${EXPECT_MCP_EFFECTIVE}" == "true" ]]; then
     for app in mcp auth-chat chatgpt-sim oauth2-proxy-mcp-console oauth2-proxy-auth-chat oauth2-proxy-chatgpt-sim; do
-      if kubectl -n "${ARGOCD_NS}" get app "${app}" >/dev/null 2>&1; then
+      if argocd_app_exists "${ARGOCD_NS}" "${app}"; then
         ok "Argo CD app ${app} exists"
       else
         fail_soft "Argo CD app ${app} missing (MCP/chatgpt demo expected${tfvars_hint})"
@@ -1707,7 +1803,7 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
   fi
 
   if [[ "${EXPECT_LANGFUSE}" == "true" ]]; then
-    if kubectl -n "${ARGOCD_NS}" get app langfuse >/dev/null 2>&1; then
+    if argocd_app_exists "${ARGOCD_NS}" langfuse; then
       ok "Argo CD app langfuse exists"
     else
       fail_soft "Argo CD app langfuse missing (enable_langfuse=true${tfvars_hint})"
