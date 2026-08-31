@@ -567,7 +567,6 @@
         "lima"
       ],
       "overlay": {
-        "worker_count": 0,
         "enable_backstage": false,
         "enable_uat_apps": false,
         "enable_external_secrets": false,

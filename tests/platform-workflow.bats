@@ -544,31 +544,21 @@ PYEOF
   [[ "${output}" != *"enable_app_of_apps = false"* ]]
 }
 
-@test "platform workflow drops local-8gb to a single-node cluster and says so" {
-  # A second kind node costs a whole container: its own kubelet, containerd and
-  # cilium agent. Measured 2026-08-30 on this repo's default 2-node cluster:
-  # kind-local-worker 4640 MiB against a 8.7 GiB Docker limit, with 206 MiB of
-  # that a per-node cilium agent. local-8gb cannot afford it.
+@test "local-8gb does not change node topology, which stays an explicit opt-in" {
+  # worker_count = 0 builds and untaints correctly (see node_topology.tftest.hcl),
+  # but on a real stage-900 cluster the hardened Cilium policies denied host->NodePort
+  # ingress for the gateway and Gitea (1812 INGRESS "Policy denied" drops) while argocd
+  # and the apiserver stayed reachable. Until that is root-caused, the profile keeps the
+  # stock topology and single-node remains available via an explicit worker_count.
   run "${SCRIPT}" preview --execute \
     --variant kind \
     --stage 900 \
     --action plan \
     --preset resource-profile=local-8gb \
-    --tfvars-file "${BATS_TEST_TMPDIR}/operator/kind-stage900-local-8gb-nodes.tfvars" \
-    --output json
+    --tfvars-file "${BATS_TEST_TMPDIR}/operator/kind-900-topology.tfvars"
 
   [ "${status}" -eq 0 ]
-  preview_json="${output}"
-
-  run jq -r '.generated_tfvars' <<<"${preview_json}"
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"worker_count = 0"* ]]
-
-  # worker_count moves the stage 100 substrate boundary, so an operator who
-  # only named a profile still has to be told the cluster may be recreated.
-  run jq -r '.warnings | join("|")' <<<"${preview_json}"
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"resource-profile=local-8gb sets worker_count"* ]]
+  [[ "${output}" != *"worker_count"* ]]
 }
 
 @test "platform workflow leaves node topology alone for profiles that do not set it" {

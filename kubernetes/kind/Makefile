@@ -819,8 +819,12 @@ apply: workflow-validate-stage
 		tg_apply_log="$$tmp_log"; \
 		set -e; \
 	fi; \
-	if [ $$rc -ne 0 ] && grep -qi "certificate signed by unknown authority" "$$tg_apply_log"; then \
-		echo "Detected kubeconfig CA mismatch; refreshing kind kubeconfig and retrying once..."; \
+	if [ $$rc -ne 0 ] && grep -qiE "certificate signed by unknown authority|localhost/api|dial tcp \[::1\]:80|dial tcp 127\.0\.0\.1:80" "$$tg_apply_log"; then \
+		if grep -qi "certificate signed by unknown authority" "$$tg_apply_log"; then \
+			echo "Detected kubeconfig CA mismatch; refreshing kind kubeconfig and retrying once..."; \
+		else \
+			echo "Kubernetes provider fell back to the empty kubeconfig because the cluster did not exist at plan time; refreshing kind kubeconfig and retrying once..."; \
+		fi; \
 		run_step "refresh-kind-kubeconfig" "$(REFRESH_KIND_KUBECONFIG)" --execute; \
 		if [ "$$profile_enabled" = "1" ]; then \
 			set +e; \
