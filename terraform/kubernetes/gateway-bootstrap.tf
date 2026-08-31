@@ -16,9 +16,15 @@ locals {
     var.enable_gateway_tls ? data.kubectl_file_documents.nginx_gateway_fabric_crds[0].manifests : {},
   ) : {}
 
+  # Only CustomResourceDefinitions, because the readiness wait below polls
+  # `kubectl get crd <name>`. The upstream Gateway API bundle also ships a
+  # ValidatingAdmissionPolicy and its Binding, both named
+  # safe-upgrades.gateway.networking.k8s.io. Taking every document's name waits
+  # for a CRD that will never exist, which costs the wait its full timeout on
+  # every apply.
   gateway_bootstrap_crd_names = var.enable_gateway_tls || var.enable_agentgateway_ai_gateway ? sort(distinct(concat(
-    [for doc in data.kubectl_file_documents.gateway_api_crds[0].documents : yamldecode(doc).metadata.name],
-    var.enable_gateway_tls ? [for doc in data.kubectl_file_documents.nginx_gateway_fabric_crds[0].documents : yamldecode(doc).metadata.name] : [],
+    [for doc in data.kubectl_file_documents.gateway_api_crds[0].documents : yamldecode(doc).metadata.name if yamldecode(doc).kind == "CustomResourceDefinition"],
+    var.enable_gateway_tls ? [for doc in data.kubectl_file_documents.nginx_gateway_fabric_crds[0].documents : yamldecode(doc).metadata.name if yamldecode(doc).kind == "CustomResourceDefinition"] : [],
   ))) : []
 }
 
