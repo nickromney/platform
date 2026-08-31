@@ -145,6 +145,7 @@ bool|ENABLE_ACTIONS_RUNNER|enable_actions_runner|true
 bool|ENABLE_APP_REPO_SENTIMENT|enable_app_repo_sentiment|false
 bool|ENABLE_APP_REPO_SUBNETCALC|enable_app_repo_subnetcalc|false
 bool|ENABLE_UAT_APPS|enable_uat_apps|true
+bool|ENABLE_CILIUM_GATEWAY_API|cilium_gateway_api|false
 bool|ENABLE_SUBNETCALC_APIM_GATEWAY|enable_subnetcalc_apim_gateway|true
 bool|ENABLE_APIM_SIMULATOR|enable_apim_simulator|false
 bool|ENABLE_AGENTGATEWAY_AI_GATEWAY|enable_agentgateway_ai_gateway|false
@@ -305,6 +306,7 @@ ENABLE_ACTIONS_RUNNER="${ENABLE_ACTIONS_RUNNER:-true}"
 ENABLE_APP_REPO_SENTIMENT="${ENABLE_APP_REPO_SENTIMENT:-false}"
 ENABLE_APP_REPO_SUBNETCALC="${ENABLE_APP_REPO_SUBNETCALC:-false}"
 ENABLE_UAT_APPS="${ENABLE_UAT_APPS:-true}"
+ENABLE_CILIUM_GATEWAY_API="${ENABLE_CILIUM_GATEWAY_API:-false}"
 ENABLE_SUBNETCALC_APIM_GATEWAY="${ENABLE_SUBNETCALC_APIM_GATEWAY:-true}"
 ENABLE_APIM_SIMULATOR="${ENABLE_APIM_SIMULATOR:-false}"
 ENABLE_AGENTGATEWAY_AI_GATEWAY="${ENABLE_AGENTGATEWAY_AI_GATEWAY:-false}"
@@ -1875,6 +1877,38 @@ render_platform_gateway_routes_application_manifest() {
   rm -f "${destination}.bak"
 }
 
+# Swaps the platform-gateway app from NGINX Gateway Fabric to Cilium's Gateway
+# API implementation. Six of the seven resources in that app are NGF-coupled --
+# the NginxProxy parametersRef, the SnippetsPolicy TLS hardening, the
+# ProxySettingsPolicy, the platform-gateway-nginx NodePort Service, the RBAC that
+# bootstraps the NGINX agent's mTLS secret, and the Gateway's own nginx.org
+# listener options -- so this is a cutover rather than a class rename. Cilium's
+# host-network listener binds the Gateway port directly on the node, which is why
+# the NodePort Service goes too.
+render_platform_gateway_for_cilium() {
+  local repo_dir="$1"
+  local app_dir="${repo_dir}/apps/platform-gateway"
+  local kustomization="${app_dir}/kustomization.yaml"
+
+  [[ -d "${app_dir}" ]] || return 0
+
+  if ! is_true "${ENABLE_CILIUM_GATEWAY_API}"; then
+    remove_if_present "${app_dir}/gateway-cilium.yaml"
+    remove_kustomization_entry "${kustomization}" "gateway-cilium.yaml"
+    return 0
+  fi
+
+  mv -f "${app_dir}/gateway-cilium.yaml" "${app_dir}/gateway.yaml"
+
+  local nginx_only
+  for nginx_only in nginxproxy.yaml proxysettingspolicy-oauth-response-buffers.yaml \
+    tls-hardening.yaml gateway-service.yaml agent-tls-bootstrap.yaml; do
+    remove_if_present "${app_dir}/${nginx_only}"
+    remove_kustomization_entry "${kustomization}" "${nginx_only}"
+  done
+  remove_kustomization_entry "${kustomization}" "gateway-cilium.yaml"
+}
+
 prune_argocd_app_manifests() {
   local apps_dir="$1"
   local otel_gateway_enabled="false"
@@ -1901,6 +1935,11 @@ prune_argocd_app_manifests() {
 
   if ! is_true "${ENABLE_CERT_MANAGER}"; then
     remove_if_present "${apps_dir}/001-cert-manager.application.yaml"
+  fi
+
+  if is_true "${ENABLE_CILIUM_GATEWAY_API}"; then
+    # Cilium owns Gateway API now; NGF would fight it over the same Gateway.
+    remove_if_present "${apps_dir}/002-nginx-gateway-fabric.application.yaml"
   fi
 
   if ! is_true "${ENABLE_GATEWAY_TLS}"; then
@@ -2524,6 +2563,7 @@ render_policy_repo_tree() {
   rewrite_image_owner "${repo_dir}/apps/workloads/base/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/dev/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/uat/all.yaml"
+  render_platform_gateway_for_cilium "${repo_dir}"
   prune_argocd_app_manifests "${repo_dir}/apps/argocd-apps"
   mkdir -p "${vendor_root}"
   rewrite_external_argocd_apps_to_vendored_charts "${repo_dir}/apps/argocd-apps" "${vendor_root}"

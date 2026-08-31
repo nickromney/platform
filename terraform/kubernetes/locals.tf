@@ -723,6 +723,7 @@ locals {
     enable_app_repo_sentiment            = var.enable_app_repo_sentiment
     enable_app_repo_subnetcalc           = var.enable_app_repo_subnetcalc
     enable_uat_apps                      = var.enable_uat_apps
+    cilium_gateway_api                   = var.cilium_gateway_api
     enable_apim_simulator                = local.enable_apim_simulator_effective
     enable_agentgateway_ai_gateway       = var.enable_agentgateway_ai_gateway
     agentgateway_chart_version           = var.agentgateway_chart_version
