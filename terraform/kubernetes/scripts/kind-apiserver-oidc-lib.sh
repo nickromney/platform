@@ -48,6 +48,34 @@ MKCERT_CA_DEST="${MKCERT_CA_DEST:-/etc/kubernetes/pki/mkcert-rootCA.pem}"
 PLATFORM_GATEWAY_NAMESPACE="${PLATFORM_GATEWAY_NAMESPACE:-platform-gateway}"
 PLATFORM_GATEWAY_INTERNAL_SVC="${PLATFORM_GATEWAY_INTERNAL_SVC:-platform-gateway-nginx-internal}"
 GATEWAY_DEPLOY_NAME="${GATEWAY_DEPLOY_NAME:-platform-gateway-nginx}"
+
+# Cilium serves Gateway API from the Envoy inside cilium-agent, on the node's
+# host network. There is no data-plane Deployment to wait for and no Service
+# with endpoints to take a clusterIP from, so both of those steps need a
+# different answer in that mode. Absent facts (lima, slicer, a pre-facts apply)
+# mean the NGINX path, which is the existing behaviour.
+OPERATOR_FACTS_FILE="${OPERATOR_FACTS_FILE:-${REPO_ROOT}/terraform/kubernetes/.run/kind/operator-facts.json}"
+
+cilium_gateway_api_enabled() {
+  [[ -f "${OPERATOR_FACTS_FILE}" ]] || return 1
+  command -v jq >/dev/null 2>&1 || return 1
+  [[ "$(jq -r '.cilium_gateway_api // false' "${OPERATOR_FACTS_FILE}" 2>/dev/null)" == "true" ]]
+}
+
+# The address the apiserver should resolve the OIDC issuer host to. Under NGINX
+# that is the internal Service's clusterIP. Under Cilium the listener is bound on
+# the node's host network, so the node's own address is what answers on 443.
+resolve_gateway_ingress_ip() {
+  local node="$1"
+
+  if cilium_gateway_api_enabled; then
+    kubectl get node "${node}" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || true
+    return 0
+  fi
+
+  kubectl -n "${PLATFORM_GATEWAY_NAMESPACE}" get svc "${PLATFORM_GATEWAY_INTERNAL_SVC}" \
+    -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true
+}
 PLATFORM_GATEWAY_NAME="${PLATFORM_GATEWAY_NAME:-platform-gateway}"
 PLATFORM_GATEWAY_TLS_SECRET="${PLATFORM_GATEWAY_TLS_SECRET:-platform-gateway-tls}"
 NGINX_GATEWAY_NAMESPACE="${NGINX_GATEWAY_NAMESPACE:-nginx-gateway}"
@@ -74,6 +102,23 @@ gateway_condition_message() {
 
   kubectl -n "${PLATFORM_GATEWAY_NAMESPACE}" get gateway "${PLATFORM_GATEWAY_NAME}" \
     -o jsonpath="{range .status.conditions[?(@.type==\"${condition_type}\")]}{.message}{end}" 2>/dev/null || true
+}
+
+# Readiness signal for the Cilium path, where no data-plane Deployment exists.
+wait_for_gateway_programmed() {
+  local timeout_seconds="${1}"
+  local end=$((SECONDS + timeout_seconds))
+
+  while (( SECONDS < end )); do
+    if [[ "$(gateway_condition_status Programmed)" == "True" ]]; then
+      ok "Gateway ${PLATFORM_GATEWAY_NAMESPACE}/${PLATFORM_GATEWAY_NAME} Programmed"
+      return 0
+    fi
+    sleep 5
+  done
+
+  warn "Gateway Programmed=$(gateway_condition_status Programmed) message=$(gateway_condition_message Programmed)"
+  return 1
 }
 
 wait_for_deployment_rollout() {
