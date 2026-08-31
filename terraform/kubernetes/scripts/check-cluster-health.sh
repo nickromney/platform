@@ -1791,7 +1791,14 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
   fi
 
   if [[ "${EXPECT_APP_REPO_SENTIMENT}" == "true" || "${EXPECT_APP_REPO_SUBNET_CALC}" == "true" ]]; then
-    for app in dev uat; do
+    workload_env_apps=(dev)
+    # enable_uat_apps defaults to true, and the resolver reports an unset key as
+    # empty, so only an explicit false drops the uat workload sync. The uat
+    # workspace itself stays and is asserted elsewhere.
+    if [[ "${EXPECT_UAT_APPS}" != "false" ]]; then
+      workload_env_apps+=(uat)
+    fi
+    for app in "${workload_env_apps[@]}"; do
       if argocd_app_exists "${ARGOCD_NS}" "${app}"; then
         ok "Argo CD app ${app} exists"
       else
