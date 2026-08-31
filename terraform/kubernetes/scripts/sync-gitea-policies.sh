@@ -1892,9 +1892,16 @@ render_platform_gateway_for_cilium() {
 
   [[ -d "${app_dir}" ]] || return 0
 
+  local shared_policies="${repo_dir}/cluster-policies/cilium/shared"
+  local policy_kustomization="${shared_policies}/kustomization.yaml"
+
   if ! is_true "${ENABLE_CILIUM_GATEWAY_API}"; then
     remove_if_present "${app_dir}/gateway-cilium.yaml"
     remove_kustomization_entry "${kustomization}" "gateway-cilium.yaml"
+    # The reserved:ingress allowances only describe Cilium's own Envoy, so they
+    # are dead weight on the NGINX path and are pruned rather than shipped inert.
+    remove_if_present "${shared_policies}/cilium-gateway-ingress.yaml"
+    remove_kustomization_entry "${policy_kustomization}" "cilium-gateway-ingress.yaml"
     return 0
   fi
 

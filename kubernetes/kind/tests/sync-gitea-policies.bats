@@ -1784,6 +1784,15 @@ seed_platform_gateway_app() {
     "${gateway_dir}/tls-hardening.yaml" \
     "${gateway_dir}/agent-tls-bootstrap.yaml"
   printf 'gatewayClassName: cilium\n' >"${gateway_dir}/gateway-cilium.yaml"
+
+  shared_policies="${repo_dir}/cluster-policies/cilium/shared"
+  mkdir -p "${shared_policies}"
+  touch "${shared_policies}/cilium-gateway-ingress.yaml" "${shared_policies}/argocd-hardened.yaml"
+  cat >"${shared_policies}/kustomization.yaml" <<'EOF'
+resources:
+  - argocd-hardened.yaml
+  - cilium-gateway-ingress.yaml
+EOF
   printf 'gatewayClassName: nginx\n' >"${gateway_dir}/gateway.yaml"
   cat >"${gateway_dir}/kustomization.yaml" <<'EOF'
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -1846,4 +1855,25 @@ EOF
   [[ "${output}" != *"- gateway-service.yaml"* ]]
   [[ "${output}" != *"- agent-tls-bootstrap.yaml"* ]]
   [[ "${output}" != *"- proxysettingspolicy-oauth-response-buffers.yaml"* ]]
+}
+
+@test "platform gateway render ships the reserved ingress policy only in cilium mode" {
+  seed_platform_gateway_app
+
+  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true; source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; find '${shared_policies}' -maxdepth 1 -type f -print; cat '${shared_policies}/kustomization.yaml'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"cilium-gateway-ingress.yaml"* ]]
+  [[ "${output}" == *"argocd-hardened.yaml"* ]]
+}
+
+@test "platform gateway render prunes the reserved ingress policy on the NGINX path" {
+  seed_platform_gateway_app
+
+  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=false; source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; find '${shared_policies}' -maxdepth 1 -type f -print; cat '${shared_policies}/kustomization.yaml'"
+
+  [ "${status}" -eq 0 ]
+  # reserved:ingress only ever describes Cilium's Envoy, so it is dead weight here.
+  [[ "${output}" != *"cilium-gateway-ingress.yaml"* ]]
+  [[ "${output}" == *"argocd-hardened.yaml"* ]]
 }
