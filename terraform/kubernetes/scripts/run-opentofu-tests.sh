@@ -44,6 +44,7 @@ FULL_ONLY_TIER=(
   tests/gitops_features.tftest.hcl
   tests/headlamp.tftest.hcl
   tests/langfuse.tftest.hcl
+  tests/node_topology.tftest.hcl
   tests/registry_secrets.tftest.hcl
   tests/resource_bounds.tftest.hcl
   tests/runtime_artifact_scope.tftest.hcl

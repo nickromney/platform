@@ -83,7 +83,11 @@ DEFAULT_KUBECONFIG_PATH ?= $(HOME)/.kube/config
 MERGE_KUBECONFIG_TO_DEFAULT ?= 0
 KIND_KUBECONFIG_CONTEXT ?= kind-kind-local
 KIND_KUBECONFIG_PATH ?= $(HOME)/.kube/$(KIND_KUBECONFIG_CONTEXT).yaml
-KIND_WORKER_COUNT ?= 1
+# Deliberately empty. render-operator-overrides.sh writes the kind stack's
+# last -var-file, so a default here would outrank the resource profile that
+# picked the node count. Unset means the stage baseline (1) or the profile
+# decides; set it to pin a topology, including 0 for a single-node cluster.
+KIND_WORKER_COUNT ?=
 KIND_PRELOAD_IMAGES_MODE ?= off
 KIND_IMAGE_DISTRIBUTION_MODE ?= registry
 KIND_BAKED_NODE_IMAGE ?=
@@ -339,7 +343,7 @@ help:
 	@echo "  KIND_PRELOAD_IMAGES_MODE=auto|on|off                 -> preload images before apply (default: off, current behavior)"
 	@echo "  KIND_APPLY_PROGRESS=0                                -> disable phase progress labels during apply (default: on)"
 	@echo "  MERGE_KUBECONFIG_TO_DEFAULT=1                        -> also merge $(DISPLAY_KIND_KUBECONFIG_PATH) into $(DISPLAY_DEFAULT_KUBECONFIG_PATH) (default: 0)"
-	@echo "  KIND_WORKER_COUNT=1|2|...                            -> worker node count (default: 1, so 2 total nodes)"
+	@echo "  KIND_WORKER_COUNT=0|1|2|...                          -> pin worker node count, 0 for a single-node cluster (default: unset, stage baseline is 1)"
 	@echo "  KIND_IMAGE_DISTRIBUTION_MODE=load|registry|hybrid|baked -> image distribution mode (default: registry)"
 	@echo "  KIND_BAKED_NODE_IMAGE=<image-ref>                    -> required for KIND_IMAGE_DISTRIBUTION_MODE=hybrid|baked"
 	@echo "  KIND_ENABLE_BACKSTAGE=off|on|auto                    -> Backstage portal gate (default: off; auto requires >=10GiB Docker memory)"

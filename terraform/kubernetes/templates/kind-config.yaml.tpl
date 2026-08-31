@@ -7,6 +7,13 @@ networking:
   kubeProxyMode: "iptables"
 nodes:
   - role: control-plane
+%{ if length(control_plane_kubeadm_config_patches) > 0 ~}
+    kubeadmConfigPatches:
+%{ for config_patch in control_plane_kubeadm_config_patches ~}
+      - |
+        ${indent(8, trimspace(config_patch))}
+%{ endfor ~}
+%{ endif ~}
 %{ if length(ports) > 0 ~}
     extraPortMappings:
 %{ for port in ports ~}
