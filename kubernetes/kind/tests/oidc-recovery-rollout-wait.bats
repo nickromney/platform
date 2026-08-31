@@ -117,3 +117,80 @@ run_with_stub() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"ready"* ]]
 }
+
+# The gateway address the apiserver resolves the OIDC issuer to differs by mode:
+# NGF exposes an internal Service with a clusterIP, Cilium binds the listener on
+# the node's host network and has no Service with endpoints at all.
+write_gateway_ip_stub() {
+  printf '%s' "$1" >"${BATS_TEST_TMPDIR}/clusterip"
+  printf '%s' "$2" >"${BATS_TEST_TMPDIR}/nodeip"
+
+  cat >"${STUB_DIR}/kubectl" <<'EOF'
+#!/usr/bin/env bash
+tmpdir="${STUB_STATE_DIR}"
+for arg in "$@"; do
+  case "${arg}" in
+    *clusterIP*) cat "${tmpdir}/clusterip"; exit 0 ;;
+    *InternalIP*) cat "${tmpdir}/nodeip"; exit 0 ;;
+  esac
+done
+exit 1
+EOF
+  chmod +x "${STUB_DIR}/kubectl"
+}
+
+write_facts() {
+  printf '{"cilium_gateway_api": %s}\n' "$1" >"${BATS_TEST_TMPDIR}/operator-facts.json"
+}
+
+run_gateway_ip() {
+  run env "PATH=${STUB_DIR}:${PATH}" "STUB_STATE_DIR=${BATS_TEST_TMPDIR}" \
+    "OPERATOR_FACTS_FILE=${BATS_TEST_TMPDIR}/operator-facts.json" \
+    bash -c "source '${LIB}'; $1"
+}
+
+@test "the NGINX path resolves the gateway to the internal Service clusterIP" {
+  write_gateway_ip_stub "10.96.72.111" "172.18.0.3"
+  write_facts false
+
+  run_gateway_ip "resolve_gateway_ingress_ip kind-local-control-plane"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"10.96.72.111"* ]]
+  [[ "${output}" != *"172.18.0.3"* ]]
+}
+
+@test "the cilium path resolves the gateway to the node running the host-network listener" {
+  write_gateway_ip_stub "10.96.72.111" "172.18.0.3"
+  write_facts true
+
+  run_gateway_ip "resolve_gateway_ingress_ip kind-local-control-plane"
+
+  [ "${status}" -eq 0 ]
+  # The clusterIP still resolves in this mode, but it fronts a Service with no
+  # endpoints -- taking it is the bug, so it must not be what comes back.
+  [[ "${output}" == *"172.18.0.3"* ]]
+  [[ "${output}" != *"10.96.72.111"* ]]
+}
+
+@test "a missing operator facts file falls back to the NGINX path" {
+  write_gateway_ip_stub "10.96.72.111" "172.18.0.3"
+  rm -f "${BATS_TEST_TMPDIR}/operator-facts.json"
+
+  run_gateway_ip "resolve_gateway_ingress_ip kind-local-control-plane"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"10.96.72.111"* ]]
+}
+
+@test "cilium_gateway_api_enabled reads the operator facts contract" {
+  write_gateway_ip_stub "10.96.72.111" "172.18.0.3"
+
+  write_facts true
+  run_gateway_ip "cilium_gateway_api_enabled"
+  [ "${status}" -eq 0 ]
+
+  write_facts false
+  run_gateway_ip "cilium_gateway_api_enabled"
+  [ "${status}" -ne 0 ]
+}
