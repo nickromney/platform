@@ -61,25 +61,49 @@ wait_for_deployment_recovery_after_apiserver_restart \
   "${GATEWAY_DEPLOY_WAIT_SECONDS}" \
   "Kyverno cleanup controller (${KYVERNO_NAMESPACE}/${KYVERNO_CLEANUP_DEPLOY_NAME})"
 
-restart_deployment "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}" "nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})"
+if cilium_gateway_api_enabled; then
+  # Cilium's Gateway controller lives in cilium-operator, and the data plane is
+  # the Envoy inside cilium-agent. There is no gateway control-plane Deployment
+  # to restart and no gateway Service with endpoints to wait for; recycling the
+  # operator is what re-establishes the watch after the apiserver restart.
+  restart_deployment "${CILIUM_NAMESPACE}" "${CILIUM_OPERATOR_DEPLOY_NAME}" \
+    "cilium operator (${CILIUM_NAMESPACE}/${CILIUM_OPERATOR_DEPLOY_NAME})"
 
-ok "waiting for nginx gateway control plane after kube-apiserver restart"
-if ! wait_for_deployment_rollout_with_early_recycle \
-  "${NGINX_GATEWAY_NAMESPACE}" \
-  "${NGINX_GATEWAY_DEPLOY_NAME}" \
-  "${GATEWAY_DEPLOY_WAIT_SECONDS}" \
-  "nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})"; then
-  warn "nginx gateway control plane did not recover after initial restart; recycling controller pods once"
-  recycle_deployment_pods \
+  ok "waiting for cilium operator after kube-apiserver restart"
+  if ! wait_for_deployment_rollout_with_early_recycle \
+    "${CILIUM_NAMESPACE}" \
+    "${CILIUM_OPERATOR_DEPLOY_NAME}" \
+    "${GATEWAY_DEPLOY_WAIT_SECONDS}" \
+    "cilium operator (${CILIUM_NAMESPACE}/${CILIUM_OPERATOR_DEPLOY_NAME})"; then
+    warn "cilium operator did not recover after initial restart; recycling pods once"
+    recycle_deployment_pods \
+      "${CILIUM_NAMESPACE}" \
+      "${CILIUM_OPERATOR_DEPLOY_NAME}" \
+      "${GATEWAY_DEPLOY_WAIT_SECONDS}" \
+      "cilium operator (${CILIUM_NAMESPACE}/${CILIUM_OPERATOR_DEPLOY_NAME})" \
+      || fail "cilium operator did not recover after kube-apiserver restart"
+  fi
+else
+  restart_deployment "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}" "nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})"
+
+  ok "waiting for nginx gateway control plane after kube-apiserver restart"
+  if ! wait_for_deployment_rollout_with_early_recycle \
     "${NGINX_GATEWAY_NAMESPACE}" \
     "${NGINX_GATEWAY_DEPLOY_NAME}" \
     "${GATEWAY_DEPLOY_WAIT_SECONDS}" \
-    "nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})" \
-    || fail "nginx gateway control plane did not recover after kube-apiserver restart"
-fi
+    "nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})"; then
+    warn "nginx gateway control plane did not recover after initial restart; recycling controller pods once"
+    recycle_deployment_pods \
+      "${NGINX_GATEWAY_NAMESPACE}" \
+      "${NGINX_GATEWAY_DEPLOY_NAME}" \
+      "${GATEWAY_DEPLOY_WAIT_SECONDS}" \
+      "nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})" \
+      || fail "nginx gateway control plane did not recover after kube-apiserver restart"
+  fi
 
-wait_for_service_endpoints "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_SERVICE}" "${GATEWAY_DEPLOY_WAIT_SECONDS}" \
-  || fail "nginx gateway control plane service has no endpoints after kube-apiserver restart"
+  wait_for_service_endpoints "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_SERVICE}" "${GATEWAY_DEPLOY_WAIT_SECONDS}" \
+    || fail "nginx gateway control plane service has no endpoints after kube-apiserver restart"
+fi
 
 ok "verifying gateway is reprogrammed after kube-apiserver restart"
 reconcile_end=$((SECONDS + GATEWAY_RECONCILE_WAIT_SECONDS))
@@ -93,7 +117,8 @@ while (( SECONDS < reconcile_end )); do
   fi
 
   if [[ "${recycled_gateway_data_plane}" -eq 0 ]] \
-    && [[ "${gateway_message}" == *"failure to reload nginx"* || "${gateway_message}" == *"dial tcp"* || "${gateway_message}" == *"connect: connection refused"* ]]; then
+    && [[ "${gateway_message}" == *"failure to reload nginx"* || "${gateway_message}" == *"dial tcp"* || "${gateway_message}" == *"connect: connection refused"* ]] \
+    && ! cilium_gateway_api_enabled; then
     warn "gateway remained unprogrammed after kube-apiserver restart: ${gateway_message}"
     recycle_gateway_data_plane || fail "gateway data plane failed to recover after recycle"
     recycled_gateway_data_plane=1
@@ -103,5 +128,9 @@ while (( SECONDS < reconcile_end )); do
 done
 
 kubectl -n "${PLATFORM_GATEWAY_NAMESPACE}" get gateway "${PLATFORM_GATEWAY_NAME}" -o yaml || true
-kubectl -n "${NGINX_GATEWAY_NAMESPACE}" logs "deploy/${NGINX_GATEWAY_DEPLOY_NAME}" --tail=120 || true
+if cilium_gateway_api_enabled; then
+  kubectl -n "${CILIUM_NAMESPACE}" logs "deploy/${CILIUM_OPERATOR_DEPLOY_NAME}" --tail=120 || true
+else
+  kubectl -n "${NGINX_GATEWAY_NAMESPACE}" logs "deploy/${NGINX_GATEWAY_DEPLOY_NAME}" --tail=120 || true
+fi
 fail "gateway ${PLATFORM_GATEWAY_NAMESPACE}/${PLATFORM_GATEWAY_NAME} did not recover after kube-apiserver restart"
