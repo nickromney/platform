@@ -825,6 +825,18 @@ locals {
         protocol       = "TCP"
       }
     ],
+    # The Cilium Gateway API listener binds 443 on the node's host network, not a
+    # NodePort, so it needs its own container_port 443 mapping. Declared here
+    # because kind bakes port mappings at cluster creation and cannot gain one later.
+    var.cilium_gateway_api ? [
+      {
+        name           = "cilium-gateway-https"
+        container_port = 443
+        host_port      = var.cilium_gateway_api_host_port
+        listen_address = trimspace(var.gateway_https_listen_address)
+        protocol       = "TCP"
+      }
+    ] : [],
     var.expose_admin_nodeports ? [
       {
         name           = "argocd"
@@ -871,6 +883,19 @@ locals {
         id   = 0
       }
 
+      MTU = var.cilium_mtu != "" ? tonumber(var.cilium_mtu) : null
+
+      # Cilium Gateway API. gatewayClass.create=auto adds a `cilium` GatewayClass
+      # next to nginx and agentgateway; hostNetwork is mandatory on kind because
+      # the default LoadBalancer service has no provider here and stays pending.
+      gatewayAPI = var.cilium_gateway_api ? {
+        enabled      = true
+        gatewayClass = { create = "auto" }
+        hostNetwork = {
+          enabled = true
+          nodes   = { matchLabels = var.cilium_gateway_api_host_network_node_labels }
+        }
+      } : null
       kubeProxyReplacement = var.cilium_kube_proxy_replacement
       # With kube-proxy gone Cilium cannot reach the apiserver through a Service,
       # so it needs the endpoint directly. The control-plane container name

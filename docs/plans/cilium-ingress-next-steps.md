@@ -59,6 +59,56 @@ So adding a third `GatewayClass` is a pattern the repo already demonstrates.
 Routes bind by `parentRefs`, which means they can be moved **one at a time**, and
 moved back.
 
+## Exact chart values (cilium 1.20.1, read from `helm show values`)
+
+```yaml
+gatewayAPI:
+  enabled: true          # default false
+  gatewayClass:
+    create: auto         # creates the `cilium` GatewayClass
+  secretsNamespace:
+    create: true
+    name: cilium-secrets
+    sync: true           # TLS secrets are synced here, see the TLS note below
+  hostNetwork:
+    enabled: true        # REQUIRED on kind: no LoadBalancer provider
+    nodes:
+      matchLabels: {}    # pin to the node holding the kind extraPortMappings
+```
+
+The chart's own commented example for `hostNetwork.nodes.matchLabels` is
+`kubernetes.io/hostname: kind-worker`, which is a good sign this path is
+exercised on kind upstream.
+
+`kubeProxyReplacement: true` is already wired behind
+`var.cilium_kube_proxy_replacement`. `l7Proxy` is on by default and needs no
+change.
+
+## The port-mapping trap
+
+This one will waste an afternoon if it is not planned for. Today the gateway is a
+**NodePort**, and kind maps **containerPort 30070 to hostPort 443**:
+
+```yaml
+extraPortMappings:
+  - containerPort: 30070
+    hostPort: 443
+```
+
+With `gatewayAPI.hostNetwork.enabled=true` the Envoy listener binds the Gateway's
+own port directly on the node's host network -- **443**, not 30070. The existing
+mapping would point at nothing. The kind config needs a `containerPort: 443`
+mapping for the Cilium path, and kind bakes port mappings at cluster creation, so
+this cannot be changed on a live cluster.
+
+Both mappings can coexist during migration (different container ports), which is
+what makes the incremental `parentRefs` approach viable.
+
+Also note `hostNetwork.nodes.matchLabels` must select **the node that holds the
+port mappings**. In this repo that is the control-plane, which carries a
+`NoSchedule` taint -- fine, because Envoy runs in the cilium agent/cilium-envoy
+DaemonSets which tolerate it, but it is the opposite of where workloads land.
+
 ## Suggested sequence
 
 1. **Prove host-network mode in isolation.** Enable

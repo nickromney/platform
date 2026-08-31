@@ -239,6 +239,30 @@ variable "enable_cilium_node_encryption" {
   default     = false
 }
 
+variable "cilium_gateway_api_host_port" {
+  description = "Host port mapped to container port 443 for the Cilium Gateway API host-network listener. Kept distinct from gateway_https_host_port so a Cilium Gateway can run in parallel with the NGINX one during migration; kind bakes port mappings at cluster creation, so both must be declared up front."
+  type        = number
+  default     = 8443
+}
+
+variable "cilium_gateway_api" {
+  description = "Let Cilium implement Gateway API through its L7 (Envoy) proxy, creating a `cilium` GatewayClass alongside the existing nginx and agentgateway ones. Requires cilium_kube_proxy_replacement. On kind this also needs host-network mode, because Cilium's Gateway controller otherwise creates a LoadBalancer service and kind has no provider. Routes move by parentRefs, so this can run in parallel with NGINX Gateway Fabric rather than replacing it in one step."
+  type        = bool
+  default     = false
+}
+
+variable "cilium_gateway_api_host_network_node_labels" {
+  description = "Node labels selecting where the Cilium Gateway API Envoy listeners bind on the host network. Must select the node that carries the kind extraPortMappings, which in this repo is the control plane. Empty means all nodes."
+  type        = map(string)
+  default     = {}
+}
+
+variable "cilium_mtu" {
+  description = "Explicit MTU for Cilium-managed interfaces. Empty means let Cilium autodetect, which on Docker Desktop inherits the node's jumbo eth0 (65535) and gives pods a matching MSS. That is fine inside the cluster but the resulting large frames -- a TLS certificate flight, for example -- do not survive the path back to the host, so plain HTTP over a NodePort succeeds while HTTPS resets mid-handshake. Set 1500 to clamp it."
+  type        = string
+  default     = ""
+}
+
 variable "cilium_kube_proxy_replacement" {
   description = "Let Cilium replace kube-proxy instead of running kube-proxy in iptables mode. The hardened Cilium policies admit only node identities on ingress, which silently relies on the workload never sharing a node with the port-mapped one; with kube-proxy iptables, same-node NodePort traffic resolves to reserved:world and is denied. Cilium's own NodePort path keeps the node identity, so this is what makes worker_count = 0 serviceable. Changing it rewrites the kind config, so it forces a cluster recreate."
   type        = bool
