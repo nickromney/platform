@@ -35,6 +35,7 @@ contracts. These ADRs explain why the repo ended up with that shape.
 - [ADR 0012: Hardened Cilium ingress policies assume cross-node NodePort routing](./0012-hardened-cilium-ingress-assumes-cross-node-nodeport.md)
 - [ADR 0013: Resource profiles reduce only, and every toggle carries a consumer tail](./0013-resource-profiles-reduce-only.md)
 - [ADR 0014: Browser E2E, not health checks, defines a working cluster](./0014-browser-e2e-defines-a-working-cluster.md)
+- [ADR 0015: Cilium's Gateway Envoy reaches backends as reserved:ingress](./0015-cilium-gateway-envoy-is-reserved-ingress.md)
 
 ## How To Read These
 
