@@ -339,6 +339,48 @@ Three things follow, and they change the shape of the remaining work:
 `platform-gateway-tls` is unaffected: it is issued by cert-manager, and neither
 the Certificate nor `wait-for-platform-gateway-tls.sh` knows anything about NGF.
 
+### The identity the Envoy actually presents (measured)
+
+This is the single fact most likely to be got wrong, so it was measured rather
+than reasoned about. A Cilium Gateway in the real `platform-gateway` namespace,
+pointed at the real `oauth2-proxy-argocd`, through the real hardened policies,
+returned 503. `cilium-dbg monitor --type drop` on the **backend's** node -- not
+the gateway's -- gave the reason:
+
+```
+Policy denied ... identity ingress->48344: 10.244.0.166 -> 10.244.1.224:4180 tcp SYN
+```
+
+The identity is `reserved:ingress`. Not `host`, which is the natural guess for a
+host-network listener, and not a platform-gateway pod identity, because there is
+no pod. Adding the mirrored allowances took the same probe from 503 to 302.
+
+Two things follow that are easy to miss:
+
+- `platform-gateway-hardened` selects on `namespace: platform-gateway`. In this
+  mode that namespace contains no pods, so the policy stops applying entirely.
+  It still reads as though it is protecting the ingress path; it is not.
+- The allowance must be written as **ingress on each backend**, not egress from
+  the gateway, because there is no gateway endpoint to attach egress to.
+
+Monitor the node that hosts the *backend*. The first capture was taken on the
+gateway's node, recorded nothing, and looked like proof that no policy was
+involved.
+
+### Checkers that needed the mode
+
+`check-cluster-health.sh` asserted the NGF Argo app, the two `gateway.nginx.org`
+CRDs, the NGINX agent mTLS secret, and port-forwarded `svc/platform-gateway-nginx`
+-- all absent in Cilium mode, so a working cluster would have failed the health
+check. These are now gated on `cilium_gateway_api`, with the port-forward
+targeting `cilium-gateway-platform-gateway` instead.
+
+`check-policy-drift.sh` needed it too, and for a subtler reason: the source tree
+declares the reserved:ingress policies unconditionally while the renderer prunes
+them on the NGINX path, so the checker correctly reported ten policies missing
+from a cluster that was behaving exactly as designed. It now skips them by name
+when the mode is off and says how many it skipped.
+
 ## Suggested sequence
 
 1. **Prove host-network mode in isolation.** Enable
