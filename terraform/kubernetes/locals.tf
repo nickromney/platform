@@ -816,28 +816,24 @@ locals {
     contains(local.kubeconfig_context_names_for_providers, trimspace(var.kubeconfig_context))
   ) ? trimspace(var.kubeconfig_context) : null
 
+  # NGINX Gateway Fabric is reached through a NodePort, but Cilium's Gateway
+  # listener binds 443 directly on the node's host network and has no NodePort at
+  # all. So the host 443 mapping has to point at a different container port in
+  # each mode -- aiming it at the NodePort under Cilium would publish a port
+  # nothing listens on. kind bakes port mappings at cluster creation and cannot
+  # gain one later, which is why this is decided here.
+  gateway_https_container_port = var.cilium_gateway_api ? 443 : var.gateway_https_node_port
+
   extra_port_mappings = concat(
     [
       {
         name           = "gateway-https"
-        container_port = var.gateway_https_node_port
+        container_port = local.gateway_https_container_port
         host_port      = var.gateway_https_host_port
         listen_address = trimspace(var.gateway_https_listen_address)
         protocol       = "TCP"
       }
     ],
-    # The Cilium Gateway API listener binds 443 on the node's host network, not a
-    # NodePort, so it needs its own container_port 443 mapping. Declared here
-    # because kind bakes port mappings at cluster creation and cannot gain one later.
-    var.cilium_gateway_api ? [
-      {
-        name           = "cilium-gateway-https"
-        container_port = 443
-        host_port      = var.cilium_gateway_api_host_port
-        listen_address = trimspace(var.gateway_https_listen_address)
-        protocol       = "TCP"
-      }
-    ] : [],
     var.expose_admin_nodeports ? [
       {
         name           = "argocd"
