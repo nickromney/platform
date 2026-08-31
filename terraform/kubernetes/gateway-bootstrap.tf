@@ -52,7 +52,7 @@ resource "null_resource" "wait_for_gateway_bootstrap_crds" {
     interpreter = ["/bin/bash", "-lc"]
     command     = "bash \"${local.stack_dir}/scripts/wait-for-gateway-crds.sh\" --execute"
     environment = {
-      KUBECONFIG  = local.kubeconfig_path_for_providers
+      KUBECONFIG   = local.kubeconfig_path_for_providers
       KUBE_CONTEXT = local.kubeconfig_context_for_providers != null ? local.kubeconfig_context_for_providers : ""
       CRD_NAMES    = join(" ", local.gateway_bootstrap_crd_names)
     }

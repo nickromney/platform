@@ -239,6 +239,12 @@ variable "enable_cilium_node_encryption" {
   default     = false
 }
 
+variable "cilium_kube_proxy_replacement" {
+  description = "Let Cilium replace kube-proxy instead of running kube-proxy in iptables mode. The hardened Cilium policies admit only node identities on ingress, which silently relies on the workload never sharing a node with the port-mapped one; with kube-proxy iptables, same-node NodePort traffic resolves to reserved:world and is denied. Cilium's own NodePort path keeps the node identity, so this is what makes worker_count = 0 serviceable. Changing it rewrites the kind config, so it forces a cluster recreate."
+  type        = bool
+  default     = false
+}
+
 variable "cilium_native_routing_cidr" {
   description = "Pod CIDR used by Cilium native routing and strict WireGuard mode."
   type        = string

@@ -4,7 +4,7 @@ networking:
   apiServerAddress: "127.0.0.1"
   apiServerPort: ${api_server_port}
   disableDefaultCNI: true
-  kubeProxyMode: "iptables"
+  kubeProxyMode: "${kube_proxy_mode}"
 nodes:
   - role: control-plane
 %{ if length(control_plane_kubeadm_config_patches) > 0 ~}

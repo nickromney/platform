@@ -871,7 +871,13 @@ locals {
         id   = 0
       }
 
-      kubeProxyReplacement  = false
+      kubeProxyReplacement = var.cilium_kube_proxy_replacement
+      # With kube-proxy gone Cilium cannot reach the apiserver through a Service,
+      # so it needs the endpoint directly. The control-plane container name
+      # resolves on the kind Docker network, and 6443 is the in-cluster port
+      # regardless of which host port kind publishes.
+      k8sServiceHost        = var.cilium_kube_proxy_replacement ? local.kind_control_plane_container_name : null
+      k8sServicePort        = var.cilium_kube_proxy_replacement ? 6443 : null
       routingMode           = "native"
       autoDirectNodeRoutes  = true
       ipv4NativeRoutingCIDR = var.cilium_native_routing_cidr

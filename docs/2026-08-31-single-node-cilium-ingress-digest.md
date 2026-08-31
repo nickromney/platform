@@ -1,0 +1,113 @@
+# 2026-08-31 Single-node Cilium ingress investigation
+
+Context: a `local-8gb` resource profile was added for constrained Docker Desktop
+hosts. `worker_count = 0` looked like free memory until it produced a cluster
+that was healthy by every internal measure and served nothing. This is the full
+record, including the wrong turns, because the wrong turns are where the cost was.
+
+Related: [ADR 0012](./adr/0012-hardened-cilium-ingress-assumes-cross-node-nodeport.md),
+[ADR 0013](./adr/0013-resource-profiles-reduce-only.md),
+[ADR 0014](./adr/0014-browser-e2e-defines-a-working-cluster.md).
+
+## Symptom
+
+Single-node cluster, everything green internally: one node `Ready`, no
+control-plane taint, Cilium and CoreDNS running clean, all 8 dev workloads 1/1,
+the `subnetcalc-dev` HTTPRoute present, Gateway `Programmed=True`. And:
+
+| endpoint | result |
+| --- | --- |
+| 6443 apiserver | HTTP 200 |
+| 30080 argocd | HTTP 200 |
+| 30070 gateway | HTTP 000 |
+| 30090 gitea | HTTP 000 |
+
+`cilium_drop_count_total direction=INGRESS reason="Policy denied"` = 1812.
+
+## Hypotheses that were wrong
+
+Recording these because each looked reasonable and cost time.
+
+1. **"argocd's policy must admit something extra."** It does not. All four
+   hardened policies carry identical `fromEntities: ["host", "remote-node"]`.
+   The argocd/apiserver successes were most likely an artefact of that run's
+   apply failing before the policies fully synced.
+2. **"`externalTrafficPolicy` differs."** All four services are `Cluster`.
+3. **"Same-node NodePort traffic escapes SNAT."** Plausible, and the mechanism
+   still involves identity, but kube-proxy in `Cluster` mode masquerades
+   NodePort traffic regardless of hop, so this framing was not right.
+4. **A first "experiment" that proved nothing.** Cordon + untaint + delete pod
+   was run with all output redirected to `/dev/null`. The pod never moved -- age
+   stayed 6h28m -- so the 302s observed afterwards were just the unchanged
+   cross-node path. **Never redirect stderr while running an experiment whose
+   whole value is knowing whether it took effect.**
+
+## What the evidence actually established
+
+Cilium reserved identities on this cluster: `1 = reserved:host`,
+`2 = reserved:world`, `6 = reserved:remote-node`.
+
+- The gateway endpoint's live policy admits `reserved:host`,
+  `reserved:remote-node`, `reserved:aggregate-remote-node`. **No `world`.**
+- `172.18.0.1` (the Docker bridge gateway) is **absent from the ipcache**, so it
+  falls to `0.0.0.0/0 -> identity=2` = `world`.
+- The control-plane taint puts all 49 workload pods on the worker while the
+  `extraPortMappings` are on the control-plane, so every request crosses a node
+  boundary and resolves to an admitted node identity.
+- `worker_count = 0` must remove that taint or nothing schedules, so workloads
+  land on the port-mapped node.
+
+## The controlled reproduction
+
+Run on a **two-node** cluster, changing only pod placement:
+
+| gateway pod placement | `subnetcalc.dev` |
+| --- | --- |
+| worker (cross-node) | HTTP 302 |
+| control-plane (co-located with port mappings) | HTTP 000 |
+| moved back to worker | HTTP 302 |
+
+```text
+xx drop (Policy denied) ... identity world->1085: 10.244.0.97 -> 10.244.0.42:443 tcp SYN
+```
+
+So **node count was never the variable. Co-location was.**
+
+## Cilium kube-proxy replacement: fixes the denial, not the whole path
+
+Added `cilium_kube_proxy_replacement` (default `false`), which sets kind's
+`kubeProxyMode: "none"` and Cilium's `kubeProxyReplacement: true` plus
+`k8sServiceHost`/`k8sServicePort` -- Cilium cannot reach the apiserver through a
+Service once kube-proxy is gone. Both kind config paths (the inline
+`kind_cluster` block and `kind-config.yaml.tpl`) must move together.
+
+On a single-node cluster with it enabled:
+
+- `KubeProxyReplacement: True [eth0 172.18.0.2 (Direct Routing)]`
+- kube-proxy DaemonSet does not exist
+- Cilium programs the NodePorts: `0.0.0.0:30070 -> 10.244.0.91:443 (active)`
+- **`cilium-dbg monitor --type drop` records nothing for the request** -- the
+  policy denial is gone
+- From inside the node the whole path works: `172.18.0.2:30070` returns 404
+  without a `Host` header, and **302 with `Host: subnetcalc.dev.127.0.0.1.sslip.io`**
+- From inside the node, loopback works too: `127.0.0.1:30070` returns 404
+
+But from the host, still HTTP 000, with the port mapping present
+(`30070/tcp -> 127.0.0.1:443`) and `com.docker.backend` listening on 443.
+
+**Conclusion: kube-proxy replacement solves the identity problem and moves the
+failure to Docker Desktop's published-port path not reaching Cilium's BPF
+NodePort.** That is where the investigation stopped. The variable defaults to
+`false` and single-node stays out of every shipped profile.
+
+## If picking this up again
+
+- The remaining question is narrow: why does Docker Desktop's forward into the
+  container miss the BPF NodePort when both `172.18.0.2:30070` and
+  `127.0.0.1:30070` work from inside that same container?
+- Cilium knobs worth reading first: `devices`, socket-LB
+  (`bpf.lbSockHostnsOnly`), and `nodePort.directRoutingDevice`.
+- Hubble is the right tool and `local-8gb` disables it. Enable
+  `enable_hubble = true` for the debug run.
+- Do not chase this for memory. Single-node measured ~117 Mi of actual saving;
+  the 24 removed pods did the real work.
