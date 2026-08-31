@@ -86,8 +86,9 @@ On a single-node cluster with it enabled:
 - `KubeProxyReplacement: True [eth0 172.18.0.2 (Direct Routing)]`
 - kube-proxy DaemonSet does not exist
 - Cilium programs the NodePorts: `0.0.0.0:30070 -> 10.244.0.91:443 (active)`
-- **`cilium-dbg monitor --type drop` records nothing for the request** -- the
-  policy denial is gone
+- **the policy denial is NOT gone.** An early monitor run recorded nothing and
+  was misread as success; capturing for longer shows the same denial, from the
+  host (`172.18.0.1`) and from a sibling container (`172.18.0.3`), both `world`
 - From inside the node the whole path works: `172.18.0.2:30070` returns 404
   without a `Host` header, and **302 with `Host: subnetcalc.dev.127.0.0.1.sslip.io`**
 - From inside the node, loopback works too: `127.0.0.1:30070` returns 404
@@ -95,10 +96,16 @@ On a single-node cluster with it enabled:
 But from the host, still HTTP 000, with the port mapping present
 (`30070/tcp -> 127.0.0.1:443`) and `com.docker.backend` listening on 443.
 
-**Conclusion: kube-proxy replacement solves the identity problem and moves the
-failure to Docker Desktop's published-port path not reaching Cilium's BPF
-NodePort.** That is where the investigation stopped. The variable defaults to
-`false` and single-node stays out of every shipped profile.
+**Conclusion: kube-proxy replacement does not solve the identity problem.**
+Cilium's NodePort translation is correct; the packet reaches the gateway endpoint
+and is denied there because its source is `world`. The identity follows the
+source address, so it makes no difference whether kube-proxy or Cilium performs
+the translation. A sibling container on the kind network reproduces it without
+Docker's port-forward involved at all, which rules the forward out as a cause.
+
+The real defect is in the policy: **the platform gateway does not admit `world`
+on its listener port**, and only works on two nodes because the cross-node hop
+SNATs the source to a node identity first.
 
 ## If picking this up again
 

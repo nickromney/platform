@@ -75,17 +75,24 @@ Cilium reserved identities on this cluster: `1 = reserved:host`,
 `2 = reserved:world`, `6 = reserved:remote-node`.
 
 Enabling Cilium's kube-proxy replacement (`cilium_kube_proxy_replacement = true`,
-which also sets kind's `kubeProxyMode: "none"`) **does remove the policy
-denial**: with it enabled on a single-node cluster, `cilium-dbg monitor` records
-no drops for the request, and from inside the node the full path works --
-`172.18.0.2:30070` returns 404 without a `Host` header and **302 with
-`Host: subnetcalc.dev.127.0.0.1.sslip.io`**.
+which also sets kind's `kubeProxyMode: "none"`) does **not** fix this. Cilium's
+NodePort translation works correctly -- it rewrites `:30070` to the gateway pod --
+and the packet is then denied at the endpoint for exactly the same reason:
 
-It does not by itself make single-node usable from the host: with kube-proxy
-absent, Docker Desktop's published port (`30070/tcp -> 127.0.0.1:443`) stops
-reaching Cilium's BPF NodePort, so the host still sees HTTP 000 while the
-cluster-side path is healthy. That is a separate, unfinished problem and is why
-the variable defaults to `false`.
+```text
+identity world->21996: 172.18.0.1:61236 -> 10.244.0.91:443 tcp SYN   (host)
+identity world->21996: 172.18.0.3:44970 -> 10.244.0.91:443 tcp SYN   (sibling container)
+```
+
+Source `172.18.0.1` is the Docker bridge gateway; `172.18.0.3` is another
+container on the kind network. Both are `world`. The identity is decided by the
+**source address**, not by which component performs the NodePort translation, so
+swapping kube-proxy for Cilium changes nothing about it.
+
+The corollary is the useful part: **an ingress gateway that does not admit
+`world` on its listener port is not hardened, it is misconfigured.** It works on
+the two-node topology only because the cross-node hop SNATs the source to a node
+identity before the policy is evaluated.
 
 See [`../2026-08-31-single-node-cilium-ingress-digest.md`](../2026-08-31-single-node-cilium-ingress-digest.md)
 for the full investigation, including the false starts.
