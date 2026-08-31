@@ -307,6 +307,38 @@ is likely to make the ingress path simpler than it is today, but it must be
 proven with `cilium-dbg monitor --type drop`, not assumed -- assuming it is the
 exact mistake recorded in ADR 0012.
 
+### What Cilium provisions, measured
+
+A bare `gatewayClassName: cilium` Gateway on port 8082 produced:
+
+```
+NAME                TYPE       CLUSTER-IP     PORT(S)
+cilium-gateway-p2   NodePort   10.96.164.35   8082:31525/TCP
+
+Pods: none
+Gateway addresses: 172.18.0.2, 172.18.0.3
+```
+
+Three things follow, and they change the shape of the remaining work:
+
+1. **There are no gateway pods.** Envoy runs inside the `cilium-agent`
+   DaemonSet. Anything selecting the NGF pods by label -- most importantly the
+   hardened Cilium policies -- has no pod to select and must be rewritten
+   against the host identity instead.
+2. **In-cluster access survives, but moves.** Cilium creates
+   `cilium-gateway-<gateway-name>` with a real ClusterIP. So
+   `kubernetes_service_v1.platform_gateway_nginx_internal` in
+   `gateway-bootstrap.tf` -- a ClusterIP selecting four NGF labels, used by the
+   SSO path -- does not need an Endpoints hack. It should either be repointed at
+   `cilium-gateway-platform-gateway` or dropped in favour of it.
+3. **Both nodes are advertised.** The Gateway reports every host-network node as
+   an address, so the `extraPortMappings` node is not privileged by Cilium. Pin
+   the binding with `cilium_gateway_api_host_network_node_labels` rather than
+   relying on which node happens to answer.
+
+`platform-gateway-tls` is unaffected: it is issued by cert-manager, and neither
+the Certificate nor `wait-for-platform-gateway-tls.sh` knows anything about NGF.
+
 ## Suggested sequence
 
 1. **Prove host-network mode in isolation.** Enable
