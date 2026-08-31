@@ -485,7 +485,7 @@ resource "null_resource" "argocd_repo_server_restart" {
       local.gitea_known_hosts_cluster_content,
     ]))
     restart_script_sha = filesha256("${local.stack_dir}/scripts/refresh-argocd-repo-server-known-hosts.sh")
-    wait_gitea_ssh_sha  = filesha256("${local.stack_dir}/scripts/wait-for-gitea-ssh.sh")
+    wait_gitea_ssh_sha = filesha256("${local.stack_dir}/scripts/wait-for-gitea-ssh.sh")
   }
 
   provisioner "local-exec" {
@@ -516,8 +516,8 @@ resource "null_resource" "argocd_refresh_gitops_repo_apps" {
     gitops_repo_hash   = local.policies_repo_render_hash
     known_hosts_hash   = local.argocd_gitops_repo_trust_hash
     gitops_repo_apps   = sha1(join(",", sort(local.argocd_gitops_repo_app_names)))
-    refresh_script_sha  = filesha256("${local.stack_dir}/scripts/refresh-argocd-gitops-repo-apps.sh")
-    wait_gitea_ssh_sha   = filesha256("${local.stack_dir}/scripts/wait-for-gitea-ssh.sh")
+    refresh_script_sha = filesha256("${local.stack_dir}/scripts/refresh-argocd-gitops-repo-apps.sh")
+    wait_gitea_ssh_sha = filesha256("${local.stack_dir}/scripts/wait-for-gitea-ssh.sh")
   }
 
   provisioner "local-exec" {

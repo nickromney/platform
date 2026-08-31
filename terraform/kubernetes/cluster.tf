@@ -86,6 +86,7 @@ resource "local_file" "kind_config" {
     extra_mounts                         = local.kind_extra_mounts
     api_server_port                      = var.kind_api_server_port
     control_plane_kubeadm_config_patches = local.kind_control_plane_kubeadm_config_patches
+    kube_proxy_mode                      = var.cilium_kube_proxy_replacement ? "none" : "iptables"
   })
 }
 
@@ -105,7 +106,7 @@ resource "kind_cluster" "local" {
       api_server_address  = "127.0.0.1"
       api_server_port     = var.kind_api_server_port
       disable_default_cni = local.kind_disable_default_cni
-      kube_proxy_mode     = "iptables"
+      kube_proxy_mode     = var.cilium_kube_proxy_replacement ? "none" : "iptables"
     }
 
     node {
