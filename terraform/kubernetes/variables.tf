@@ -101,6 +101,12 @@ variable "kind_target_tfvars_file" {
   default     = ""
 }
 
+variable "kind_profile_tfvars_file" {
+  description = "Absolute path to the operator profile tfvars passed as KIND_PROFILE_TFVARS. Scripts run from local-exec need it to see the same toggles the apply was given; without it a profile-disabled app looks enabled to the in-apply health check."
+  type        = string
+  default     = ""
+}
+
 variable "platform_tfvars_file" {
   description = "Absolute path to the operator/profile tfvars file (PLATFORM_TFVARS). Post-apply health checks rebuild their expectations from the same tfvars the apply used, so without this any profile-level toggle -- enable_uat_apps, for example -- is invisible to them and they assert a shape the apply never built."
   type        = string

@@ -1237,6 +1237,7 @@ resource "null_resource" "check_kind_cluster_health_after_oidc" {
       KUBECONFIG                   = local.kubeconfig_path_expanded
       KIND_STAGE_TFVARS_FILE       = var.kind_stage_tfvars_file
       KIND_TARGET_TFVARS_FILE      = var.kind_target_tfvars_file
+      KIND_PROFILE_TFVARS_FILE     = var.kind_profile_tfvars_file
       KIND_OPERATOR_OVERRIDES_FILE = var.kind_operator_overrides_file
       PLATFORM_TFVARS              = var.platform_tfvars_file
     }

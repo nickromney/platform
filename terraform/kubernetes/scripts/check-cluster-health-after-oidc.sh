@@ -29,6 +29,7 @@ shell_cli_handle_standard_no_args usage "would retry cluster health after OIDC" 
 
 KIND_STAGE_TFVARS_FILE="${KIND_STAGE_TFVARS_FILE:-}"
 KIND_TARGET_TFVARS_FILE="${KIND_TARGET_TFVARS_FILE:-}"
+KIND_PROFILE_TFVARS_FILE="${KIND_PROFILE_TFVARS_FILE:-}"
 KIND_OPERATOR_OVERRIDES_FILE="${KIND_OPERATOR_OVERRIDES_FILE:-}"
 PLATFORM_TFVARS_FILE="${PLATFORM_TFVARS:-}"
 
@@ -38,6 +39,12 @@ if [[ -n "${KIND_STAGE_TFVARS_FILE}" && -f "${KIND_STAGE_TFVARS_FILE}" ]]; then
 fi
 if [[ -n "${KIND_TARGET_TFVARS_FILE}" && -f "${KIND_TARGET_TFVARS_FILE}" ]]; then
   check_args+=(--var-file "${KIND_TARGET_TFVARS_FILE}")
+fi
+# Between target and platform, matching the precedence the Makefile builds for
+# `make check-health`. Omitting it makes the operator profile invisible here, so
+# an app the profile disables reads as missing rather than as not requested.
+if [[ -n "${KIND_PROFILE_TFVARS_FILE}" && -f "${KIND_PROFILE_TFVARS_FILE}" ]]; then
+  check_args+=(--var-file "${KIND_PROFILE_TFVARS_FILE}")
 fi
 if [[ -n "${PLATFORM_TFVARS_FILE}" && -f "${PLATFORM_TFVARS_FILE}" ]]; then
   check_args+=(--var-file "${PLATFORM_TFVARS_FILE}")
