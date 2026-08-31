@@ -16,6 +16,21 @@ spec:
     - fromEntities:
         - host
         - remote-node
+    # Gitea is published to the host as NodePort 30090 (HTTP 3000) and 30022
+    # (SSH 22), and gitea-sync drives both from outside the cluster. An external
+    # client is reserved:world unless a cross-node hop rewrites its identity, so
+    # host/remote-node alone only worked on the two-node topology. Scoped to the
+    # two published ports rather than widening the unrestricted rule above.
+    - fromEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+            - port: "22"
+              protocol: TCP
+            - port: "2222"
+              protocol: TCP
     - fromEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": gitea
