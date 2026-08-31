@@ -572,6 +572,7 @@
         "enable_uat_apps": false,
         "enable_external_secrets": false,
         "enable_prometheus": false,
+        "enable_alertmanager": false,
         "enable_grafana": false,
         "enable_headlamp": false,
         "enable_hubble": false,

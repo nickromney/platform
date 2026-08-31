@@ -44,7 +44,12 @@ wait_for_gitea_ssh() {
   if [[ "${mode}" == "best-effort" ]]; then
     gitea_ssh_kubectl -n "${gitea_ns}" rollout status deployment/gitea --timeout="${timeout}s" >/dev/null 2>&1 || true
   else
-    gitea_ssh_kubectl -n "${gitea_ns}" rollout status deployment/gitea --timeout="${timeout}s"
+    # stdout belongs to the caller: fetch-gitea-ssh-public-keys.sh is a Terraform
+    # `data "external"` program, whose stdout must be nothing but a JSON object.
+    # kubectl prints `deployment "gitea" successfully rolled out` on success, which
+    # made the data source fail with `invalid character 'd'`. Keep the diagnostic,
+    # send it to stderr like every other message in this file.
+    gitea_ssh_kubectl -n "${gitea_ns}" rollout status deployment/gitea --timeout="${timeout}s" >&2
   fi
 
   while (( SECONDS < deadline )); do
