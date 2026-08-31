@@ -55,6 +55,7 @@ const INCLUDE_UAT_APPS = isEnabled('SSO_E2E_ENABLE_UAT_APPS', true)
 // with it. Both default true so the full stage-900 profile is unchanged.
 const INCLUDE_GRAFANA = isEnabled('SSO_E2E_ENABLE_GRAFANA', true)
 const INCLUDE_HUBBLE = isEnabled('SSO_E2E_ENABLE_HUBBLE', true)
+const INCLUDE_APIM = isEnabled('SSO_E2E_ENABLE_APIM', true)
 const VERIFY_APP_ACTIONS = isEnabled('SSO_E2E_VERIFY_APP_ACTIONS', true)
 const VERIFY_AUTH_CHAT_MODEL = isEnabled('SSO_E2E_VERIFY_AUTH_CHAT_MODEL', false)
 const BASE_SCHEME = process.env.SSO_E2E_SCHEME || 'https'
@@ -134,6 +135,7 @@ const BASE_TARGETS: Target[] = [
   { name: 'argocd-admin', url: platformUrl('argocd.admin'), segment: 'admin', flow: 'oauth2-proxy' },
   { name: 'hubble-admin', url: platformUrl('hubble.admin'), segment: 'admin', flow: 'oauth2-proxy', postLogin: 'hubble-namespace-argocd' },
   { name: 'kyverno-admin', url: platformUrl('kyverno.admin'), segment: 'admin', flow: 'none' },
+  { name: 'apim-admin', url: platformUrl('apim.admin'), segment: 'admin', flow: 'oauth2-proxy' },
   {
     name: 'developer-portal-api',
     url: absolutePlatformUrl('portal-api', '/api/v1/runtime'),
@@ -147,6 +149,7 @@ function filterTargetByEnabledApps(target: Target) {
   if (target.segment === 'uat' && !INCLUDE_UAT_APPS) return false
   if (target.name.startsWith('grafana-')) return INCLUDE_GRAFANA
   if (target.name.startsWith('hubble-')) return INCLUDE_HUBBLE
+  if (target.name.startsWith('apim-')) return INCLUDE_APIM
   if (target.name.startsWith('sentiment-')) return INCLUDE_SENTIMENT
   if (target.name.startsWith('subnetcalc-')) return INCLUDE_SUBNETCALC
   return true
