@@ -90,7 +90,14 @@ expected_argocd_apps() {
   if [[ "${EXPECT_LANGFUSE_DEMOS}" == "true" ]]; then apps+=(langfuse-demos); fi
 
   if [[ "${EXPECT_APP_REPO_SENTIMENT}" == "true" || "${EXPECT_APP_REPO_SUBNET_CALC}" == "true" ]]; then
-    apps+=(dev uat)
+    apps+=(dev)
+    # enable_uat_apps defaults to true, and expected_from_tfvars reports
+    # "not reported" for a key the operator never set, so only an explicit
+    # false drops the app. The uat workspace itself -- namespace, SSO proxies,
+    # gateway routes -- is Terraform-owned and still expected either way.
+    if [[ "${EXPECT_UAT_APPS}" != "false" ]]; then
+      apps+=(uat)
+    fi
   fi
 
   if [[ "${EXPECT_SSO}" == "true" ]]; then
@@ -982,6 +989,7 @@ EXPECT_AGENTGATEWAY_AI_GATEWAY=$(expected_from_tfvars enable_agentgateway_ai_gat
 EXPECT_BACKSTAGE=$(tfvar_or_default enable_backstage false)
 EXPECT_APP_REPO_SUBNET_CALC=$(expected_from_tfvars enable_app_repo_subnetcalc)
 EXPECT_APP_REPO_SENTIMENT=$(expected_from_tfvars enable_app_repo_sentiment)
+EXPECT_UAT_APPS=$(expected_from_tfvars enable_uat_apps)
 EXPECT_LANGFUSE=$(expected_from_tfvars enable_langfuse)
 EXPECT_LANGFUSE_DEMOS=$(expected_from_tfvars enable_langfuse_demos)
 EXPECT_PREFER_EXTERNAL_WORKLOAD_IMAGES=$(expected_from_tfvars prefer_external_workload_images)
