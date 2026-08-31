@@ -6,9 +6,37 @@ locals {
   module_repo_root     = abspath("${path.module}/../..")
   # Tests may point kind_stack_dir at a synthetic location that is useful for
   # output-path assertions but does not contain the repo helper scripts.
-  repo_root                              = fileexists("${local.repo_root_from_stack}/kubernetes/kind/scripts/ensure-kind-kubeconfig.sh") ? local.repo_root_from_stack : local.module_repo_root
-  kind_workers                           = range(var.worker_count)
-  kind_control_plane_container_name      = "${var.cluster_name}-control-plane"
+  repo_root                         = fileexists("${local.repo_root_from_stack}/kubernetes/kind/scripts/ensure-kind-kubeconfig.sh") ? local.repo_root_from_stack : local.module_repo_root
+  kind_workers                      = range(var.worker_count)
+  kind_control_plane_container_name = "${var.cluster_name}-control-plane"
+
+  # worker_count = 0 is a supported topology for memory-constrained hosts: it
+  # drops a whole node container (kubelet + containerd + cilium agent) and
+  # schedules everything on the control plane instead.
+  #
+  # That only works if the control-plane node is untainted. kind does untaint it
+  # by itself, but only for len(allNodes) == 1 and only by shelling out to
+  # `kubectl taint nodes --all node-role.kubernetes.io/control-plane-` INSIDE
+  # the node -- and this stack mounts scripts/kind-node-kubectl-wrapper.sh over
+  # /usr/local/bin/kubectl there. That wrapper prints usage and exits 0 unless
+  # it is passed --execute, which kind does not pass, so kind's own untaint is a
+  # silent no-op here. Ask kubeadm for an untainted control plane instead.
+  #
+  # An explicitly empty nodeRegistration.taints list is kubeadm's documented
+  # "register this node with no taints" signal; nil (the field absent, which is
+  # what kind's generated InitConfiguration leaves it as) is what asks for the
+  # default control-plane NoSchedule taint. kind applies the patch as an
+  # RFC 7386 JSON merge patch, where a non-object value replaces wholesale, so
+  # the empty list survives the merge.
+  kind_single_node = var.worker_count == 0
+  kind_control_plane_kubeadm_config_patches = local.kind_single_node ? [
+    <<-EOT
+    kind: InitConfiguration
+    nodeRegistration:
+      taints: []
+    EOT
+  ] : []
+
   kind_config_path_expanded              = abspath(pathexpand(var.kind_config_path))
   kubeconfig_path_expanded               = abspath(pathexpand(var.kubeconfig_path))
   preload_image_list_path_input          = trimspace(var.preload_image_list_path)

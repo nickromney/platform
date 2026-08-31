@@ -81,10 +81,11 @@ resource "local_file" "kind_config" {
   filename = local.kind_config_path_expanded
 
   content = templatefile("${local.stack_dir}/templates/kind-config.yaml.tpl", {
-    workers         = local.kind_workers
-    ports           = local.extra_port_mappings
-    extra_mounts    = local.kind_extra_mounts
-    api_server_port = var.kind_api_server_port
+    workers                              = local.kind_workers
+    ports                                = local.extra_port_mappings
+    extra_mounts                         = local.kind_extra_mounts
+    api_server_port                      = var.kind_api_server_port
+    control_plane_kubeadm_config_patches = local.kind_control_plane_kubeadm_config_patches
   })
 }
 
@@ -109,6 +110,11 @@ resource "kind_cluster" "local" {
 
     node {
       role = "control-plane"
+
+      # Empty for every worker_count > 0, so the default multi-node topology
+      # keeps the control-plane taint it has always had. See
+      # local.kind_control_plane_kubeadm_config_patches.
+      kubeadm_config_patches = local.kind_control_plane_kubeadm_config_patches
 
       dynamic "extra_port_mappings" {
         for_each = local.extra_port_mappings

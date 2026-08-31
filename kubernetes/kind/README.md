@@ -372,7 +372,8 @@ flowchart TB
 ```
 
 - `worker_count = 1` creates a 2-node cluster: 1 control-plane node and 1 worker node.
-- `KIND_WORKER_COUNT` overrides that worker count at the wrapper layer. `1` means 2 total nodes, `2` means 3 total nodes, and so on.
+- `worker_count = 0` creates a single-node cluster. The second node is not free: it is another container with its own kubelet, containerd, and Cilium agent, which is why the `local-8gb` resource profile drops to one node. Terraform clears the control-plane `NoSchedule` taint for that topology with a kubeadm config patch, so workloads still schedule.
+- `KIND_WORKER_COUNT` pins the worker count at the wrapper layer. `0` means 1 total node, `1` means 2 total nodes, `2` means 3 total nodes, and so on. Leave it unset to let the stage baseline or the selected resource profile decide.
 - `cni_provider = "none"` and `kind_disable_default_cni = true` mean there is no working pod network yet.
 - `kubeconfig_context = ""` leaves bootstrap free to create the cluster before the final context name exists.
 

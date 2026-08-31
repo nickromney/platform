@@ -152,3 +152,39 @@ EOF
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"KIND_BAKED_NODE_IMAGE is required"* ]]
 }
+
+@test "render-operator-overrides leaves worker_count out when the operator did not pin one" {
+  # This file is the last -var-file the kind stack passes, so a worker_count
+  # written here outranks the resource profile. Emitting the old default of 1
+  # unconditionally is what made a single-node profile impossible.
+  run env \
+    KIND_OPERATOR_OVERRIDES_FILE="${OUTPUT_FILE}" \
+    KIND_IMAGE_DISTRIBUTION_MODE=load \
+    "${RENDER_SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  [ -f "${OUTPUT_FILE}" ]
+  ! grep -q 'worker_count' "${OUTPUT_FILE}"
+}
+
+@test "render-operator-overrides accepts a single-node worker count" {
+  run env \
+    KIND_OPERATOR_OVERRIDES_FILE="${OUTPUT_FILE}" \
+    KIND_WORKER_COUNT=0 \
+    KIND_IMAGE_DISTRIBUTION_MODE=load \
+    "${RENDER_SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  grep -F 'worker_count = 0' "${OUTPUT_FILE}"
+}
+
+@test "render-operator-overrides still rejects a non-numeric worker count" {
+  run env \
+    KIND_OPERATOR_OVERRIDES_FILE="${OUTPUT_FILE}" \
+    KIND_WORKER_COUNT=one \
+    KIND_IMAGE_DISTRIBUTION_MODE=load \
+    "${RENDER_SCRIPT}" --execute
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"KIND_WORKER_COUNT must be a whole number"* ]]
+}
