@@ -351,3 +351,63 @@ EOF
   [[ "${output}" != *"quay.io/argoproj/argo-rollouts:v1.9.0"* ]]
   [[ "${output}" == *"busybox:latest"* ]]
 }
+
+# The toggle list is passed positionally, so a shifted or duplicated `local`
+# binding silently makes one feature's toggle control another's images. These
+# tests pin each of the late positional arguments to the images it actually owns.
+
+preload_toggle_list() {
+  local image_list="${BATS_TEST_TMPDIR}/toggle-images.txt"
+
+  cat >"${image_list}" <<'EOF'
+docker.io/langfuse/langfuse:3
+quay.io/argoproj/argo-rollouts:v1.9.0
+quay.io/cilium/hubble-relay:v1.20.1
+quay.io/cilium/hubble-ui:v0.13.5
+busybox:latest
+EOF
+
+  printf '%s' "${image_list}"
+}
+
+@test "preload-images langfuse images follow the langfuse toggle, not the actions-runner toggle" {
+  local image_list
+  image_list="$(preload_toggle_list)"
+
+  PRELOAD_ENABLE_LANGFUSE=true run "${SCRIPT}" --execute --print-images --image-list "${image_list}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"docker.io/langfuse/langfuse:3"* ]]
+
+  PRELOAD_ENABLE_LANGFUSE=false PRELOAD_ENABLE_ACTIONS_RUNNER=true run "${SCRIPT}" --execute --print-images --image-list "${image_list}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"docker.io/langfuse/langfuse:3"* ]]
+}
+
+@test "preload-images argo-rollouts images follow progressive delivery, not external secrets" {
+  local image_list
+  image_list="$(preload_toggle_list)"
+
+  PRELOAD_ENABLE_PROGRESSIVE_DELIVERY=true run "${SCRIPT}" --execute --print-images --image-list "${image_list}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"quay.io/argoproj/argo-rollouts:v1.9.0"* ]]
+
+  PRELOAD_ENABLE_PROGRESSIVE_DELIVERY=false PRELOAD_ENABLE_EXTERNAL_SECRETS=true run "${SCRIPT}" --execute --print-images --image-list "${image_list}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"quay.io/argoproj/argo-rollouts:v1.9.0"* ]]
+}
+
+@test "preload-images drops hubble images when hubble is disabled and keeps them by default" {
+  local image_list
+  image_list="$(preload_toggle_list)"
+
+  PRELOAD_ENABLE_HUBBLE=false run "${SCRIPT}" --execute --print-images --image-list "${image_list}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"quay.io/cilium/hubble-relay:v1.20.1"* ]]
+  [[ "${output}" != *"quay.io/cilium/hubble-ui:v0.13.5"* ]]
+  [[ "${output}" == *"busybox:latest"* ]]
+
+  # enable_hubble defaults to true in variables.tf, so an unset toggle must keep them.
+  run "${SCRIPT}" --execute --print-images --image-list "${image_list}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"quay.io/cilium/hubble-relay:v1.20.1"* ]]
+}

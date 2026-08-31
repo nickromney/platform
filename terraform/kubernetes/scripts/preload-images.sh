@@ -116,7 +116,7 @@ is_true() {
 has_toggle_env_overrides() {
   local env_key
 
-  for env_key in PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_METRICS_SERVER PRELOAD_ENABLE_EXTERNAL_SECRETS PRELOAD_ENABLE_PROGRESSIVE_DELIVERY PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_ENABLE_LANGFUSE; do
+  for env_key in PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_METRICS_SERVER PRELOAD_ENABLE_EXTERNAL_SECRETS PRELOAD_ENABLE_PROGRESSIVE_DELIVERY PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_ENABLE_LANGFUSE PRELOAD_ENABLE_HUBBLE; do
     if [[ -n "${!env_key:-}" ]]; then
       return 0
     fi
@@ -245,6 +245,14 @@ is_headlamp_image() {
   esac
 }
 
+is_hubble_image() {
+  local img="$1"
+  case "${img}" in
+    quay.io/cilium/hubble-relay:*|quay.io/cilium/hubble-ui:*|quay.io/cilium/hubble-ui-backend:*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 is_metrics_server_image() {
   local img="$1"
   case "${img}" in
@@ -299,13 +307,11 @@ filter_images_by_toggles() {
   local enable_headlamp="$4"
   local enable_metrics_server="$5"
   local enable_external_secrets="$6"
-  local enable_sso="$7"
-  local enable_actions_runner="$8"
-  local enable_langfuse="$9"
-  local enable_progressive_delivery="$6"
-  local enable_sso="$7"
-  local enable_actions_runner="$8"
-  local enable_langfuse="$9"
+  local enable_progressive_delivery="$7"
+  local enable_sso="$8"
+  local enable_actions_runner="$9"
+  local enable_langfuse="${10}"
+  local enable_hubble="${11}"
   local output=""
   local img
 
@@ -349,6 +355,10 @@ filter_images_by_toggles() {
     fi
 
     if ! is_true "${enable_langfuse}" && is_langfuse_image "${img}"; then
+      continue
+    fi
+
+    if ! is_true "${enable_hubble}" && is_hubble_image "${img}"; then
       continue
     fi
 
@@ -948,7 +958,7 @@ HAS_TOGGLE_INPUTS="false"
 if [[ -n "${TFVARS_FILE}" && -f "${TFVARS_FILE}" ]]; then
   HAS_TOGGLE_INPUTS="true"
 fi
-for env_key in PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_METRICS_SERVER PRELOAD_ENABLE_EXTERNAL_SECRETS PRELOAD_ENABLE_PROGRESSIVE_DELIVERY PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_ENABLE_LANGFUSE; do
+for env_key in PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_METRICS_SERVER PRELOAD_ENABLE_EXTERNAL_SECRETS PRELOAD_ENABLE_PROGRESSIVE_DELIVERY PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_ENABLE_LANGFUSE PRELOAD_ENABLE_HUBBLE; do
   if [[ -n "${!env_key:-}" ]]; then
     HAS_TOGGLE_INPUTS="true"
     break
@@ -966,6 +976,10 @@ if is_true "${HAS_TOGGLE_INPUTS}"; then
   ENABLE_SSO="$(toggle_input_or_default "PRELOAD_ENABLE_SSO" "enable_sso" "false")"
   ENABLE_ACTIONS_RUNNER="$(toggle_input_or_default "PRELOAD_ENABLE_ACTIONS_RUNNER" "enable_actions_runner" "false")"
   ENABLE_LANGFUSE="$(toggle_input_or_default "PRELOAD_ENABLE_LANGFUSE" "enable_langfuse" "false")"
+  # Hubble follows the cluster's own default rather than false: enable_hubble
+  # defaults to true in variables.tf, so defaulting to false here would silently
+  # stop preloading images the default profile does deploy.
+  ENABLE_HUBBLE="$(toggle_input_or_default "PRELOAD_ENABLE_HUBBLE" "enable_hubble" "true")"
 
   if [[ -n "${TFVARS_FILE}" && -f "${TFVARS_FILE}" ]]; then
     echo "Applying feature filters from ${TFVARS_FILE} with PRELOAD_ENABLE_* env overrides" >&2
@@ -983,7 +997,8 @@ if is_true "${HAS_TOGGLE_INPUTS}"; then
     "${ENABLE_PROGRESSIVE_DELIVERY}" \
     "${ENABLE_SSO}" \
     "${ENABLE_ACTIONS_RUNNER}" \
-    "${ENABLE_LANGFUSE}")"
+    "${ENABLE_LANGFUSE}" \
+    "${ENABLE_HUBBLE}")"
 fi
 
 if [[ -z "$images" ]]; then
