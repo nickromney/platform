@@ -381,6 +381,54 @@ them on the NGINX path, so the checker correctly reported ten policies missing
 from a cluster that was behaving exactly as designed. It now skips them by name
 when the mode is off and says how many it skipped.
 
+### What the first real cutover build found
+
+Two bugs that only a full build surfaces, both of which look like a slow cluster
+rather than a defect.
+
+**The CRD wait waited for something that is not a CRD.** `gateway-bootstrap.tf`
+built its readiness list from `metadata.name` of every document in the Gateway
+API bundle and then polled `kubectl get crd <name>` for each. That was fine on
+v1.4.1, which is all CRDs. The v1.6.1 bundle also ships a
+`ValidatingAdmissionPolicy` and its Binding, both named
+`safe-upgrades.gateway.networking.k8s.io`:
+
+```
+Timed out waiting for CRD/safe-upgrades.gateway.networking.k8s.io to become Established
+```
+
+It burned the full wait and then failed the apply. Filter the list to
+`kind == "CustomResourceDefinition"`. Anyone bumping the bundle again should
+check what non-CRD documents it has grown.
+
+**The apiserver OIDC config pointed at a Service with no endpoints.**
+`configure-kind-apiserver-oidc.sh` took the clusterIP of
+`platform-gateway-nginx-internal` and wrote it into the control-plane node's
+`/etc/hosts` so the apiserver could resolve the issuer host. In Cilium mode that
+Service still exists and still has a clusterIP -- it just selects NGF pods that
+are never created. So the lookup *succeeds* and the failure surfaces much later,
+during OIDC discovery, far from its cause. The same script then waited on a
+data-plane Deployment that does not exist in this mode.
+
+Cilium's Envoy binds the listener on the node's host network, so the node's own
+InternalIP is the address that answers on 443, and the Gateway's `Programmed`
+condition replaces the Deployment rollout as the readiness signal.
+
+`platform-gateway-nginx-internal` is still created in Cilium mode and is still
+wrong there. It is left in place for now because the subnetcalc canary patch
+proxies to it by name, so removing it is a separate change. It belongs on the
+list below.
+
+### Still outstanding
+
+- `platform-gateway-hardened` is inert in Cilium mode (no pods in the namespace)
+  but would silently start applying if anything ever did schedule there. Prune
+  it in this mode or rewrite it against the Envoy identity.
+- `platform-gateway-nginx-internal` and the subnetcalc canary patch that
+  proxies to it.
+- The SnippetsPolicy TLS hardening and the OAuth response-buffer tuning have no
+  Cilium equivalent and are currently just lost.
+
 ## Suggested sequence
 
 1. **Prove host-network mode in isolation.** Enable
