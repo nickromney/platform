@@ -2000,3 +2000,98 @@ EOF
   [[ "${output}" == *"snippetsfilter-admin-allowlist.yaml"* ]]
   [[ "${output}" != *"ResponseHeaderModifier"* ]]
 }
+
+@test "cilium route render gives the global headers to routes that never had a filter" {
+  seed_gateway_routes
+
+  # Under NGF these came from tls-hardening.yaml, a Gateway-scoped SnippetsPolicy
+  # covering every route. Translating only the per-route filters left roughly
+  # twenty routes with no HSTS, framing, nosniff or referrer policy at all.
+  cat >"${routes_dir}/httproute-portal.yaml" <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: portal
+  namespace: gateway-routes
+spec:
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: portal
+          port: 8080
+EOF
+
+  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true ADMIN_ROUTE_ALLOWLIST_CIDRS=; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; cat '${routes_dir}/httproute-portal.yaml'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"ResponseHeaderModifier"* ]]
+  [[ "${output}" == *"Strict-Transport-Security"* ]]
+  [[ "${output}" == *'value: "DENY"'* ]]
+  [[ "${output}" == *"backendRefs"* ]]
+  [[ "${output}" == *"portal"* ]]
+}
+
+@test "cilium route render covers every rule of a multi-rule route" {
+  seed_gateway_routes
+
+  cat >"${routes_dir}/httproute-mcp.yaml" <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mcp
+  namespace: gateway-routes
+spec:
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /a
+      backendRefs:
+        - name: a
+          port: 8080
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /b
+      backendRefs:
+        - name: b
+          port: 8080
+EOF
+
+  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true ADMIN_ROUTE_ALLOWLIST_CIDRS=; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; grep -c ResponseHeaderModifier '${routes_dir}/httproute-mcp.yaml'"
+
+  [ "${status}" -eq 0 ]
+  # One per rule; a single insertion would leave the second path unprotected.
+  [[ "${output}" == *"2"* ]]
+}
+
+@test "the NGINX path leaves unfiltered routes alone" {
+  seed_gateway_routes
+
+  cat >"${routes_dir}/httproute-portal.yaml" <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: portal
+  namespace: gateway-routes
+spec:
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: portal
+          port: 8080
+EOF
+
+  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=false; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; cat '${routes_dir}/httproute-portal.yaml'"
+
+  [ "${status}" -eq 0 ]
+  # NGF applies these globally through tls-hardening.yaml; duplicating them
+  # per route would be redundant and would drift from that policy.
+  [[ "${output}" != *"ResponseHeaderModifier"* ]]
+}

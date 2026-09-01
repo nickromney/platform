@@ -1949,8 +1949,6 @@ render_gateway_routes_for_cilium() {
 
     for route_file in "${routes_dir}"/httproute-*.yaml; do
       [[ -e "${route_file}" ]] || continue
-      grep -q "kind: SnippetsFilter" "${route_file}" || continue
-
       # Keycloak admin needs same-origin framing for its browser storage check;
       # every other route keeps the gateway default of DENY.
       frame_options="DENY"

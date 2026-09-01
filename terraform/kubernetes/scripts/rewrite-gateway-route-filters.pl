@@ -10,16 +10,10 @@
 # admin, which needs same-origin framing for its browser storage check, DENY
 # everywhere else.
 my $frame = $ENV{FRAME_OPTIONS} // 'DENY';
-s{
-  ^([ ]+)filters:\n
-  [ ]+-[ ]type:[ ]ExtensionRef\n
-  [ ]+extensionRef:\n
-  [ ]+group:[ ]gateway\.nginx\.org\n
-  [ ]+kind:[ ]SnippetsFilter\n
-  [ ]+name:[ ][^\n]+\n
-}{
-  my $i = $1;
-  $i . "filters:\n"
+
+sub header_block {
+  my ($i) = @_;
+  return $i . "filters:\n"
     . $i . "  - type: ResponseHeaderModifier\n"
     . $i . "    responseHeaderModifier:\n"
     . $i . "      set:\n"
@@ -30,5 +24,25 @@ s{
     . $i . "        - name: X-Frame-Options\n"
     . $i . "          value: \"" . $frame . "\"\n"
     . $i . "        - name: Referrer-Policy\n"
-    . $i . "          value: \"strict-origin-when-cross-origin\"\n"
-}gmex
+    . $i . "          value: \"strict-origin-when-cross-origin\"\n";
+}
+s{
+  ^([ ]+)filters:\n
+  [ ]+-[ ]type:[ ]ExtensionRef\n
+  [ ]+extensionRef:\n
+  [ ]+group:[ ]gateway\.nginx\.org\n
+  [ ]+kind:[ ]SnippetsFilter\n
+  [ ]+name:[ ][^\n]+\n
+}{
+  header_block($1)
+}gmex;
+
+# Routes that never carried a SnippetsFilter still lost their headers. Under NGF
+# those came from tls-hardening.yaml, a Gateway-scoped SnippetsPolicy that
+# applied to every route, so translating only the per-route filters left roughly
+# twenty routes -- subnetcalc, sentiment, mcp-console, portal-api, llm, apim --
+# with no HSTS, framing, nosniff or referrer policy at all. Give every remaining
+# rule the same block, once per rule, matching the indent of its backendRefs.
+unless (/ResponseHeaderModifier/) {
+  s{^([ ]+)backendRefs:}{header_block($1) . $1 . "backendRefs:"}gme;
+}
