@@ -149,15 +149,41 @@ Keycloak admin console), `Referrer-Policy`. These now apply per route rather
 than through one Gateway-scoped policy, and cover every route rather than only
 the twelve that happened to carry a filter.
 
-Genuinely lost, and not worked around:
+**TLS versions and ciphers are not lost.** I said they were; that was wrong.
+Cilium has no declarative knob -- `CiliumGatewayClassConfig` exposes only
+`serverHeaderTransformation`, `httpOptions`, `service` and `telemetry` -- but the
+posture Envoy produces already matches what the NGINX config asked for. Measured
+against the live gateway:
 
-- **TLS cipher and session-ticket control.** `tls-hardening.yaml` set
-  `ssl_conf_command Ciphersuites`, `ssl_ecdh_curve`, `ssl_prefer_server_ciphers`
-  and `ssl_session_tickets`. There is no core Gateway API equivalent.
-- **Admin IP allowlist.** No core equivalent either. Rather than render admin
-  routes without the restriction they are configured to have, a non-empty
+| probe | result |
+| --- | --- |
+| TLS 1.0, TLS 1.1 | refused |
+| TLS 1.2, TLS 1.3 | both available, 1.3 negotiated by default |
+| `TLS_AES_128_GCM_SHA256`, `TLS_AES_256_GCM_SHA384`, `TLS_CHACHA20_POLY1305_SHA256` | all available |
+| RC4-SHA, DES-CBC3-SHA, AES128-SHA, NULL-SHA | all refused |
+
+Those are the same three suites `ssl_conf_command Ciphersuites` pinned, and the
+same versions `nginx.org/ssl-protocols: TLSv1.2 TLSv1.3` allowed.
+
+What is genuinely missing is *enforcement*, not the outcome. A default is not a
+setting: a Cilium or Envoy bump could move it with nothing to notice. So
+`check-gateway-urls` now asserts the posture directly -- eleven probes covering
+refused versions, available versions, the pinned suites, and four weak ciphers.
+That is arguably stronger than the NGINX snippet was, because it verifies the
+negotiated result rather than declaring an intent, and it runs against the NGINX
+path too.
+
+`ssl_session_tickets off` and `ssl_ecdh_curve` have no equivalent and are not
+asserted.
+
+Genuinely lost:
+
+- **Admin IP allowlist.** No core Gateway API equivalent. Rather than render
+  admin routes without the restriction they are configured to have, a non-empty
   `ADMIN_ROUTE_ALLOWLIST_CIDRS` is a hard failure in this mode. The local
-  default is unset, which matches the permissive behaviour NGF produced.
+  default is unset, which matches the permissive behaviour NGF produced. For a
+  teaching cluster on loopback that is acceptable, but it should be called out
+  rather than discovered.
 
 ## Single-node also works, and is the better shape
 
