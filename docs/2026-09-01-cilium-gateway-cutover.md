@@ -11,10 +11,17 @@ NGINX Gateway Fabric is gone. Cilium's Envoy serves every route.
 NAME               CLASS    ADDRESS      PROGRAMMED
 platform-gateway   cilium   172.18.0.2   True
 
-check-gateway-urls   60 OK / 0 FAIL
+make -C kubernetes/kind 900 apply   exit 0 in 6m32s
+  Apply complete! Resources: 8 added, 0 changed, 5 destroyed.
+  146 OK / 0 FAIL in-apply verification
+
 check-sso-e2e        14 passed / 0 failed
-memory               2.19 GiB + 3.59 GiB = 5.78 GiB of 8.72 GiB
+memory               2.21 GiB + 3.95 GiB = 6.17 GiB of 8.72 GiB
 ```
+
+A single `900 apply` now builds this from the profile in one command. Attempts 1
+through 4 each found a real defect, all fixed here; attempt 5 was lost to Docker
+Desktop wedging its image-pull path, which `docker builder prune` cleared.
 
 All five admin routes pass the browser login flow on Cilium: `gitea-admin`,
 `argocd-admin`, `hubble-admin`, `kyverno-admin`, `apim-admin`. The last of those
@@ -73,9 +80,13 @@ Genuinely lost, and not worked around:
 
 ## Still open
 
-- No completed end-to-end `900 apply` in Cilium mode. Attempts 1-4 each found a
-  real defect, all now fixed; attempt 5 was stopped by Docker Desktop wedging
-  its image-pull path, unrelated to this work. The cluster validated above was
-  built by attempt 4 plus a `gitea-sync`, so the code path is proven but the
-  single-command build has not been demonstrated.
 - Single-node remains unvalidated in this mode.
+
+## One transient failure worth expecting
+
+The first `check-sso-e2e` immediately after the apply failed on `keycloak` with
+a `toHaveURL` mismatch, then passed on a straight re-run with no intervention.
+All pods were ready and Keycloak answered 302 in 33ms throughout, so this is the
+OIDC apiserver restart still settling rather than a defect -- the same class of
+transient the operator notes already describe for gateway pods. Treat the second
+run as the signal.
