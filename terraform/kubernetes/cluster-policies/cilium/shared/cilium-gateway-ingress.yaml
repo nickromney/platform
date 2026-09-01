@@ -16,6 +16,22 @@
 # These are scoped per backend rather than written as a single empty
 # endpointSelector, so the Cilium Envoy is admitted only where the NGINX
 # gateway was already allowed to go.
+#
+# Deliberately absent: hubble-ui and policy-reporter. In Cilium, selecting an
+# endpoint in any policy switches it from default-allow to default-deny for that
+# direction, so adding an allow rule to an otherwise-unselected endpoint REMOVES
+# access rather than granting it. Both of those are unselected by any other
+# ingress policy, so reserved:ingress already reaches them, and adding a rule
+# here broke the node-to-NodePort path instead:
+#
+#   Policy denied ... identity kube-apiserver->14998: 172.18.0.3 -> 10.244.1.74:8081
+#
+# That is the control plane reaching Hubble UI's NodePort, which is what kind
+# publishes to the host. Note the identity: the node hosting the apiserver
+# presents reserved:kube-apiserver, not host, so even an explicit host rule
+# would not have covered it. Every entry below selects an endpoint that some
+# other policy already restricts, which is what makes these rules purely
+# additive.
 ---
 apiVersion: cilium.io/v2
 kind: CiliumClusterwideNetworkPolicy
@@ -151,37 +167,4 @@ spec:
       toPorts:
         - ports:
             - port: "4466"
-              protocol: TCP
----
-apiVersion: cilium.io/v2
-kind: CiliumClusterwideNetworkPolicy
-metadata:
-  name: cilium-gateway-ingress-hubble-ui
-spec:
-  endpointSelector:
-    matchLabels:
-      "k8s:io.kubernetes.pod.namespace": kube-system
-      "k8s:k8s-app": hubble-ui
-  ingress:
-    - fromEntities:
-        - ingress
-      toPorts:
-        - ports:
-            - port: "8081"
-              protocol: TCP
----
-apiVersion: cilium.io/v2
-kind: CiliumClusterwideNetworkPolicy
-metadata:
-  name: cilium-gateway-ingress-policy-reporter
-spec:
-  endpointSelector:
-    matchLabels:
-      "k8s:io.kubernetes.pod.namespace": policy-reporter
-  ingress:
-    - fromEntities:
-        - ingress
-      toPorts:
-        - ports:
-            - port: "8080"
               protocol: TCP
