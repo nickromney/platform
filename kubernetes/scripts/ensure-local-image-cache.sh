@@ -32,7 +32,7 @@ cache_volume_name="${CACHE_VOLUME_NAME:-platform-local-image-cache-data}"
 # in-flight layer upload breaks when the container recycles. Derived from the
 # container name so it is deterministic rather than a checked-in credential;
 # this registry is loopback-only and holds no secrets.
-cache_http_secret="${CACHE_HTTP_SECRET:-$(printf '%s' "platform-image-cache-${cache_container_name}" | shasum -a 256 | cut -d' ' -f1)}"
+cache_http_secret="${CACHE_HTTP_SECRET:-$(printf '%s' "platform-image-cache-${cache_container_name}" | LC_ALL=C shasum -a 256 | cut -d' ' -f1)}"
 
 # shellcheck disable=SC2329 # invoked by name through the shell_cli_* helpers
 usage() {
