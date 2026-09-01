@@ -248,3 +248,66 @@ PY
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated kyverno platform audits"* ]]
 }
+
+@test "Cilium gateway ingress policy only selects endpoints another policy already restricts" {
+  run uv run --isolated --with pyyaml python - <<'XPY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+policy = repo_root / "terraform/kubernetes/cluster-policies/cilium/shared/cilium-gateway-ingress.yaml"
+docs = [d for d in yaml.safe_load_all(policy.read_text()) if d]
+
+# Selecting an endpoint in any Cilium policy switches it from default-allow to
+# default-deny for that direction, so an allow rule on an otherwise unselected
+# endpoint removes access instead of granting it. hubble-ui and policy-reporter
+# are unselected by any other ingress policy; adding them here broke the
+# control-plane-to-NodePort path that kind publishes to the host.
+forbidden = {"hubble-ui", "policy-reporter"}
+violations = []
+for doc in docs:
+    selector = doc["spec"]["endpointSelector"]["matchLabels"]
+    for value in selector.values():
+        if value in forbidden:
+            violations.append(doc["metadata"]["name"] + " selects " + value)
+
+print("VIOLATIONS " + "; ".join(violations) if violations else "CLEAN")
+XPY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"CLEAN"* ]]
+}
+
+@test "Cilium gateway ingress policy admits the Envoy identity rather than host" {
+  run uv run --isolated --with pyyaml python - <<'XPY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+policy = repo_root / "terraform/kubernetes/cluster-policies/cilium/shared/cilium-gateway-ingress.yaml"
+docs = [d for d in yaml.safe_load_all(policy.read_text()) if d]
+
+# Cilium's Gateway API Envoy presents reserved:ingress. A host rule here would
+# silently fail to match it and every gateway backend would return 503.
+problems = []
+for doc in docs:
+    entities = set()
+    for rule in doc["spec"]["ingress"]:
+        entities.update(rule.get("fromEntities", []))
+    if entities != {"ingress"}:
+        problems.append(doc["metadata"]["name"] + " admits " + ",".join(sorted(entities)))
+
+print("PROBLEMS " + "; ".join(problems) if problems else "CLEAN")
+XPY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"CLEAN"* ]]
+}
