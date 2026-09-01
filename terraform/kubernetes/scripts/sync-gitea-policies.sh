@@ -1905,7 +1905,15 @@ render_platform_gateway_for_cilium() {
     return 0
   fi
 
-  mv -f "${app_dir}/gateway-cilium.yaml" "${app_dir}/gateway.yaml"
+  # Guarded because the script runs under `set -e`: render_repo always starts
+  # from a fresh copy so the source is present today, but a second call on the
+  # same directory would fail this mv and abort the whole policy sync with only
+  # a bare "No such file or directory" to explain it.
+  if [[ -f "${app_dir}/gateway-cilium.yaml" ]]; then
+    mv -f "${app_dir}/gateway-cilium.yaml" "${app_dir}/gateway.yaml"
+  elif ! grep -q "gatewayClassName: cilium" "${app_dir}/gateway.yaml" 2>/dev/null; then
+    fail "platform-gateway/gateway-cilium.yaml is missing and gateway.yaml is not the Cilium variant; refusing to prune the NGINX resources and leave no gateway"
+  fi
 
   local nginx_only
   for nginx_only in nginxproxy.yaml proxysettingspolicy-oauth-response-buffers.yaml \

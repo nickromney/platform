@@ -41,8 +41,16 @@ s{
 # those came from tls-hardening.yaml, a Gateway-scoped SnippetsPolicy that
 # applied to every route, so translating only the per-route filters left roughly
 # twenty routes -- subnetcalc, sentiment, mcp-console, portal-api, llm, apim --
-# with no HSTS, framing, nosniff or referrer policy at all. Give every remaining
-# rule the same block, once per rule, matching the indent of its backendRefs.
-unless (/ResponseHeaderModifier/) {
-  s{^([ ]+)backendRefs:}{header_block($1) . $1 . "backendRefs:"}gme;
+# with no HSTS, framing, nosniff or referrer policy at all.
+#
+# This is decided per rule, not per file. A file-wide "does this already have a
+# ResponseHeaderModifier?" guard breaks silently on a route that mixes the two:
+# once the swap above fires for one rule, every other rule in that file is
+# skipped and serves no security headers, with nothing to notice it. No route
+# has that shape today, but a path-specific admin filter would create one.
+my @rules = split /(?=^[ ]+-[ ]matches:)/m, $_;
+for my $rule (@rules) {
+  next if $rule =~ /^[ ]+filters:/m;
+  $rule =~ s{^([ ]+)backendRefs:}{header_block($1) . $1 . "backendRefs:"}gme;
 }
+$_ = join '', @rules;

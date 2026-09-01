@@ -2095,3 +2095,47 @@ EOF
   # per route would be redundant and would drift from that policy.
   [[ "${output}" != *"ResponseHeaderModifier"* ]]
 }
+
+@test "cilium route render covers unfiltered rules in a route that also has a filtered one" {
+  seed_gateway_routes
+
+  # The guard on the second rewrite pass has to be per rule. A file-wide check
+  # for an existing ResponseHeaderModifier is satisfied by the swapped rule and
+  # then skips every other rule in the same file, which serves those paths with
+  # no security headers and reports nothing.
+  cat >"${routes_dir}/httproute-mixed.yaml" <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mixed
+  namespace: gateway-routes
+spec:
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /admin
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: SnippetsFilter
+            name: admin-allowlist
+      backendRefs:
+        - name: admin-backend
+          port: 8080
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /public
+      backendRefs:
+        - name: public-backend
+          port: 8080
+EOF
+
+  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true ADMIN_ROUTE_ALLOWLIST_CIDRS=; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; grep -c ResponseHeaderModifier '${routes_dir}/httproute-mixed.yaml'"
+
+  [ "${status}" -eq 0 ]
+  # One per rule: the swapped /admin rule and the previously bare /public rule.
+  [[ "${output}" == *"2"* ]]
+}
