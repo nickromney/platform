@@ -28,12 +28,11 @@ All five admin routes pass the browser login flow on Cilium: `gitea-admin`,
 had no E2E coverage before this work -- it was the one admin hostname the suite
 never exercised.
 
-## Proved from tabula rasa
+## Rebuild from a pruned Docker (not a true tabula rasa)
 
-The whole thing was rebuilt from an empty Docker to check none of it depended on
-warm state. `docker system prune -af --volumes` reclaimed 44.51 GB and took the
-image count from 127 to 1, the build cache from 226 entries to 0, and the host
-volume from 89% to 78% capacity. Then, single-node, from nothing:
+`docker system prune -af --volumes` reclaimed 44.51 GB, took the image count
+from 127 to 1 and the build cache from 226 entries to 0. Rebuilt single-node
+from that state:
 
 ```
 100 apply + 900 apply   exit 0 in 13m36s
@@ -46,9 +45,20 @@ make test-ci    1389 ok / 0 not ok, exit 0
 memory          5.32 GiB of 8.72 GiB
 ```
 
-13m36s from an empty Docker against 13m20s warm. Re-pulling every image cost
-roughly sixteen seconds of wall clock, which is the image cache and the
-TF_PLUGIN_CACHE_DIR doing their job rather than a measurement error.
+**This was not a cold build, and the timing should not be read as one.** The
+`platform-local-image-cache` registry container was running throughout, so
+neither it nor its volume was pruned -- it still held all 62 repositories. The
+rebuild sourced images from that local registry rather than from upstream. The
+13m36s is therefore a fair measure of "Docker's image store emptied" and not of
+"nothing cached anywhere".
+
+Two related facts about `docker system prune -af --volumes`, both of which
+caught me out:
+
+- It does not stop running containers, so anything up at the time survives
+  along with its volumes.
+- `--volumes` prunes only *anonymous* volumes. Named volumes survive; removing
+  those needs `docker volume prune -a`.
 
 Spot-checked on that cluster: the Hubble NodePort returns 200, and a route that
 never carried a SnippetsFilter serves all four security headers -- the two
