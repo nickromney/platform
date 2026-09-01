@@ -39,6 +39,8 @@ FAST_TIER=(
 # shellcheck disable=SC2034  # read by tests/opentofu-tier.bats, not by this script
 FULL_ONLY_TIER=(
   tests/argocd_health_customizations.tftest.hcl
+  tests/gateway_bootstrap_crds.tftest.hcl
+  tests/gateway_port_mapping.tftest.hcl
   tests/bootstrap_app_of_apps.tftest.hcl
   tests/direct_workload_apps.tftest.hcl
   tests/gitops_features.tftest.hcl
