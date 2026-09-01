@@ -429,6 +429,75 @@ list below.
 - The SnippetsPolicy TLS hardening and the OAuth response-buffer tuning have no
   Cilium equivalent and are currently just lost.
 
+## Cilium identities, measured (2026-09-01)
+
+Three identity facts decide whether this cutover works. All three were measured
+with `cilium-dbg monitor --type drop`, and none of them is what I would have
+guessed.
+
+### 1. The gateway Envoy is `reserved:ingress`, not `host`
+
+```
+Policy denied ... identity ingress->48344: 10.244.0.166 -> 10.244.1.224:4180
+```
+
+Cilium's Gateway API Envoy runs inside `cilium-agent`, not in a pod, and
+presents `reserved:ingress`. A policy written against `host` matches nothing and
+every backend returns 503 through a gateway that reports `Programmed=True`.
+
+### 2. The apiserver node is `reserved:kube-apiserver`, not `host`
+
+```
+Policy denied ... identity kube-apiserver->14998: 172.18.0.3 -> 10.244.1.74:8081
+```
+
+That is the control plane reaching Hubble UI on the worker. The node hosting the
+apiserver presents `reserved:kube-apiserver`, so an explicit `host` rule does
+**not** cover traffic originating on the control plane. This matters more than it
+sounds: kind publishes NodePorts from the control plane, so this is the identity
+behind every `127.0.0.1:<nodeport>` probe the health check makes.
+
+### 3. Adding an allow rule can remove access
+
+This is the one that cost the most time, and it is a property of Cilium rather
+than of this repo. Selecting an endpoint in **any** policy switches it from
+default-allow to default-deny for that direction. So adding an allow rule to an
+endpoint that no other policy selects takes access away.
+
+`hubble-ui` and `policy-reporter` are selected by no other ingress policy.
+Adding them to `cilium-gateway-ingress` flipped them to default-deny and broke
+the direct NodePort path. They never needed the rule -- `reserved:ingress`
+already reaches an unrestricted endpoint. The rule is only required where
+something already denies.
+
+Before adding a backend to that policy, check whether another policy already
+selects it. `tests/platform-security-policies.bats` guards the two known cases,
+but the general rule is the thing to remember.
+
+## The SnippetsFilter loss is silent, not loud
+
+I expected removing NGF to leave the admin routes at `ResolvedRefs=False`. It
+does not, and the truth is worse.
+
+`gateway-bootstrap.tf` applies the NGF CRD bundle whenever `enable_gateway_tls`
+is set, independently of which implementation actually runs. So
+`snippetsfilters.gateway.nginx.org` is still installed, the ExtensionRef still
+resolves, the route still reports `Accepted=True ResolvedRefs=True` -- and
+Cilium simply ignores a filter it does not implement.
+
+Measured on an admin route under Cilium before the fix:
+
+```
+HTTP/1.1 302 Found
+server: envoy
+```
+
+No `Strict-Transport-Security`, no `X-Frame-Options`, no
+`X-Content-Type-Options`, no `Referrer-Policy`. Every check stays green while
+the admin routes quietly lose their transport and framing protections. That is
+why the headers are translated into a core-API `ResponseHeaderModifier` rather
+than dropped, and why the IP allowlist is a hard failure instead of a warning.
+
 ## Suggested sequence
 
 1. **Prove host-network mode in isolation.** Enable
