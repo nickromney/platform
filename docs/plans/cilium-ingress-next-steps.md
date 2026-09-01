@@ -227,7 +227,7 @@ verified on the live two-node cluster rather than reasoned about.
 `cilium-operator` runs its Gateway API preflight exactly once, at startup, in
 `gateway-api.initGatewayAPIController`. On the v1.4.1 bundle it logged:
 
-```
+```text
 Required GatewayAPI resources are not found, please refer to docs for installation instructions
   CRD "tlsroutes.gateway.networking.k8s.io" does not have version "v1"
   CRD "referencegrants.gateway.networking.k8s.io" does not have version "v1"
@@ -242,7 +242,7 @@ experimental** bundle (20825 -> 24120 lines, 13 CRDs). After applying it and
 restarting the operator, the served versions are `tlsroutes: v1 v1alpha2
 v1alpha3` and `referencegrants: v1 v1beta1`, and:
 
-```
+```text
 NAME           CONTROLLER                                   ACCEPTED
 cilium         io.cilium/gateway-controller                 True
 ```
@@ -258,7 +258,7 @@ A throwaway Gateway (`gatewayClassName: cilium`, HTTP listener, HTTPRoute to an
 agnhost backend) reached `Accepted=True` / `Programmed=True`, Cilium created a
 `CiliumEnvoyConfig`, and traffic flowed:
 
-```
+```text
 HTTP/1.1 200 OK
 server: envoy
 probe-677cfcd9fd-pdc8j
@@ -311,7 +311,7 @@ exact mistake recorded in ADR 0012.
 
 A bare `gatewayClassName: cilium` Gateway on port 8082 produced:
 
-```
+```text
 NAME                TYPE       CLUSTER-IP     PORT(S)
 cilium-gateway-p2   NodePort   10.96.164.35   8082:31525/TCP
 
@@ -347,7 +347,7 @@ pointed at the real `oauth2-proxy-argocd`, through the real hardened policies,
 returned 503. `cilium-dbg monitor --type drop` on the **backend's** node -- not
 the gateway's -- gave the reason:
 
-```
+```text
 Policy denied ... identity ingress->48344: 10.244.0.166 -> 10.244.1.224:4180 tcp SYN
 ```
 
@@ -393,7 +393,7 @@ v1.4.1, which is all CRDs. The v1.6.1 bundle also ships a
 `ValidatingAdmissionPolicy` and its Binding, both named
 `safe-upgrades.gateway.networking.k8s.io`:
 
-```
+```text
 Timed out waiting for CRD/safe-upgrades.gateway.networking.k8s.io to become Established
 ```
 
@@ -437,7 +437,7 @@ guessed.
 
 ### 1. The gateway Envoy is `reserved:ingress`, not `host`
 
-```
+```text
 Policy denied ... identity ingress->48344: 10.244.0.166 -> 10.244.1.224:4180
 ```
 
@@ -447,7 +447,7 @@ every backend returns 503 through a gateway that reports `Programmed=True`.
 
 ### 2. The apiserver node is `reserved:kube-apiserver`, not `host`
 
-```
+```text
 Policy denied ... identity kube-apiserver->14998: 172.18.0.3 -> 10.244.1.74:8081
 ```
 
@@ -487,7 +487,7 @@ Cilium simply ignores a filter it does not implement.
 
 Measured on an admin route under Cilium before the fix:
 
-```
+```text
 HTTP/1.1 302 Found
 server: envoy
 ```
