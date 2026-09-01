@@ -28,41 +28,86 @@ All five admin routes pass the browser login flow on Cilium: `gitea-admin`,
 had no E2E coverage before this work -- it was the one admin hostname the suite
 never exercised.
 
-## Rebuild from a pruned Docker (not a true tabula rasa)
+## Rebuilt from an empty Docker
 
-`docker system prune -af --volumes` reclaimed 44.51 GB, took the image count
-from 127 to 1 and the build cache from 226 entries to 0. Rebuilt single-node
-from that state:
+Two rebuilds, because the first one did not test what it claimed.
+
+`docker system prune -af --volumes` reclaimed 44.51 GB and took images from 127
+to 1, and the rebuild after it ran in 13m36s. But that prune does not stop
+running containers, and `--volumes` prunes only *anonymous* volumes -- so
+`platform-local-image-cache` was still up with all 62 repositories, and the
+rebuild pulled from it rather than from upstream.
+
+Removing the registry container and its volume, then `docker volume prune -a`,
+left Docker genuinely empty: 0 images, 0 containers, 0 volumes, 0 build cache.
+Single-node, from that:
 
 ```
-100 apply + 900 apply   exit 0 in 13m36s
+100 apply + 900 apply   exit 0 in 20m07s
   Apply complete! Resources: 12 added   (stage 100)
   Apply complete! Resources: 118 added  (stage 900)
-  145 OK / 0 FAIL in-apply verification
+  0 FAIL
 
-check-sso-e2e   14 passed / 0 failed in 25.7s
-make test-ci    1389 ok / 0 not ok, exit 0
-memory          5.32 GiB of 8.72 GiB
+check-sso-e2e   14 passed / 0 failed in 27.4s
+memory          5.47 GiB of 8.72 GiB
 ```
 
-**This was not a cold build, and the timing should not be read as one.** The
-`platform-local-image-cache` registry container was running throughout, so
-neither it nor its volume was pruned -- it still held all 62 repositories. The
-rebuild sourced images from that local registry rather than from upstream. The
-13m36s is therefore a fair measure of "Docker's image store emptied" and not of
-"nothing cached anywhere".
+| build | time |
+| --- | --- |
+| fully warm | 13m20s |
+| Docker images pruned, registry cache intact | 13m36s |
+| genuinely empty Docker | 20m07s |
 
-Two related facts about `docker system prune -af --volumes`, both of which
-caught me out:
+So the local registry cache is worth about six and a half minutes on a rebuild.
+That is the number to quote; the sixteen seconds between the first two rows
+measures almost nothing, because both had the cache.
 
-- It does not stop running containers, so anything up at the time survives
-  along with its volumes.
-- `--volumes` prunes only *anonymous* volumes. Named volumes survive; removing
-  those needs `docker volume prune -a`.
+## The image cache, and what it says about tagging
 
-Spot-checked on that cluster: the Hubble NodePort returns 200, and a route that
-never carried a SnippetsFilter serves all four security headers -- the two
-regressions this work introduced and then fixed.
+The cache is a plain registry you push to, not a pull-through cache
+(`REGISTRY_PROXY_REMOTEURL`). That is the right choice here even though it looks
+like more work: a pull-through cache proxies exactly one upstream, and this
+stack pulls from docker.io, quay.io, ghcr.io and registry.k8s.io.
+
+It does cache the kind node image -- `127.0.0.1:5002/kindest/node:v1.36.4` --
+which is why a cluster comes up before anything reaches Docker Hub.
+
+`docker images` shows a second `kindest/node` row with `<none>` for its tag.
+That is not a stray layer. It is the same image ID, referenced by digest,
+because `variables.tf` pins the node image as
+`kindest/node:v1.36.4@sha256:099e0493...`. Docker renders a digest-only
+reference with an empty tag column.
+
+The `platform/*` images do carry a `latest` tag, but nothing deploys from it.
+Each image has four references -- a semantic version, `latest`, the commit SHA,
+and a `src-<fingerprint>` content hash -- and nine of the ten platform
+Deployments reference the `src-` tag:
+
+```
+dev  sentiment-api        sentiment-api:src-e6683805a7c851d42961
+dev  subnetcalc-frontend  subnetcalc-frontend:src-140b5dd72b2fef4f7c47
+idp  idp-core             idp-core:src-62b36c87238dc6ce985d
+sso  keycloak             keycloak:26.6.4
+```
+
+That is what makes rollouts correct: a source change moves the tag, so the
+Deployment template changes and Kubernetes actually restarts the pod. Images
+sharing a fingerprint -- `sentiment-api` and `sentiment-auth-ui`, or the
+subnetcalc pair -- are built from one source tree and are the same image serving
+two roles, not duplicates.
+
+### The registry's log output
+
+`level=error` lines from this registry are not faults. A single successful push
+and pull of one image produces three of them -- two `blob unknown` and one
+`manifest unknown` -- because the client asks whether the registry already holds
+each blob and manifest before uploading, and registry:2 logs every miss at error
+severity. A cold build produced 514, all of them cache misses against an empty
+cache.
+
+The one genuine warning, `No HTTP secret provided`, is now fixed: the container
+runs with a deterministic `REGISTRY_HTTP_SECRET` and a named volume
+(`platform-local-image-cache-data`) instead of an anonymous one.
 
 ## What the cutover actually required
 
