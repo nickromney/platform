@@ -183,7 +183,8 @@ Genuinely lost:
   `ADMIN_ROUTE_ALLOWLIST_CIDRS` is a hard failure in this mode. The local
   default is unset, which matches the permissive behaviour NGF produced. For a
   teaching cluster on loopback that is acceptable, but it should be called out
-  rather than discovered.
+  rather than discovered. Tracked in
+  [#224](https://github.com/nickromney/platform/issues/224).
 
 ## Single-node also works, and is the better shape
 
