@@ -239,6 +239,14 @@ export TF_VAR_kind_config_path := $(abspath $(STACK_DIR))/kind-config.yaml
 export TF_VAR_kind_operator_overrides_file := $(KIND_OPERATOR_OVERRIDES_FILE)
 export TF_VAR_platform_tfvars_file := $(PLATFORM_TFVARS)
 export TF_VAR_kind_profile_tfvars_file := $(if $(strip $(KIND_PROFILE_TFVARS)),$(abspath $(KIND_PROFILE_TFVARS)))
+
+# The operator facts file is the Terraform-emitted contract and is the first
+# source operator-facts.sh looks for, but nothing set it, so every checker fell
+# back to merging whatever tfvars the caller happened to pass. That made the
+# answer depend on remembering KIND_PROFILE_TFVARS on each check command:
+# `make check-gateway-urls` without it asserted the NGINX gateway against a
+# Cilium cluster and reported two failures on a healthy stack.
+export OPERATOR_FACTS_FILE := $(abspath $(STACK_DIR)/.run/kind/operator-facts.json)
 .PHONY: help
 help:
 	@echo "kind demo (Docker + kind + Cilium + Argo CD + Gitea + Grafana/Prometheus/VictoriaLogs)"
