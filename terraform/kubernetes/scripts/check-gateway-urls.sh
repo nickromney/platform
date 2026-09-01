@@ -537,13 +537,30 @@ if kubectl -n platform-gateway get svc ${PLATFORM_GATEWAY_SERVICE} >/dev/null 2>
   else
     fail_soft "NodePort not found on service ${PLATFORM_GATEWAY_SERVICE}"
   fi
-  endpoints=$(kubectl -n platform-gateway get endpoints ${PLATFORM_GATEWAY_SERVICE} -o jsonpath='{range .subsets[*].addresses[*]}{.ip}{" "}{end}' 2>/dev/null || true)
-  if [[ -n "${endpoints}" ]]; then
-    ok "Endpoints: ${endpoints}"
+  if [[ "${CILIUM_GATEWAY_API}" == "true" ]]; then
+    # Cilium's gateway Service has no selector and no Endpoints object at all --
+    # the listener is Envoy inside cilium-agent, not a pod. It publishes a
+    # sentinel EndpointSlice (192.192.192.192:9999) purely so the Service looks
+    # backed, so counting pod endpoints here would always fail. The Programmed
+    # condition checked above is the real readiness signal in this mode.
+    slice_count=$(kubectl -n platform-gateway get endpointslices -l "kubernetes.io/service-name=${PLATFORM_GATEWAY_SERVICE}" -o name 2>/dev/null | wc -l | tr -d ' ')
+    if [[ "${slice_count:-0}" -gt 0 ]]; then
+      ok "Cilium gateway Service present (host-network Envoy; no pod endpoints by design)"
+    else
+      fail_soft "No EndpointSlice for service ${PLATFORM_GATEWAY_SERVICE}"
+      if [[ "${EXTENDED}" -eq 1 ]]; then
+        print_debug_context
+      fi
+    fi
   else
-    fail_soft "No endpoints for service ${PLATFORM_GATEWAY_SERVICE}"
-    if [[ "${EXTENDED}" -eq 1 ]]; then
-      print_debug_context
+    endpoints=$(kubectl -n platform-gateway get endpoints ${PLATFORM_GATEWAY_SERVICE} -o jsonpath='{range .subsets[*].addresses[*]}{.ip}{" "}{end}' 2>/dev/null || true)
+    if [[ -n "${endpoints}" ]]; then
+      ok "Endpoints: ${endpoints}"
+    else
+      fail_soft "No endpoints for service ${PLATFORM_GATEWAY_SERVICE}"
+      if [[ "${EXTENDED}" -eq 1 ]]; then
+        print_debug_context
+      fi
     fi
   fi
 else
