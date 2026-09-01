@@ -6,6 +6,8 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/operator-facts.sh"
 
 # Repeatable diagnostics for "gateway stack is broken" situations:
 # - No pods in platform-gateway
@@ -16,6 +18,10 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 # Intended to be safe to run anytime; best-effort output, no mutations.
 
 FAILURES=0
+operator_facts_load 2>/dev/null || true
+# NGINX Gateway Fabric is pruned when Cilium owns Gateway API, so expecting its
+# Argo app would fail a healthy cluster.
+CILIUM_GATEWAY_API="$(operator_facts_bool cilium_gateway_api false 2>/dev/null || echo false)"
 fail_soft() { echo "FAIL $*" >&2; FAILURES=$((FAILURES + 1)); }
 warn() { echo "WARN $*"; }
 ok() { echo "OK   $*"; }
@@ -184,7 +190,6 @@ case "${gitops_mode}" in
       cilium-policies
       kyverno
       kyverno-policies
-      nginx-gateway-fabric
       platform-gateway
       platform-gateway-routes
     )
@@ -197,12 +202,17 @@ case "${gitops_mode}" in
       cilium-policies
       kyverno
       kyverno-policies
-      nginx-gateway-fabric
       platform-gateway
       platform-gateway-routes
     )
     ;;
 esac
+
+# NGINX Gateway Fabric only exists on the NGINX path; Cilium's implementation
+# is the operator, which has no Argo application of its own.
+if [[ "${CILIUM_GATEWAY_API}" != "true" ]]; then
+  apps+=(nginx-gateway-fabric)
+fi
 for a in "${apps[@]}"; do
   print_argocd_app "${a}"
 done
