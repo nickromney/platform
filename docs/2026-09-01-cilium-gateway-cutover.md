@@ -78,9 +78,43 @@ Genuinely lost, and not worked around:
   `ADMIN_ROUTE_ALLOWLIST_CIDRS` is a hard failure in this mode. The local
   default is unset, which matches the permissive behaviour NGF produced.
 
-## Still open
+## Single-node also works, and is the better shape
 
-- Single-node remains unvalidated in this mode.
+Validated the same day, `KIND_WORKER_COUNT=0`, built from a full reset:
+
+```
+reset + 100 apply + 900 apply   exit 0 in 13m20s
+  Apply complete! Resources: 118 added, 0 changed, 1 destroyed.
+  148 OK / 0 FAIL in-apply verification
+
+check-sso-e2e   14 passed / 0 failed in 20.0s
+memory          5.44 GiB of 8.72 GiB
+```
+
+Compared with the two-node cluster: 5.44 GiB against 6.17, and the browser
+suite finishes in 20 seconds against 3.9 minutes. Single node is not a
+compromise here, it is the faster and smaller configuration.
+
+The failure that made single-node unusable under NGINX Gateway Fabric is gone.
+That failure was a TLS handshake reset on host 443 -- `client closed connection
+while SSL handshaking` -- and it is absent from this build; the only matches for
+"handshake" in the log are Gateway API CRD description text. The reason is
+structural rather than a fix: NGF terminated on a pod reached through a
+NodePort, so on one node the request never took the cross-node hop the hardened
+policies assumed. Cilium's Envoy binds :443 directly in the node's host network,
+so there is no NodePort hop to get wrong.
+
+`cilium_mtu` was wired earlier on the theory that Docker Desktop's jumbo MTU
+caused that reset. It was never needed and is left at its default. The MTU was
+not the cause.
+
+The control-plane untaint via `kind_control_plane_kubeadm_config_patches` is
+what makes workloads schedulable on a single node, and it applied cleanly --
+the node came up with no taints.
+
+Spot-checked on this cluster: the Hubble NodePort returns 200 (the path the
+default-deny regression broke), and a route that never carried a SnippetsFilter
+serves all four security headers.
 
 ## One transient failure worth expecting
 
