@@ -28,6 +28,32 @@ All five admin routes pass the browser login flow on Cilium: `gitea-admin`,
 had no E2E coverage before this work -- it was the one admin hostname the suite
 never exercised.
 
+## Proved from tabula rasa
+
+The whole thing was rebuilt from an empty Docker to check none of it depended on
+warm state. `docker system prune -af --volumes` reclaimed 44.51 GB and took the
+image count from 127 to 1, the build cache from 226 entries to 0, and the host
+volume from 89% to 78% capacity. Then, single-node, from nothing:
+
+```
+100 apply + 900 apply   exit 0 in 13m36s
+  Apply complete! Resources: 12 added   (stage 100)
+  Apply complete! Resources: 118 added  (stage 900)
+  145 OK / 0 FAIL in-apply verification
+
+check-sso-e2e   14 passed / 0 failed in 25.7s
+make test-ci    1389 ok / 0 not ok, exit 0
+memory          5.32 GiB of 8.72 GiB
+```
+
+13m36s from an empty Docker against 13m20s warm. Re-pulling every image cost
+roughly sixteen seconds of wall clock, which is the image cache and the
+TF_PLUGIN_CACHE_DIR doing their job rather than a measurement error.
+
+Spot-checked on that cluster: the Hubble NodePort returns 200, and a route that
+never carried a SnippetsFilter serves all four security headers -- the two
+regressions this work introduced and then fixed.
+
 ## What the cutover actually required
 
 The GatewayClass was the easy part. Six of the seven resources in the
