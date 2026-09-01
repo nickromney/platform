@@ -29,9 +29,29 @@ $(shell_cli_standard_options)
 EOF
 }
 
+# GITEA_SYNC_TFVARS_FILE is a single file -- the stage tfvars -- so it does not
+# see the operator profile or the operator overrides. Rendering from it alone
+# means `make gitea-sync` re-renders at stage defaults and drifts the cluster
+# away from the profile that built it: with enable_grafana and enable_headlamp
+# false in the profile, a manual sync still published their routes, and the
+# gateway then returned 500 for backends that were never deployed.
+#
+# Operator facts are written by the last apply and already outrank tfvars
+# everywhere else, so prefer them and fall back to the stage file.
 tfvar_bool_or_default() {
   local key="$1"
   local default_value="$2"
+  local fact=""
+
+  if [[ -n "${OPERATOR_FACTS_FILE:-}" && -f "${OPERATOR_FACTS_FILE}" ]] && command -v jq >/dev/null 2>&1; then
+    fact="$(jq -r --arg key "${key}" '
+      if has($key) and (.[$key] != null) then (.[$key] | tostring) else empty end
+    ' "${OPERATOR_FACTS_FILE}" 2>/dev/null || true)"
+    if [[ "${fact}" == "true" || "${fact}" == "false" ]]; then
+      printf '%s\n' "${fact}"
+      return 0
+    fi
+  fi
 
   tfvar_bool_from_file_or_default "${GITEA_SYNC_TFVARS_FILE}" "${key}" "${default_value}"
 }
