@@ -673,6 +673,66 @@ else
 fi
 
 echo ""
+# The NGINX path pinned TLS versions and ciphersuites declaratively, through
+# nginx.org/ssl-protocols and a SnippetsPolicy ssl_conf_command. Cilium's Gateway
+# API has no equivalent knob -- CiliumGatewayClassConfig exposes only
+# serverHeaderTransformation, httpOptions, service and telemetry -- so the
+# posture comes from Envoy's defaults instead of from configuration.
+#
+# Measured, those defaults match what the NGINX config asked for. But a default
+# is not an enforcement: a Cilium or Envoy bump could move it with nothing to
+# notice. So assert the outcome rather than the setting, which also covers the
+# NGINX path for free.
+probe_tls_posture() {
+  local connect_host probe_sni proto cipher
+  local -a weak_ciphers=(RC4-SHA DES-CBC3-SHA AES128-SHA NULL-SHA)
+
+  command -v openssl >/dev/null 2>&1 || { warn "openssl not found; skipping TLS posture checks"; return 0; }
+  [[ "${#ROUTE_ENTRIES[@]}" -gt 0 ]] || return 0
+
+  connect_host="$(probe_host_for_local_https)"
+  probe_sni="${ROUTE_ENTRIES[0]%%|*}"
+
+  # Deprecated versions must be refused.
+  for proto in tls1 tls1_1; do
+    if echo | openssl s_client -connect "${connect_host}:${HOST_PORT}" -servername "${probe_sni}" "-${proto}" 2>/dev/null \
+      | grep -qE "^ *Protocol *: *TLSv1(\.1)?$"; then
+      fail_soft "TLS posture: ${proto} is accepted and must not be"
+    else
+      ok "TLS posture: ${proto} refused"
+    fi
+  done
+
+  # Both modern versions must be available.
+  for proto in tls1_2 tls1_3; do
+    if echo | openssl s_client -connect "${connect_host}:${HOST_PORT}" -servername "${probe_sni}" "-${proto}" 2>/dev/null \
+      | grep -qE "^ *Protocol *: *TLSv1\.[23]$"; then
+      ok "TLS posture: ${proto} available"
+    else
+      fail_soft "TLS posture: ${proto} is not available"
+    fi
+  done
+
+  # The three suites the NGINX ssl_conf_command pinned.
+  for cipher in TLS_AES_128_GCM_SHA256 TLS_AES_256_GCM_SHA384 TLS_CHACHA20_POLY1305_SHA256; do
+    if echo | openssl s_client -connect "${connect_host}:${HOST_PORT}" -servername "${probe_sni}" -tls1_3 -ciphersuites "${cipher}" 2>/dev/null \
+      | grep -qE "^ *Protocol *: *TLSv1\.3$"; then
+      ok "TLS posture: ${cipher} available"
+    else
+      fail_soft "TLS posture: ${cipher} is not available"
+    fi
+  done
+
+  for cipher in "${weak_ciphers[@]}"; do
+    if echo | openssl s_client -connect "${connect_host}:${HOST_PORT}" -servername "${probe_sni}" -tls1_2 -cipher "${cipher}" 2>&1 \
+      | grep -qE "^ *Cipher *: *${cipher}$"; then
+      fail_soft "TLS posture: weak cipher ${cipher} is accepted"
+    else
+      ok "TLS posture: weak cipher ${cipher} refused"
+    fi
+  done
+}
+
 echo "TLS certificate hostname checks (host port ${HOST_PORT}):"
 if [[ "${#ROUTE_ENTRIES[@]}" -eq 0 ]]; then
   fail_soft "No gateway route hostnames available to check certificate SAN coverage"
@@ -698,6 +758,10 @@ else
     done
   fi
 fi
+
+echo ""
+echo "TLS posture (host port ${HOST_PORT}):"
+probe_tls_posture
 
 if [[ "${FAILURES}" -gt 0 ]]; then
   echo ""
