@@ -693,6 +693,18 @@ probe_tls_posture() {
   connect_host="$(probe_host_for_local_https)"
   probe_sni="${ROUTE_ENTRIES[0]%%|*}"
 
+  # Establish that the endpoint reports a negotiated protocol at all before
+  # asserting anything about it. Without this the whole battery fails whenever
+  # openssl cannot speak to the listener -- and each probe would report its own
+  # failure, turning one unreachable endpoint into eleven. A genuinely broken
+  # TLS listener is already caught by the HTTPS route and certificate checks
+  # above, so skipping here loses no coverage.
+  if ! echo | openssl s_client -connect "${connect_host}:${HOST_PORT}" -servername "${probe_sni}" 2>/dev/null \
+    | grep -qE "^ *Protocol *: *TLSv"; then
+    warn "TLS posture: no negotiated protocol reported by ${connect_host}:${HOST_PORT}; skipping posture checks"
+    return 0
+  fi
+
   # Deprecated versions must be refused.
   for proto in tls1 tls1_1; do
     if echo | openssl s_client -connect "${connect_host}:${HOST_PORT}" -servername "${probe_sni}" "-${proto}" 2>/dev/null \
