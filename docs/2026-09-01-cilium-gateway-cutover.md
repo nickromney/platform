@@ -7,7 +7,7 @@ Date: 2026-09-01. Two-node kind cluster, profile `.run/operator/cgw.tfvars`
 
 NGINX Gateway Fabric is gone. Cilium's Envoy serves every route.
 
-```
+```text
 NAME               CLASS    ADDRESS      PROGRAMMED
 platform-gateway   cilium   172.18.0.2   True
 
@@ -42,7 +42,7 @@ Removing the registry container and its volume, then `docker volume prune -a`,
 left Docker genuinely empty: 0 images, 0 containers, 0 volumes, 0 build cache.
 Single-node, from that:
 
-```
+```text
 100 apply + 900 apply   exit 0 in 20m07s
   Apply complete! Resources: 12 added   (stage 100)
   Apply complete! Resources: 118 added  (stage 900)
@@ -83,7 +83,7 @@ Each image has four references -- a semantic version, `latest`, the commit SHA,
 and a `src-<fingerprint>` content hash -- and nine of the ten platform
 Deployments reference the `src-` tag:
 
-```
+```text
 dev  sentiment-api        sentiment-api:src-e6683805a7c851d42961
 dev  subnetcalc-frontend  subnetcalc-frontend:src-140b5dd72b2fef4f7c47
 idp  idp-core             idp-core:src-62b36c87238dc6ce985d
@@ -163,7 +163,7 @@ Genuinely lost, and not worked around:
 
 Validated the same day, `KIND_WORKER_COUNT=0`, built from a full reset:
 
-```
+```text
 reset + 100 apply + 900 apply   exit 0 in 13m20s
   Apply complete! Resources: 118 added, 0 changed, 1 destroyed.
   148 OK / 0 FAIL in-apply verification
