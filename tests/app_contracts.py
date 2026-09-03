@@ -5375,7 +5375,7 @@ def sentiment_api_kubernetes_runtime_contract_violations(repo_root: Path) -> tup
 
     resources = container.get("resources", {})
     expected_resources = {
-        ("requests", "memory"): "768Mi",
+        ("requests", "memory"): "256Mi",
         ("limits", "memory"): "2048Mi",
         ("limits", "cpu"): "1",
     }
