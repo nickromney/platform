@@ -545,11 +545,9 @@ PYEOF
 }
 
 @test "local-8gb does not change node topology, which stays an explicit opt-in" {
-  # worker_count = 0 builds and untaints correctly (see node_topology.tftest.hcl),
-  # but on a real stage-900 cluster the hardened Cilium policies denied host->NodePort
-  # ingress for the gateway and Gitea (1812 INGRESS "Policy denied" drops) while argocd
-  # and the apiserver stayed reachable. Until that is root-caused, the profile keeps the
-  # stock topology and single-node remains available via an explicit worker_count.
+  # Kind stages already default to worker_count = 0 with Cilium Gateway and
+  # kube-proxy replacement. local-8gb reduces capabilities, not node count; a
+  # second node is an explicit KIND_WORKER_COUNT / --set worker_count override.
   run "${SCRIPT}" preview --execute \
     --variant kind \
     --stage 900 \

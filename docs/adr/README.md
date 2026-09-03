@@ -32,7 +32,7 @@ contracts. These ADRs explain why the repo ended up with that shape.
 - [ADR 0009: Treat idpauth as the auth+HTTP integration layer](./0009-idpauth-is-auth-http-integration-layer.md)
 - [ADR 0010: Concentrate the shared variant lifecycle and the guided-surface workflow core](./0010-share-variant-lifecycle-and-workflow-core.md)
 - [ADR 0011: Run the full gate locally, verified by a receipt, and take CI off pull requests](./0011-run-the-full-gate-locally-with-a-receipt.md)
-- [ADR 0012: Hardened Cilium ingress policies assume cross-node NodePort routing](./0012-hardened-cilium-ingress-assumes-cross-node-nodeport.md)
+- [ADR 0012: Hardened Cilium ingress policies assume cross-node NodePort routing](./0012-hardened-cilium-ingress-assumes-cross-node-nodeport.md) (kind default superseded; trap remains for NGF)
 - [ADR 0013: Resource profiles reduce only, and every toggle carries a consumer tail](./0013-resource-profiles-reduce-only.md)
 - [ADR 0014: Browser E2E, not health checks, defines a working cluster](./0014-browser-e2e-defines-a-working-cluster.md)
 - [ADR 0015: Cilium's Gateway Envoy reaches backends as reserved:ingress](./0015-cilium-gateway-envoy-is-reserved-ingress.md)

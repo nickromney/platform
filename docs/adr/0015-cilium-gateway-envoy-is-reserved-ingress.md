@@ -76,3 +76,8 @@ reason other than the stated one -- ADR 0012 records the first. Both were found
 by watching drops rather than by reading the policy. Treat "the policy admits X,
 therefore traffic from X arrives as X" as a hypothesis to test, and test it on
 the node that owns the destination.
+
+Kind stages enable this mode from stage 100. NGINX Gateway Fabric remains
+in-tree as the pre-cutover migration reference (manifests, CRDs, prune logic,
+and tofu tests). It is not a supported kind operator path and is not restored
+by any workflow network profile.

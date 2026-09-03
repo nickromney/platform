@@ -168,14 +168,15 @@ real_can_i() {
   local expected="$1"
   local token="$2"
   shift 2
-  local output
+  local output identity
   prepare_real_token_kubectl_args
   output="$(KUBECONFIG=/dev/null kubectl "${REAL_KUBECTL_ARGS[@]}" --token="${token}" auth can-i "$@" 2>/dev/null || true)"
   if [[ "${output}" == "${expected}" ]]; then
     ok "real OIDC token kubectl auth can-i $* -> ${expected}"
     return 0
   fi
-  fail "real OIDC token kubectl auth can-i $* -> ${output:-<empty>}; expected ${expected}"
+  identity="$(KUBECONFIG=/dev/null kubectl "${REAL_KUBECTL_ARGS[@]}" --token="${token}" auth whoami -o jsonpath='user={.status.userInfo.username} groups={.status.userInfo.groups}' 2>/dev/null || true)"
+  fail "real OIDC token kubectl auth can-i $* -> ${output:-<empty>}; expected ${expected} (${identity:-whoami unavailable})"
 }
 
 run_real_token_checks() {

@@ -4,9 +4,10 @@ metadata:
   name: subnetcalc-router-http-routes
 spec:
   description: >-
-    The router sends browser API traffic through the shared APIM simulator.
-    Dev frontend paths re-enter the platform gateway so Argo Rollouts can shift
-    Gateway API backend weights; UAT keeps the direct frontend path.
+    The router sends browser API traffic through the shared APIM simulator and
+    frontend traffic to the subnetcalc-frontend Service. On NGINX Gateway Fabric,
+    the progressive-delivery canary additionally re-enters the platform gateway
+    on 443; Cilium strips that hop because Rollouts shifts HTTPRoute weights.
   endpointSelector:
     matchLabels:
       "k8s:project": kindlocal

@@ -23,10 +23,9 @@ source "${REPO_ROOT}/kubernetes/workflow/image-catalog-lib.sh"
 
 mode="${KIND_IMAGE_DISTRIBUTION_MODE:-load}"
 # Deliberately no default. This file is the LAST -var-file the kind stack
-# passes, so anything written here outranks a resource profile -- and writing
-# the old default of 1 unconditionally meant local-8gb could never reach its
-# single-node topology. Unset now means "leave the node count to the stage
-# baseline or the selected profile"; the stage tfvars still carry 1.
+# passes, so anything written here outranks a resource profile. Unset now means
+# "leave the node count to the stage baseline or the selected profile"; kind
+# stage tfvars pin 0. local-8gb does not set worker_count.
 worker_count="${KIND_WORKER_COUNT:-}"
 cache_host="${KIND_LOCAL_IMAGE_CACHE_HOST:-host.docker.internal:5002}"
 baked_node_image="${KIND_BAKED_NODE_IMAGE:-}"

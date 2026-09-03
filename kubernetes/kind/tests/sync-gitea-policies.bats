@@ -1290,12 +1290,12 @@ spec:
 __GRAFANA_PLUGINS_VALUES__
 EOF
 
-  run bash -lc "export PREFER_EXTERNAL_PLATFORM_IMAGES=true EXTERNAL_PLATFORM_IMAGE_GRAFANA='host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.29.0'; source '${SCRIPT}'; apply_external_platform_images '${repo_dir}'; render_grafana_application_manifest '${app_file}'"
+  run bash -lc "export PREFER_EXTERNAL_PLATFORM_IMAGES=true EXTERNAL_PLATFORM_IMAGE_GRAFANA='host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.31.0'; source '${SCRIPT}'; apply_external_platform_images '${repo_dir}'; render_grafana_application_manifest '${app_file}'"
 
   [ "${status}" -eq 0 ]
   grep -Fq "registry: host.docker.internal:5002" "${app_file}"
   grep -Fq "repository: platform/grafana-victorialogs" "${app_file}"
-  grep -Fq "tag: 12.3.1-v0.29.0" "${app_file}"
+  grep -Fq "tag: 12.3.1-v0.31.0" "${app_file}"
   grep -Fq "plugins: []" "${app_file}"
 }
 
@@ -1389,6 +1389,23 @@ EOF
   grep -Fq 'path: subnetcalc-frontend-rollout-patch.yaml' "${repo_dir}/apps/dev/kustomization.yaml"
   grep -Fq 'name: subnetcalc-frontend' "${repo_dir}/apps/dev/kustomization.yaml"
   [ "$(grep -c '^patches:' "${repo_dir}/apps/dev/kustomization.yaml")" -eq 1 ]
+}
+
+@test "progressive delivery render omits the gateway hairpin when Cilium owns Gateway API" {
+  repo_dir="${BATS_TEST_TMPDIR}/repo-cilium-canary"
+  mkdir -p "${repo_dir}/apps/dev"
+  printf '%s\n' \
+    'namespace: dev' \
+    'resources:' \
+    '  - ../workloads/base' \
+    >"${repo_dir}/apps/dev/kustomization.yaml"
+
+  run bash -lc "export ENABLE_PROGRESSIVE_DELIVERY=true ENABLE_APP_REPO_SUBNETCALC=true ENABLE_CILIUM_GATEWAY_API=true; source '${SCRIPT}'; configure_progressive_delivery '${repo_dir}'"
+
+  [ "${status}" -eq 0 ]
+  grep -Fq '  - subnetcalc-frontend-canary-service.yaml' "${repo_dir}/apps/dev/kustomization.yaml"
+  grep -Fq 'path: subnetcalc-frontend-rollout-patch.yaml' "${repo_dir}/apps/dev/kustomization.yaml"
+  grep -Fvq 'subnetcalc-router-gateway-canary-patch.yaml' "${repo_dir}/apps/dev/kustomization.yaml"
 }
 
 @test "policy repo render vendors subnetcalc frontend canary route and dev ReferenceGrant" {
@@ -1535,6 +1552,7 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"issuerURL: https://keycloak.127.0.0.1.sslip.io/realms/platform"* ]]
+  [[ "${output}" == *"scopes: openid,profile,email,groups"* ]]
 }
 
 @test "app-of-apps render uses direct gateway routes before SSO" {
@@ -1807,6 +1825,59 @@ resources:
   - proxysettingspolicy-oauth-response-buffers.yaml
   - tls-hardening.yaml
 EOF
+}
+
+@test "cilium gateway render drops the subnetcalc canary gateway hairpin" {
+  seed_platform_gateway_app
+  mkdir -p "${repo_dir}/apps/dev"
+  cat >"${repo_dir}/apps/dev/kustomization.yaml" <<'EOF'
+patches:
+  - path: subnetcalc-router-gateway-canary-patch.yaml
+EOF
+  cat >"${repo_dir}/apps/dev/subnetcalc-router-gateway-canary-patch.yaml" <<'EOF'
+        proxy_pass https://platform-gateway-nginx-internal.platform-gateway.svc.cluster.local:443;
+EOF
+
+  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true; source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; test ! -f '${repo_dir}/apps/dev/subnetcalc-router-gateway-canary-patch.yaml'; grep -Fvq 'subnetcalc-router-gateway-canary-patch.yaml' '${repo_dir}/apps/dev/kustomization.yaml' || true; cat '${repo_dir}/apps/dev/kustomization.yaml'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"subnetcalc-router-gateway-canary-patch.yaml"* ]]
+}
+
+@test "cilium gateway render drops NGF gateway egress from subnetcalc-router" {
+  seed_platform_gateway_app
+  mkdir -p "${repo_dir}/cluster-policies/cilium/projects/subnetcalc"
+  cat >"${repo_dir}/cluster-policies/cilium/projects/subnetcalc/subnetcalc-http-routes.yaml" <<'EOF'
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": platform-gateway
+            "k8s:app.kubernetes.io/name": platform-gateway-nginx
+            "k8s:gateway.networking.k8s.io/gateway-name": platform-gateway
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+EOF
+
+  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true; source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; cat '${repo_dir}/cluster-policies/cilium/projects/subnetcalc/subnetcalc-http-routes.yaml'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"platform-gateway-nginx"* ]]
+  [[ "${output}" != *"toEntities:"* ]]
+}
+
+@test "NGINX gateway render leaves the subnetcalc canary hairpin on platform-gateway-nginx-internal" {
+  seed_platform_gateway_app
+  mkdir -p "${repo_dir}/apps/dev"
+  cat >"${repo_dir}/apps/dev/subnetcalc-router-gateway-canary-patch.yaml" <<'EOF'
+        proxy_pass https://platform-gateway-nginx-internal.platform-gateway.svc.cluster.local:443;
+EOF
+
+  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=false; source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; cat '${repo_dir}/apps/dev/subnetcalc-router-gateway-canary-patch.yaml'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"platform-gateway-nginx-internal.platform-gateway.svc.cluster.local"* ]]
+  [[ "${output}" != *"cilium-gateway-platform-gateway.platform-gateway.svc.cluster.local"* ]]
 }
 
 @test "platform gateway render keeps the NGINX shape when cilium gateway api is off" {

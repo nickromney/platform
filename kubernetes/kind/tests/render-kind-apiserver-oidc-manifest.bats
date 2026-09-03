@@ -35,7 +35,9 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"--oidc-client-id=headlamp"* ]]
   [[ "${output}" == *"--oidc-username-claim=email"* ]]
+  [[ "${output}" == *"--oidc-username-prefix=-"* ]]
   [[ "${output}" == *"--oidc-groups-claim=groups"* ]]
+  [[ "${output}" == *"--oidc-groups-prefix=-"* ]]
   [[ "${output}" == *"--oidc-ca-file=/etc/kubernetes/pki/mkcert-rootCA.pem"* ]]
   [[ "${output}" == *'  - ip: "10.0.0.25"'* ]]
 }
@@ -68,8 +70,48 @@ EOF
   run cat "${rendered_manifest}"
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"--oidc-issuer-url=https://keycloak.example.test/realms/platform"* ]]
+  [[ "${output}" == *"--oidc-username-prefix=-"* ]]
   [[ "${output}" == *"--oidc-groups-claim=groups"* ]]
+  [[ "${output}" == *"--oidc-groups-prefix=-"* ]]
   [[ "${output}" == *"    - keycloak.example.test"* ]]
+}
+
+@test "render-kind-apiserver-oidc-manifest replaces existing OIDC flags with prefix-disabled claims" {
+  source_manifest="${BATS_TEST_TMPDIR}/kube-apiserver.yaml"
+  rendered_manifest="${BATS_TEST_TMPDIR}/kube-apiserver.rendered.yaml"
+
+  cat >"${source_manifest}" <<'EOF'
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - command:
+    - kube-apiserver
+    - --service-cluster-ip-range=10.96.0.0/12
+    - --oidc-issuer-url=https://keycloak.example.test/realms/platform
+    - --oidc-client-id=headlamp
+    - --oidc-username-claim=email
+    - --oidc-groups-claim=groups
+    - --oidc-ca-file=/etc/kubernetes/pki/mkcert-rootCA.pem
+  hostNetwork: true
+EOF
+
+  run "${HELPER}" \
+    "${source_manifest}" \
+    "${rendered_manifest}" \
+    "https://keycloak.example.test/realms/platform" \
+    "headlamp" \
+    "/etc/kubernetes/pki/mkcert-rootCA.pem" \
+    "keycloak.example.test" \
+    "10.0.0.25"
+
+  [ "${status}" -eq 0 ]
+  run cat "${rendered_manifest}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"--oidc-username-prefix=-"* ]]
+  [[ "${output}" == *"--oidc-groups-prefix=-"* ]]
+  [[ "$(grep -c -- '--oidc-username-claim=email' <<<"${output}")" -eq 1 ]]
+  [[ "$(grep -c -- '--oidc-groups-claim=groups' <<<"${output}")" -eq 1 ]]
 }
 
 @test "render-kind-apiserver-oidc-manifest replaces empty existing host aliases" {

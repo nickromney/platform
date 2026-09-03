@@ -32,7 +32,7 @@ func main() {
 	insertedHostAliases := false
 	seenHostNetwork := false
 
-	oidcLine := regexp.MustCompile(`^\s*-\s*--oidc-(issuer-url|client-id|username-claim|groups-claim|ca-file)=`)
+	oidcLine := regexp.MustCompile(`^\s*-\s*--oidc-(issuer-url|client-id|username-claim|username-prefix|groups-claim|groups-prefix|ca-file)=`)
 	serviceClusterIPRange := regexp.MustCompile(`^\s*-\s*--service-cluster-ip-range=`)
 	topLevelSpecKey := regexp.MustCompile(`^  [A-Za-z0-9_-]+:`)
 	hostNetwork := regexp.MustCompile(`^  hostNetwork:\s*(true|false)\s*$`)
@@ -85,7 +85,9 @@ func main() {
 				fmt.Sprintf("    - --oidc-issuer-url=%s", issuer),
 				fmt.Sprintf("    - --oidc-client-id=%s", clientID),
 				"    - --oidc-username-claim=email",
+				"    - --oidc-username-prefix=-",
 				"    - --oidc-groups-claim=groups",
+				"    - --oidc-groups-prefix=-",
 				fmt.Sprintf("    - --oidc-ca-file=%s", caPath),
 			)
 			insertedOIDC = true

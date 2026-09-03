@@ -646,7 +646,10 @@ locals {
     var.enable_policies && var.enable_cilium_policies && var.enable_argocd ? ["cilium-policies"] : [],
     var.enable_policies && var.enable_argocd ? ["policy-reporter"] : [],
     var.enable_cert_manager && var.enable_argocd ? ["cert-manager"] : [],
-    var.enable_gateway_tls && var.enable_argocd ? ["cert-manager-config", "nginx-gateway-fabric", "platform-gateway", "platform-gateway-routes"] : [],
+    var.enable_gateway_tls && var.enable_argocd ? concat(
+      ["cert-manager-config", "platform-gateway", "platform-gateway-routes"],
+      var.cilium_gateway_api ? [] : ["nginx-gateway-fabric"],
+    ) : [],
     var.enable_actions_runner && var.enable_gitea && var.enable_argocd ? ["gitea-actions-runner"] : [],
     local.enable_prometheus_effective && var.enable_argocd ? ["prometheus"] : [],
     local.enable_grafana_effective && var.enable_argocd ? ["grafana"] : [],
@@ -885,12 +888,19 @@ locals {
       # Cilium Gateway API. gatewayClass.create=auto adds a `cilium` GatewayClass
       # next to nginx and agentgateway; hostNetwork is mandatory on kind because
       # the default LoadBalancer service has no provider here and stays pending.
+      # Empty matchLabels means every node; on kind that would bind Envoy on
+      # workers that do not hold extraPortMappings. Pin to the control-plane
+      # hostname unless the operator supplied an explicit selector.
       gatewayAPI = var.cilium_gateway_api ? {
         enabled      = true
         gatewayClass = { create = "auto" }
         hostNetwork = {
           enabled = true
-          nodes   = { matchLabels = var.cilium_gateway_api_host_network_node_labels }
+          nodes = {
+            matchLabels = length(var.cilium_gateway_api_host_network_node_labels) > 0 ? var.cilium_gateway_api_host_network_node_labels : (
+              var.provision_kind_cluster ? { "kubernetes.io/hostname" = local.kind_control_plane_container_name } : {}
+            )
+          }
         }
       } : null
       kubeProxyReplacement = var.cilium_kube_proxy_replacement
@@ -1248,7 +1258,7 @@ locals {
     server = {
       hostAliases = var.enable_sso ? [
         {
-          ip        = kubernetes_service_v1.platform_gateway_nginx_internal[0].spec[0].cluster_ip
+          ip        = local.platform_gateway_sso_alias_ip
           hostnames = [local.sso_public_host]
         }
       ] : []
@@ -1292,7 +1302,7 @@ locals {
         clientID     = "headlamp"
         clientSecret = random_password.oidc_headlamp_client_secret[0].result
         issuerURL    = local.sso_public_url
-        scopes       = "openid profile email groups"
+        scopes       = "openid,profile,email,groups"
         callbackURL  = "${local.headlamp_public_url}/oidc-callback"
       }
     } : {},

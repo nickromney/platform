@@ -516,10 +516,9 @@ warnings_json() {
     done
   fi
 
-  # A resource profile can move worker_count too (local-8gb drops to a
-  # single-node cluster to save a whole node container), and that is the same
-  # stage 100 substrate change as the --set path above -- silently, because the
-  # operator only named a profile.
+  # A resource profile can move worker_count (a stage 100 substrate change)
+  # the same way --set does, silently, because the operator only named a
+  # profile. local-8gb does not do this: kind already defaults to one node.
   if [[ "${PRESET_RESOURCE_PROFILE}" != "default" ]] &&
     jq -e --arg id "${PRESET_RESOURCE_PROFILE}" \
       'any(.presets[]; .group == "resource_profile" and .id == $id and ((.overlay // {}) | has("worker_count")))' \

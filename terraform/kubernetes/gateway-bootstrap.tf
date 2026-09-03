@@ -90,8 +90,28 @@ __YAML__
   ]
 }
 
+data "kubernetes_nodes" "platform_gateway_alias" {
+  count = var.enable_sso && var.cilium_gateway_api ? 1 : 0
+}
+
+locals {
+  # In-cluster clients (Headlamp, Argo CD, Langfuse) resolve the public Keycloak
+  # hostname via hostAliases. Cilium Envoy is on the node's host network, so the
+  # node InternalIP is the address that answers on 443. The NGF ClusterIP exists
+  # only on the migration path.
+  platform_gateway_sso_alias_ip = (
+    var.enable_sso && var.cilium_gateway_api ? [
+      for addr in flatten([
+        for node in data.kubernetes_nodes.platform_gateway_alias[0].nodes : node.status[0].addresses
+      ]) : addr.address if addr.type == "InternalIP" && can(cidrnetmask("${addr.address}/32"))
+    ][0] :
+    var.enable_sso ? kubernetes_service_v1.platform_gateway_nginx_internal[0].spec[0].cluster_ip :
+    ""
+  )
+}
+
 resource "kubernetes_service_v1" "platform_gateway_nginx_internal" {
-  count = var.enable_sso ? 1 : 0
+  count = var.enable_sso && !var.cilium_gateway_api ? 1 : 0
 
   metadata {
     name      = "platform-gateway-nginx-internal"

@@ -63,6 +63,8 @@ data:
       }
 
       location = /signed-out.html {
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
         proxy_ssl_server_name on;
         proxy_ssl_name $frontend_gateway_host;
         proxy_ssl_trusted_certificate /gateway-ca/ca.crt;
@@ -75,6 +77,8 @@ data:
       }
 
       location = /style.css {
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
         proxy_ssl_server_name on;
         proxy_ssl_name $frontend_gateway_host;
         proxy_ssl_trusted_certificate /gateway-ca/ca.crt;
@@ -87,6 +91,8 @@ data:
       }
 
       location = /app-shell.css {
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
         proxy_ssl_server_name on;
         proxy_ssl_name $frontend_gateway_host;
         proxy_ssl_trusted_certificate /gateway-ca/ca.crt;
@@ -99,6 +105,8 @@ data:
       }
 
       location = /favicon.svg {
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
         proxy_ssl_server_name on;
         proxy_ssl_name $frontend_gateway_host;
         proxy_ssl_trusted_certificate /gateway-ca/ca.crt;
@@ -111,6 +119,8 @@ data:
       }
 
       location = /favicon.ico {
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
         proxy_ssl_server_name on;
         proxy_ssl_name $frontend_gateway_host;
         proxy_ssl_trusted_certificate /gateway-ca/ca.crt;
@@ -122,13 +132,31 @@ data:
         proxy_pass https://platform-gateway-nginx-internal.platform-gateway.svc.cluster.local:443;
       }
 
+      location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 'ok';
+      }
+
       location / {
+        # nginx "if" in the same location as proxy_pass/try_files drops
+        # proxy_http_version back to HTTP/1.0 (Envoy 426) or skips try_files
+        # (this nginx 404). return + error_page is a rewrite-module jump, so
+        # the Gateway proxy can live in a named location without if.
+        error_page 418 = @frontend_gateway;
+
         if ($http_user_agent ~* "kube-probe") { return 200; }
 
         set $auth_email $http_x_auth_request_email;
         if ($auth_email = "") { set $auth_email $http_x_forwarded_email; }
         if ($auth_email = "") { return 302 https://$host/oauth2/start?rd=$uri; }
 
+        return 418;
+      }
+
+      location @frontend_gateway {
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
         proxy_ssl_server_name on;
         proxy_ssl_name $frontend_gateway_host;
         proxy_ssl_trusted_certificate /gateway-ca/ca.crt;
@@ -150,6 +178,13 @@ spec:
     spec:
       containers:
         - name: nginx
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            timeoutSeconds: 5
           volumeMounts:
             - name: gateway-ca
               mountPath: /gateway-ca

@@ -50,9 +50,9 @@ Use these local cluster command paths when you need to prove a stack end to end 
 
 - Kind full confidence path:
   `make -C kubernetes/kind reset AUTO_APPROVE=1`
-  `make -C kubernetes/kind 100 apply AUTO_APPROVE=1`
   `make -C kubernetes/kind 900 apply AUTO_APPROVE=1`
   `make -C kubernetes/kind check-health`
+  Stages are cumulative, so `900 apply` after reset is enough. `100 apply` then `900 apply` is the same ladder and remains useful when you want to watch the first stage land. Kind defaults to a single node with Cilium Gateway and kube-proxy replacement from stage 100. NGINX Gateway Fabric is a migration reference, not a supported kind path.
 - The kind stage-900 browser path now runs inside the devcontainer too. The shared SSO harness maps `*.127.0.0.1.sslip.io` through `host.docker.internal` when `PLATFORM_DEVCONTAINER=1`, so the devcontainer can exercise the same `check-sso-e2e` step instead of skipping it.
 - Lima is best-effort and validated on demand; kind is the reference substrate.
 - Lima conflict preflight while kind is still active:
@@ -76,7 +76,7 @@ Validated operator learnings from real teardown/rebuild runs:
 - When changing Cilium policies in the kind GitOps path, validate both directions of a flow. A Gateway-to-APIM route, for example, needs platform-gateway egress to APIM and APIM ingress from platform-gateway; fixing only one side still looks like a timeout from the browser or curl.
 - Protected API routes are allowed to be healthy by returning an auth failure. For machine API paths such as `https://mcp.127.0.0.1.sslip.io/mcp`, an unauthenticated `401` or `403` is the correct gateway smoke outcome; do not force those routes to behave like SSO browser pages that return `302`.
 - If `make -C kubernetes/kind 900 apply AUTO_APPROVE=1` is interrupted during Terraform/OpenTofu, check for a zero-byte `terraform/.run/kubernetes/terraform.tfstate`. If the active state is empty and `terraform.tfstate.backup` is intact, restore the backup before rerunning. Do not use destructive reset commands unless the user explicitly asks.
-- Kind can briefly show `nginx-gateway` instability during OIDC or apiserver reconfiguration and still recover cleanly. Treat the final `check-health` and `check-sso-e2e` results as the source of truth, not transient gateway pod restarts by themselves.
+- Kind can briefly show Cilium operator instability during OIDC or apiserver reconfiguration and still recover cleanly. Treat the final `check-health` and `check-sso-e2e` results as the source of truth, not transient controller restarts by themselves.
 - The platform devcontainer now bakes Chromium runtime libraries, so the stage-900 kind path is no longer host-only. If browser E2E is failing inside the container, rebuild the devcontainer before assuming the stack is at fault.
 - Inside the devcontainer, local HTTPS probes must target `host.docker.internal` instead of raw `127.0.0.1`. The devcontainer exports `PLATFORM_DEVCONTAINER_HOST_ALIAS` and `KIND_DEVCONTAINER_HOST_ALIAS` for this purpose, and the gateway/app/SSO checkers now honor those aliases.
 - The managed kind kubeconfig is environment-sensitive: `ensure-kind-kubeconfig.sh` rewrites loopback API endpoints to `host.docker.internal` when `PLATFORM_DEVCONTAINER=1`, while the host shell keeps the raw loopback form. The shared `~/.kube/kind-kind-local.yaml` can therefore flip between two valid shapes as you move between shells, which can surface as non-no-op plans even though the cluster itself is unchanged.

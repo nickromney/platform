@@ -20,11 +20,12 @@ This README covers the Docker-backed teaching path for the repo.
 
 ## Operational truths
 
-- Stage `100` is expected to look unhealthy. The cluster exists, but there is no CNI until stage `200` installs Cilium.
-- The stage model is cumulative. `make kind apply 900` means "bring the stack to the stage-900 shape", not "apply only the last step".
+- Stage `100` is expected to look unhealthy. The cluster exists, but there is no CNI until stage `200` installs Cilium. Kind stages pin a single-node cluster (`worker_count = 0`) with Cilium Gateway and kube-proxy replacement from this stage, because those flags rewrite kind config (host 443 container port and `kubeProxyMode`).
+- The stage model is cumulative. `make kind apply 900` means "bring the stack to the stage-900 shape", not "apply only the last step". After `reset`, `900 apply` is enough; `100 apply` then `900 apply` is the same ladder, useful when you want to watch the first stage land.
 - Treat every planned destroy as something to explain before apply. In this stack, some `null_resource` replacements are expected orchestration churn, but they should still be inspected.
 - kind uses the local Docker daemon. On macOS that normally means Docker Desktop; on Linux Docker Engine is enough.
 - Exposed service ports bind to `127.0.0.1` by default, not `0.0.0.0`, so the local platform stays local and can coexist with other local VM-based stacks. If you intentionally override the HTTPS gateway bind for a public demo, keep the direct admin NodePorts disabled.
+- Kind ingress is Cilium Gateway (host-network Envoy on the control-plane node). Host `127.0.0.1:443` maps to container `443`. NGINX Gateway Fabric stays in-tree as a migration reference for lima and tofu tests; it is not a supported kind operator path.
 - `make reset` is destructive local cleanup. Without `AUTO_APPROVE=1`, it should prompt before removing cluster, kubeconfig, or local state.
 - The repo-owned kubeconfig stays at `~/.kube/kind-kind-local.yaml` by default. Use `kubie` to work across split kubeconfigs, and only run `make merge-default-kubeconfig` if you intentionally want this context copied into `~/.kube/config`.
 - The Terraform module anchors generated files to the real `terraform/kubernetes` checkout path, not Terragrunt's cache copy. If you stay on the same clone path, switching between the host shell and the devcontainer should no longer create cache-path drift; the kubeconfig rewrite remains the only intentional host-vs-devcontainer shape difference.
@@ -245,13 +246,11 @@ plain Deployment. The demo canary uses Gateway API traffic routing against the
 
 The browser entrypoint stays the SSO-protected app route:
 `platform-gateway` -> `gateway-routes/subnetcalc-dev` ->
-`sso/oauth2-proxy-subnetcalc-dev` -> `dev/subnetcalc-router`. The dev router
-keeps `/api` on APIM and sends frontend paths back through the internal
-`platform-gateway-nginx-internal.platform-gateway.svc.cluster.local:443`
-service with Host/SNI
-`subnetcalc-frontend.dev.127.0.0.1.sslip.io`. That re-entrant gateway hop is
-what lets Argo Rollouts change the weighted backendRefs between
-`dev/subnetcalc-frontend` and `dev/subnetcalc-frontend-canary`.
+`sso/oauth2-proxy-subnetcalc-dev` -> `dev/subnetcalc-router`. The router
+keeps `/api` on APIM and proxies frontend paths to
+`subnetcalc-frontend` in-cluster, the same as UAT. Argo Rollouts shifts
+canary traffic on Cilium HTTPRoute `gateway-routes/subnetcalc-frontend-dev`
+between `dev/subnetcalc-frontend` and `dev/subnetcalc-frontend-canary`.
 
 Watch the rollout and the route weights:
 
@@ -345,7 +344,7 @@ flowchart LR
 
 | Stage | Intent | Main toggles |
 | --- | --- | --- |
-| `100` | Make the cluster available. | `worker_count=1`, `cni_provider="none"`, `kind_disable_default_cni=true` |
+| `100` | Make the cluster available. | `worker_count=0`, `cilium_gateway_api=true`, `cilium_kube_proxy_replacement=true`, `cni_provider="none"`, `kind_disable_default_cni=true` |
 | `200` | Install Cilium as the CNI. | `cni_provider="cilium"` |
 | `300` | Add Hubble on top of Cilium. | `enable_hubble=true` |
 | `400` | Add Argo CD for GitOps. | `enable_argocd=true`, `argocd_applicationset_enabled=false`, `argocd_notifications_enabled=false` |
@@ -358,22 +357,27 @@ flowchart LR
 
 ### Stage 100: cluster available
 
-Stage 100 makes a minimal kind cluster available: one control-plane node and
-one worker node. It is intentionally created without a pod network so later
+Stage 100 makes a minimal kind cluster available: one control-plane node, no
+extra workers. It is intentionally created without a pod network so later
 stages can install Cilium without recreating the cluster.
+
+Cilium Gateway and kube-proxy replacement are pinned here even though Cilium
+itself arrives at stage 200. Both rewrite kind config: host 443 must map to
+container 443 (Cilium binds the listener on the node host network, not a
+NodePort), and `kubeProxyMode` must be `none`. Changing either later recreates
+the cluster.
 
 ```mermaid
 flowchart TB
     subgraph docker["Docker host"]
-        cp["kind-local-control-plane<br/>API server + control plane"]
-        wk["kind-local-worker<br/>workloads"]
+        cp["kind-local-control-plane<br/>API server + workloads"]
     end
-    cp -. "no pod network yet" .- wk
 ```
 
-- `worker_count = 1` creates a 2-node cluster: 1 control-plane node and 1 worker node.
-- `worker_count = 0` creates a single-node cluster. The second node is not free: it is another container with its own kubelet, containerd, and Cilium agent, which is why the `local-8gb` resource profile drops to one node. Terraform clears the control-plane `NoSchedule` taint for that topology with a kubeadm config patch, so workloads still schedule.
-- `KIND_WORKER_COUNT` pins the worker count at the wrapper layer. `0` means 1 total node, `1` means 2 total nodes, `2` means 3 total nodes, and so on. Leave it unset to let the stage baseline or the selected resource profile decide.
+- `worker_count = 0` creates a single-node cluster. Terraform clears the control-plane `NoSchedule` taint for that topology with a kubeadm config patch, so workloads still schedule.
+- `worker_count = 1` creates a 2-node cluster: 1 control-plane node and 1 worker node. Use `KIND_WORKER_COUNT=1` when you explicitly want that shape.
+- `KIND_WORKER_COUNT` pins the worker count at the wrapper layer. `0` means 1 total node, `1` means 2 total nodes, `2` means 3 total nodes, and so on. Leave it unset to let the stage baseline decide. The `local-8gb` resource profile does not change node count.
+- `cilium_gateway_api = true` and `cilium_kube_proxy_replacement = true` are the kind ingress substrate. NGINX Gateway Fabric is not installed.
 - `cni_provider = "none"` and `kind_disable_default_cni = true` mean there is no working pod network yet.
 - `kubeconfig_context = ""` leaves bootstrap free to create the cluster before the final context name exists.
 
@@ -382,7 +386,7 @@ Stage 100 also reserves the host ports that later stages will use. The Kind port
 | Host bind | Var(s) | Intended later use |
 | --- | --- | --- |
 | `127.0.0.1:6443` | `kind_api_server_port` | Kubernetes API server |
-| `127.0.0.1:443` | `gateway_https_host_port` -> `gateway_https_node_port=30070` | HTTPS gateway at stage `800+` |
+| `127.0.0.1:443` | `gateway_https_host_port` -> container `443` | HTTPS Cilium Gateway at stage `800+` |
 | `127.0.0.1:30080` | `argocd_server_node_port` | Argo CD UI at stage `400+` |
 | `127.0.0.1:31235` | `hubble_ui_node_port` | Hubble UI at stage `300+` |
 | `127.0.0.1:30090` | `gitea_http_node_port` | Gitea HTTP at stage `500+` |
@@ -409,13 +413,9 @@ Stage 200 installs [Cilium](https://docs.cilium.io/en/stable/overview/intro/) as
 flowchart LR
     subgraph cp["control-plane node"]
         cpa["Cilium agent"]
-    end
-    subgraph wk["worker node"]
-        wka["Cilium agent"]
         pod["Application pod"]
     end
-    cpa <-- "cluster datapath" --> wka
-    wka --> pod
+    cpa --> pod
 ```
 
 - `cni_provider = "cilium"` switches networking over to Cilium.
@@ -531,7 +531,7 @@ flowchart LR
     headlamp["Headlamp"] --> cluster["cluster API"]
 ```
 
-- `enable_gateway_tls = true` switches platform routes to HTTPS.
+- `enable_gateway_tls = true` switches platform routes to HTTPS through Cilium Gateway.
 - `enable_headlamp = true` adds a Kubernetes dashboard.
 
 ### Stage 900: SSO

@@ -11,7 +11,7 @@ This stack is a reproducible, local "platform-in-a-box" demo that shows:
   - the CI system (Gitea Actions)
   - the container image registry (OCI)
 - **Argo CD** using the **app-of-apps** GitOps pattern
-- **NGINX Gateway Fabric** (Gateway API) for ingress
+- **Cilium Gateway** (Gateway API) for ingress on kind. NGINX Gateway Fabric stays in-tree as a migration reference.
 - **TLS everywhere** via **cert-manager** + a locally bootstrapped **mkcert CA**
 - **Instrumentation/Monitoring** with **Prometheus, Grafana, and VictoriaLogs**
 
@@ -37,9 +37,8 @@ For the platform gateway, it now does two different kinds of proof:
   - HTTP/2 negotiates
   - HSTS and `X-Content-Type-Options: nosniff` are present on the wire
 - white-box checks inside the cluster:
-  - the NGINX Gateway Fabric controller is started with `--snippets`
-  - the controller RBAC includes `SnippetsPolicy` and `SnippetsFilter`
-  - the live rendered NGINX config tree contains every active directive declared in [`../apps/platform-gateway/tls-hardening.yaml`](../apps/platform-gateway/tls-hardening.yaml)
+  - on the NGINX Gateway Fabric migration-reference path, the controller is started with `--snippets` and the live NGINX config tree contains every active directive declared in [`../apps/platform-gateway/tls-hardening.yaml`](../apps/platform-gateway/tls-hardening.yaml)
+  - on the kind Cilium Gateway path those NGF surfaces are skipped; black-box TLS 1.3, HTTP/2, and security-header probes still run
 
 That verifier is intentionally a misconfiguration guardrail, not an admission control. The owner of the repo can still make an intentional change; the point is to catch accidental drift where the manifest exists but the running gateway is not enforcing it.
 
@@ -128,7 +127,7 @@ make kind apply 900 AUTO_APPROVE=1
 ### What emits telemetry
 
 - **Platform metrics/logs/traces** are collected via OpenTelemetry.
-- **NGINX Gateway Fabric tracing** is enabled so edge requests produce spans (useful for "did the request reach the cluster" debugging).
+- **Cilium Gateway tracing** is the kind edge. NGINX Gateway Fabric tracing remains on the migration-reference path.
 
 ### Service graph debugging
 
