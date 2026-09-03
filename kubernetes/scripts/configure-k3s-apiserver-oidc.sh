@@ -278,7 +278,9 @@ kube-apiserver-arg:
   - oidc-issuer-url=${OIDC_ISSUER_URL}
   - oidc-client-id=${OIDC_CLIENT_ID}
   - oidc-username-claim=email
+  - oidc-username-prefix=-
   - oidc-groups-claim=groups
+  - oidc-groups-prefix=-
   - oidc-ca-file=${MKCERT_CA_DEST}
 EOF
 )"
