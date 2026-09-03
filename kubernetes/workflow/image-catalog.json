@@ -46,7 +46,7 @@
       "id": "grafana-victorialogs",
       "hcl_key": "grafana",
       "image_name": "grafana-victorialogs",
-      "default_tag": "12.3.1-v0.29.0",
+      "default_tag": "12.3.1-v0.31.0",
       "build": {
         "context": "generated-grafana-victorialogs",
         "dockerfile": "Dockerfile",
