@@ -20,7 +20,8 @@ usage() {
   cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--var-file PATH] [--host-port PORT] [--wait-seconds N] [--retry-interval-seconds N] [--extended]
 
-Checks the NGINX Gateway Fabric + TLS path for public and admin gateway URLs.
+Checks the Gateway API + TLS path for public and admin gateway URLs.
+Kind uses Cilium Gateway; NGINX Gateway Fabric remains a migration reference.
 Use --extended (or EXTENDED=1) for deeper pod/endpoint diagnostics.
 EOF
   printf '\n%s\n' "$(shell_cli_standard_options)"

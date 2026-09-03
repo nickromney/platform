@@ -71,7 +71,7 @@ config:
     clientID: "headlamp"
     clientSecret: "<from-oidc-provider-config>"
     issuerURL: "https://keycloak.127.0.0.1.sslip.io/realms/platform"
-    scopes: "openid profile email groups"
+    scopes: "openid,profile,email,groups"
 
 # Or use service account token auth (simpler, no SSO)
 # Users create tokens via: kubectl create token headlamp -n headlamp

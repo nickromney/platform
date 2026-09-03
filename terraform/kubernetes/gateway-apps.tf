@@ -1,5 +1,8 @@
+# NGINX Gateway Fabric is retained as a pre-Cilium-Gateway migration
+# reference. Kind stages enable cilium_gateway_api, which keeps this
+# Application at count 0. Do not restore it as an operator-selectable path.
 resource "kubectl_manifest" "argocd_app_nginx_gateway_fabric" {
-  count = var.enable_gateway_tls && var.enable_argocd && !var.enable_app_of_apps ? 1 : 0
+  count = var.enable_gateway_tls && var.enable_argocd && !var.enable_app_of_apps && !var.cilium_gateway_api ? 1 : 0
 
   yaml_body = <<__YAML__
 apiVersion: argoproj.io/v1alpha1

@@ -1,6 +1,6 @@
 # ADR 0012: Hardened Cilium ingress policies assume cross-node NodePort routing
 
-- Status: Accepted
+- Status: Accepted (kind operator default superseded 2026-09-02; the NodePort identity trap remains)
 - Recorded: 2026-08-31
 
 ## Context
@@ -117,3 +117,17 @@ identity before the policy is evaluated.
 
 See [`../2026-08-31-single-node-cilium-ingress-digest.md`](../2026-08-31-single-node-cilium-ingress-digest.md)
 for the full investigation, including the false starts.
+
+## Later supersession of the kind default
+
+Kind stages now pin `worker_count = 0` with Cilium Gateway host-network and
+kube-proxy replacement from stage 100. That is the faster and smaller operator
+path; see ADR 0015 and
+[`../2026-09-01-cilium-gateway-cutover.md`](../2026-09-01-cilium-gateway-cutover.md).
+
+The NodePort identity trap recorded here remains true for NGINX Gateway Fabric.
+That is why NGF stays in-tree as a migration reference rather than a rollback
+profile or an operator-selectable kind path. Single-node is serviceable on the
+Cilium Gateway path because host 443 maps to the Envoy listener on the node
+host network: there is no NodePort hop to get wrong. `local-8gb` still does not
+set `worker_count`; kind already defaults to one node.

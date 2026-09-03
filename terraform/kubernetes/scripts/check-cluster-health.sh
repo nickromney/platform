@@ -1119,7 +1119,11 @@ print_gateway_urls() {
   if [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]]; then
     port_suffix=":${GATEWAY_HTTPS_HOST_PORT}"
   fi
-  echo "HTTPS URLs (via NGINX Gateway Fabric):"
+  if [[ "${EXPECT_CILIUM_GATEWAY_API}" == "true" ]]; then
+    echo "HTTPS URLs (via Cilium Gateway):"
+  else
+    echo "HTTPS URLs (via NGINX Gateway Fabric, migration reference):"
+  fi
   echo "  • Public app zone: *.${PLATFORM_BASE_DOMAIN}"
   if [[ "${SEPARATE_ADMIN_DOMAIN}" == "1" ]]; then
     echo "  • Admin zone: *.${PLATFORM_ADMIN_BASE_DOMAIN}"

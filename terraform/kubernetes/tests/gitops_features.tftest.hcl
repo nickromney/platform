@@ -209,6 +209,7 @@ run "gateway_tls_enabled" {
     enable_gitea       = true
     enable_sso         = false
     enable_gateway_tls = true
+    cilium_gateway_api = false
   }
 
   assert {
@@ -228,7 +229,7 @@ run "gateway_tls_enabled" {
 
   assert {
     condition     = length(kubectl_manifest.argocd_app_nginx_gateway_fabric) == 1
-    error_message = "Expected kubectl_manifest.argocd_app_nginx_gateway_fabric to exist when enable_gateway_tls=true"
+    error_message = "Expected kubectl_manifest.argocd_app_nginx_gateway_fabric to exist on the NGINX Gateway path (cilium_gateway_api=false)"
   }
 
   assert {
@@ -249,6 +250,46 @@ run "gateway_tls_enabled" {
   assert {
     condition     = length(kubernetes_secret_v1.argocd_repo_creds_gitea_ssh) == 1
     error_message = "Expected ArgoCD repo-creds secret for Gitea SSH to exist when enable_gateway_tls=true"
+  }
+}
+
+run "cilium_gateway_api_does_not_install_nginx_gateway_fabric" {
+  command = plan
+
+  variables {
+    cni_provider                  = "none"
+    enable_hubble                 = false
+    enable_argocd                 = true
+    enable_gitea                  = true
+    enable_sso                    = false
+    enable_gateway_tls            = true
+    cilium_gateway_api            = true
+    cilium_kube_proxy_replacement = true
+  }
+
+  assert {
+    condition     = length(kubectl_manifest.argocd_app_nginx_gateway_fabric) == 0
+    error_message = "Expected nginx-gateway-fabric to stay a migration reference and not install when cilium_gateway_api=true"
+  }
+
+  assert {
+    condition     = !contains(local.argocd_gitops_repo_app_names, "nginx-gateway-fabric")
+    error_message = "Expected the GitOps app list to omit nginx-gateway-fabric when cilium_gateway_api=true"
+  }
+
+  assert {
+    condition     = length(kubectl_manifest.argocd_app_platform_gateway) == 1
+    error_message = "Expected the platform Gateway app to remain when Cilium owns Gateway API"
+  }
+
+  assert {
+    condition     = strcontains(file("${path.module}/gateway-bootstrap.tf"), "count = var.enable_sso && !var.cilium_gateway_api ? 1 : 0")
+    error_message = "Expected platform-gateway-nginx-internal to stay off the Cilium Gateway path"
+  }
+
+  assert {
+    condition     = !strcontains(file("${path.module}/sso.tf"), "null_resource.check_kind_cluster_health_after_oidc,")
+    error_message = "Expected OIDC ClusterRoleBindings to apply even when post-OIDC health is still failing"
   }
 }
 

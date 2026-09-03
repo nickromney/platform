@@ -106,8 +106,9 @@ run "sso_enabled_argocd_oidc_disabled" {
       strcontains(file("${path.module}/sso.tf"), "email         = \"demo@dev.test\""),
       strcontains(file("${path.module}/sso.tf"), "email         = \"demo@uat.test\""),
       strcontains(file("${path.module}/sso.tf"), "emailVerified = true"),
+      strcontains(file("${path.module}/sso.tf"), "name: demo@admin.test"),
     ])
-    error_message = "Expected all rendered platform realm demo users to have verified email addresses"
+    error_message = "Expected all rendered platform realm demo users to have verified email addresses and the Headlamp admin ClusterRoleBinding to include the admin user"
   }
 
   assert {

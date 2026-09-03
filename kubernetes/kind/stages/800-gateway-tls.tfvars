@@ -4,7 +4,9 @@ cluster_name         = "kind-local"
 kubeconfig_path      = "~/.kube/config"
 kubeconfig_context   = "kind-kind-local"
 kind_api_server_port = 6443
-worker_count         = 1
+worker_count                      = 0
+cilium_kube_proxy_replacement     = true
+cilium_gateway_api                = true
 node_image           = "kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed"
 
 enable_image_preload             = true

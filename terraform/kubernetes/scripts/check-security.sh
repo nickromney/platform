@@ -69,6 +69,7 @@ for i in "${!TFVARS_FILES[@]}"; do
 done
 
 operator_facts_load
+CILIUM_GATEWAY_API="$(operator_facts_bool cilium_gateway_api false 2>/dev/null || echo false)"
 
 admin_host() {
   local app="$1"
@@ -298,18 +299,25 @@ wait_for_platform_gateway_hardening() {
 
   while (( SECONDS < deadline )); do
     PLATFORM_GATEWAY_HEADERS="$(platform_gateway_headers)"
-    PLATFORM_GATEWAY_NGINX_CONF="$(live_platform_gateway_nginx_conf)"
-
-    if platform_gateway_headers_ready "${PLATFORM_GATEWAY_HEADERS}" &&
-      platform_gateway_config_ready "${PLATFORM_GATEWAY_NGINX_CONF}"; then
-      return 0
+    if [[ "${CILIUM_GATEWAY_API}" == "true" ]]; then
+      if platform_gateway_headers_ready "${PLATFORM_GATEWAY_HEADERS}"; then
+        return 0
+      fi
+    else
+      PLATFORM_GATEWAY_NGINX_CONF="$(live_platform_gateway_nginx_conf)"
+      if platform_gateway_headers_ready "${PLATFORM_GATEWAY_HEADERS}" &&
+        platform_gateway_config_ready "${PLATFORM_GATEWAY_NGINX_CONF}"; then
+        return 0
+      fi
     fi
 
     sleep 3
   done
 
   PLATFORM_GATEWAY_HEADERS="$(platform_gateway_headers)"
-  PLATFORM_GATEWAY_NGINX_CONF="$(live_platform_gateway_nginx_conf)"
+  if [[ "${CILIUM_GATEWAY_API}" != "true" ]]; then
+    PLATFORM_GATEWAY_NGINX_CONF="$(live_platform_gateway_nginx_conf)"
+  fi
   return 1
 }
 
@@ -385,7 +393,11 @@ if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
       fail_soft "TLS 1.3 connection failed to platform gateway"
     fi
 
-    # Prove the negative: TLS 1.2 should be rejected
+    # NGF used SnippetsFilter to reject TLS 1.2. Cilium Gateway has no
+    # equivalent, so TLS 1.2 stays available there (TLS 1.3 still negotiates).
+    if [[ "${CILIUM_GATEWAY_API}" == "true" ]]; then
+      skip "TLS 1.2 rejection is NGF-only; Cilium Gateway keeps 1.2 available"
+    else
     tls12_info=$(echo | openssl s_client \
       -connect "127.0.0.1:${probe_port}" \
       -servername "$(admin_host argocd)" \
@@ -399,6 +411,7 @@ if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
       else
         warn "TLS 1.2 test inconclusive (gateway may not be reachable)"
       fi
+    fi
     fi
   else
     skip "openssl not found; skipping black-box TLS probes"
@@ -439,6 +452,9 @@ if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
 
   echo ""
   echo "--- Platform gateway config integrity ---"
+  if [[ "${CILIUM_GATEWAY_API}" == "true" ]]; then
+    skip "NGINX Gateway Fabric config checks skipped (Cilium owns Gateway API; NGF is a migration reference)"
+  else
   controller_args=$(kubectl -n nginx-gateway get deploy nginx-gateway \
     -o go-template='{{range (index .spec.template.spec.containers 0).args}}{{println .}}{{end}}' 2>/dev/null || true)
   if printf '%s\n' "${controller_args}" | grep -Fxq -- "--snippets"; then
@@ -474,6 +490,7 @@ if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
         fail_soft "Rendered NGINX config missing expected directive: ${directive}"
       fi
     done < <(expected_platform_gateway_tls_directives)
+  fi
   fi
 else
   skip "Gateway TLS checks skipped (enable_gateway_tls=${EXPECT_GATEWAY_TLS:-unset})"

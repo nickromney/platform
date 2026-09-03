@@ -74,7 +74,21 @@ setup() {
 
   run grep -Fn 'null_resource.check_kind_cluster_health_after_oidc,' "${SSO_FILE}"
 
+  [ "${status}" -eq 1 ]
+}
+
+@test "OIDC user ClusterRoleBindings apply even if post-OIDC health is still failing" {
+  run grep -Fn 'resource "kubectl_manifest" "clusterrolebinding_oidc_demo_admin_cluster_admin"' "${SSO_FILE}"
+
   [ "${status}" -eq 0 ]
+
+  run grep -Fn 'resource "kubectl_manifest" "clusterrolebinding_oidc_platform_viewers"' "${SSO_FILE}"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'null_resource.check_kind_cluster_health_after_oidc,' "${SSO_FILE}"
+
+  [ "${status}" -eq 1 ]
 }
 
 @test "kind OIDC health local-exec delegates to the extracted script" {

@@ -11,7 +11,7 @@ variable "provision_kind_cluster" {
 }
 
 variable "worker_count" {
-  description = "Number of worker nodes."
+  description = "Number of worker nodes. Kind stages pin this to 0 (single-node) from stage 100 because Cilium Gateway host-network plus kube-proxy replacement made that topology the faster and smaller default. The module default stays 1 for lima and for tofu tests that still exercise the two-node NodePort path."
   type        = number
   default     = 1
 }
@@ -246,7 +246,7 @@ variable "enable_cilium_node_encryption" {
 }
 
 variable "cilium_gateway_api" {
-  description = "Let Cilium implement Gateway API through its L7 (Envoy) proxy, creating a `cilium` GatewayClass alongside the existing nginx and agentgateway ones. Requires cilium_kube_proxy_replacement. On kind this also needs host-network mode, because Cilium's Gateway controller otherwise creates a LoadBalancer service and kind has no provider. This is a cutover, not a parallel run: the platform Gateway, its NGF-only resources, and the host 443 mapping all switch together, because host 443 can only point at one container port and Cilium binds 443 directly rather than through a NodePort."
+  description = "Let Cilium implement Gateway API through its L7 (Envoy) proxy, creating a `cilium` GatewayClass. Requires cilium_kube_proxy_replacement. Kind stages enable this from stage 100. NGINX Gateway Fabric remains in-tree as a migration reference for lima and tofu tests, not as a supported kind operator path. On kind this also needs host-network mode, because Cilium's Gateway controller otherwise creates a LoadBalancer service and kind has no provider. This is a cutover, not a parallel run: the platform Gateway, its NGF-only resources, and the host 443 mapping all switch together, because host 443 can only point at one container port and Cilium binds 443 directly rather than through a NodePort."
   type        = bool
   default     = false
 }
@@ -1133,6 +1133,13 @@ check "enable_cilium_policy_audit_mode_requires_cilium_provider" {
   assert {
     condition     = !var.enable_cilium_policy_audit_mode || lower(var.cni_provider) == "cilium"
     error_message = "enable_cilium_policy_audit_mode requires cni_provider=cilium."
+  }
+}
+
+check "cilium_gateway_api_requires_kube_proxy_replacement" {
+  assert {
+    condition     = !var.cilium_gateway_api || var.cilium_kube_proxy_replacement
+    error_message = "cilium_gateway_api requires cilium_kube_proxy_replacement=true."
   }
 }
 

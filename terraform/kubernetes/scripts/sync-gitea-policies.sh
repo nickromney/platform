@@ -1788,7 +1788,7 @@ EOF
             clientID: headlamp
             clientSecret: "${HEADLAMP_OIDC_CLIENT_SECRET}"
             issuerURL: ${SSO_PUBLIC_URL}
-            scopes: openid profile email groups
+            scopes: openid,profile,email,groups
             callbackURL: https://${HEADLAMP_PUBLIC_HOST}/oidc-callback
           extraArgs:
             - -oidc-ca-file=/headlamp-ca/ca.crt
@@ -1922,6 +1922,25 @@ render_platform_gateway_for_cilium() {
     remove_kustomization_entry "${kustomization}" "${nginx_only}"
   done
   remove_kustomization_entry "${kustomization}" "gateway-cilium.yaml"
+
+  # Argo Rollouts already shifts HTTPRoute subnetcalc-frontend-dev weights.
+  # Re-entering the Gateway from subnetcalc-router is an NGF-era hairpin that
+  # targeted platform-gateway-nginx-internal, which has no endpoints here.
+  local canary_patch="${repo_dir}/apps/dev/subnetcalc-router-gateway-canary-patch.yaml"
+  local dev_kustomization="${repo_dir}/apps/dev/kustomization.yaml"
+  remove_if_present "${canary_patch}"
+  if [[ -f "${dev_kustomization}" ]]; then
+    local tmp_kustomization
+    tmp_kustomization="$(mktemp)"
+    grep -Fv 'subnetcalc-router-gateway-canary-patch.yaml' "${dev_kustomization}" > "${tmp_kustomization}" || true
+    mv "${tmp_kustomization}" "${dev_kustomization}"
+  fi
+
+  # That hairpin is the only reason the router needed egress to NGF pods on 443.
+  local router_routes="${repo_dir}/cluster-policies/cilium/projects/subnetcalc/subnetcalc-http-routes.yaml"
+  if [[ -f "${router_routes}" ]]; then
+    LC_ALL=C perl -0pi -e 's/    - toEndpoints:\n        - matchLabels:\n            "k8s:io\.kubernetes\.pod\.namespace": platform-gateway\n            "k8s:app\.kubernetes\.io\/name": platform-gateway-nginx\n            "k8s:gateway\.networking\.k8s\.io\/gateway-name": platform-gateway\n      toPorts:\n        - ports:\n            - port: "443"\n              protocol: TCP\n//' "${router_routes}"
+  fi
 }
 
 # NGINX Gateway Fabric's SnippetsFilter has no Cilium equivalent, and the routes
@@ -2328,16 +2347,20 @@ configure_progressive_delivery() {
   is_true "${ENABLE_APP_REPO_SUBNETCALC}" || return 0
   [[ -f "${kustomization_file}" ]] || return 0
 
-  if ! grep -Fq "subnetcalc-router-gateway-canary-patch.yaml" "${kustomization_file}"; then
-    if grep -Eq '^patches:' "${kustomization_file}"; then
-      cat >>"${kustomization_file}" <<'EOF'
+  # Cilium canary traffic is HTTPRoute subnetcalc-frontend-dev weights. The
+  # router keeps the UAT path: frontend Service, not a Gateway re-entry.
+  if ! is_true "${ENABLE_CILIUM_GATEWAY_API}"; then
+    if ! grep -Fq "subnetcalc-router-gateway-canary-patch.yaml" "${kustomization_file}"; then
+      if grep -Eq '^patches:' "${kustomization_file}"; then
+        cat >>"${kustomization_file}" <<'EOF'
   - path: subnetcalc-router-gateway-canary-patch.yaml
 EOF
-    else
-      cat >>"${kustomization_file}" <<'EOF'
+      else
+        cat >>"${kustomization_file}" <<'EOF'
 patches:
   - path: subnetcalc-router-gateway-canary-patch.yaml
 EOF
+      fi
     fi
   fi
 

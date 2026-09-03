@@ -711,8 +711,8 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           directAccessGrantsEnabled = true
           redirectUris              = ["${local.headlamp_public_url}/oidc-callback"]
           webOrigins                = ["+"]
-          defaultClientScopes       = ["web-origins", "acr", "profile", "basic", "email"]
-          optionalClientScopes      = [local.sso_groups_claim]
+          defaultClientScopes       = ["web-origins", "acr", "profile", "basic", "email", local.sso_groups_claim]
+          optionalClientScopes      = []
           protocolMappers = [
             {
               name            = "groups"
@@ -1151,7 +1151,8 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
     configure_script_sha = filesha256(abspath("${local.stack_dir}/scripts/configure-kind-apiserver-oidc.sh"))
     helper_lib_sha       = filesha256(abspath("${local.stack_dir}/scripts/kind-apiserver-oidc-lib.sh"))
     render_helper_sha    = filesha256(abspath("${local.stack_dir}/scripts/render-kind-apiserver-oidc-manifest.sh"))
-    gateway_service_uid  = kubernetes_service_v1.platform_gateway_nginx_internal[0].metadata[0].uid
+    render_go_sha        = filesha256("${local.repo_root}/tools/platform-helpers/cmd/render-kind-apiserver-oidc-manifest/main.go")
+    gateway_service_uid  = var.cilium_gateway_api ? local.platform_gateway_sso_alias_ip : kubernetes_service_v1.platform_gateway_nginx_internal[0].metadata[0].uid
     cluster_name         = var.cluster_name
     oidc_host            = local.sso_public_host
     oidc_client_id       = "headlamp"
@@ -1182,6 +1183,7 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
   depends_on = [
     null_resource.ensure_kind_kubeconfig,
     kubernetes_service_v1.platform_gateway_nginx_internal,
+    data.kubernetes_nodes.platform_gateway_alias,
     null_resource.argocd_refresh_gitops_repo_apps,
     null_resource.wait_for_platform_gateway_tls,
     null_resource.reconcile_keycloak_realm,
@@ -1264,6 +1266,9 @@ subjects:
   - kind: Group
     apiGroup: rbac.authorization.k8s.io
     name: ${local.sso_admin_group}
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: demo@admin.test
 __YAML__
 
   wait              = true
@@ -1272,7 +1277,7 @@ __YAML__
   server_side_apply = true
 
   depends_on = [
-    null_resource.check_kind_cluster_health_after_oidc,
+    null_resource.ensure_kind_kubeconfig,
   ]
 }
 
@@ -1305,7 +1310,7 @@ __YAML__
   server_side_apply = true
 
   depends_on = [
-    null_resource.check_kind_cluster_health_after_oidc,
+    null_resource.ensure_kind_kubeconfig,
   ]
 }
 
@@ -1325,6 +1330,12 @@ subjects:
   - kind: Group
     apiGroup: rbac.authorization.k8s.io
     name: ${local.sso_viewer_group}
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: demo@dev.test
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: demo@uat.test
 __YAML__
 
   wait              = true
