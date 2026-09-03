@@ -50,6 +50,7 @@ assert "SSO_E2E_PROJECT=working" in kind_makefile
 assert "SSO_E2E_PROJECT=working" in lima_makefile
 assert "hubbleUatServiceMapWorks" in working
 assert "HUBBLE_EMPTY_SERVICE_MAP" in working
+assert "loginArgocdConsoleIfNeeded" in harness
 assert "WORKING_BY_NAME" in working
 
 names = set(re.findall(r"name:\s*'([^']+)'", harness))

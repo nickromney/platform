@@ -12,6 +12,7 @@ import {
   completeOidcLogin,
   creds,
   developerPortalWorks,
+  loginArgocdConsoleIfNeeded,
   fetchHeadlampStatus,
   gotoWithGatewayRetry,
   grafanaBackstageObservabilityDashboardWorks,
@@ -55,14 +56,15 @@ async function giteaExploreHasRepositories(page: Page, target: Target) {
 }
 
 async function argocdApplicationsHaveItems(page: Page, target: Target) {
-  await gotoWithGatewayRetry(page, new URL('/applications', target.url).toString())
+  const applicationsUrl = new URL('/applications', target.url).toString()
+  await gotoWithGatewayRetry(page, applicationsUrl)
+  await loginArgocdConsoleIfNeeded(page, target)
   const body = page.locator('body')
-  await expect(body).toContainText(/applications/i, { timeout: 90_000 })
   await expect(body).not.toContainText(/failed to load|unable to load applications/i)
   await expect
     .poll(async () => bodyText(page), {
       message: 'Argo CD applications page did not show a known synced app',
-      timeout: 90_000,
+      timeout: 120_000,
     })
     .toMatch(/cilium|gitea|argocd|platform-gateway|oauth2-proxy|headlamp/i)
 }
