@@ -281,7 +281,14 @@ export async function completeKeycloakLogin(page: Page, login: string, password:
 }
 
 export async function completeOidcLogin(page: Page, login: string, password: string) {
-  await completeKeycloakLogin(page, login, password)
+  if (await page.locator('#username').isVisible().catch(() => false)) {
+    await completeKeycloakLogin(page, login, password)
+    return
+  }
+
+  // An existing Keycloak SSO session (for example from oauth2-proxy) may auto-approve
+  // the redirect without rendering the login form again.
+  await page.waitForLoadState('domcontentloaded', { timeout: 60_000 }).catch(() => undefined)
 }
 
 export async function ensureOnTargetOrOidc(page: Page, targetUrl: string) {
@@ -381,6 +388,70 @@ export async function loginViaOauth2ProxyRedirect(page: Page, target: Target) {
   }
 
   throw new Error(`OAuth2 proxy returned an internal error during login for ${target.name}`)
+}
+
+export async function isArgocdLoginPage(page: Page) {
+  const text = (await bodyText(page)).replace(/\s+/g, '').toLowerCase()
+  // "Let's get stuff deployed!" also appears briefly while the SPA loads; require a login CTA.
+  return text.includes('loginviakeycloak') || text.includes('usernamepasswordsignin')
+}
+
+// Stage 900 sets enable_argocd_oidc=true, so oauth2-proxy only covers the gateway.
+// Argo CD still enforces its own Keycloak OIDC before /applications lists synced apps.
+export async function loginArgocdConsoleIfNeeded(page: Page, target: Target) {
+  const { login, password } = creds(target.segment)
+  const targetHost = new URL(target.url).host
+  const applicationsUrl = new URL('/applications', target.url).toString()
+
+  if (!(await isArgocdLoginPage(page))) {
+    await gotoWithGatewayRetry(
+      page,
+      new URL(`/auth/login?return_url=${encodeURIComponent(applicationsUrl)}`, target.url).toString(),
+    )
+  }
+
+  if (!(await isArgocdLoginPage(page))) return
+
+  await page.getByRole('link', { name: /log in via keycloak/i }).click()
+
+  // Argo CD bounces through /auth/login on its own host before Keycloak; do not treat
+  // that intermediate URL as a completed login.
+  await expect
+    .poll(
+      async () => {
+        const url = new URL(page.url())
+        if (url.host === OIDC_HOST || url.pathname.includes('/protocol/openid-connect/auth')) return 'keycloak'
+        if (url.host === targetHost && !url.pathname.includes('/auth/login') && !(await isArgocdLoginPage(page))) {
+          return 'authenticated'
+        }
+        return 'pending'
+      },
+      { message: 'Argo CD did not reach Keycloak or leave the login page', timeout: 120_000 },
+    )
+    .not.toBe('pending')
+
+  if (new URL(page.url()).host === OIDC_HOST) {
+    await completeOidcLogin(page, login, password)
+    await page.waitForURL((u) => u.host === targetHost, { timeout: 120_000 })
+  }
+
+  if (!page.url().includes('/applications') || (await isArgocdLoginPage(page))) {
+    await gotoWithGatewayRetry(page, applicationsUrl)
+  }
+
+  await expect
+    .poll(async () => !(await isArgocdLoginPage(page)), {
+      message: 'Argo CD console still on login page after Keycloak SSO',
+      timeout: 120_000,
+    })
+    .toBe(true)
+  await expect
+    .poll(async () => /sync status|refresh/i.test(await bodyText(page)), {
+      message: 'Argo CD console did not reach the applications UI after Keycloak SSO',
+      timeout: 120_000,
+    })
+    .toBe(true)
+  await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => undefined)
 }
 
 export async function loadWithoutLogin(page: Page, target: Target) {
