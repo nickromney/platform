@@ -192,7 +192,7 @@ setup() {
 }
 
 @test "lima cluster-dependent read-only targets gate on assert-lima-active" {
-  for target in check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e show-urls; do
+  for target in check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e check-sso-working show-urls; do
     run sed -n "/^${target}:/,/^\\.PHONY:/p" "${REPO_ROOT}/kubernetes/lima/Makefile"
 
     [ "${status}" -eq 0 ]

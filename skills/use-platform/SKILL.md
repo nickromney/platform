@@ -112,6 +112,8 @@ Use these state probes while an `apply` is in flight:
   `make -C kubernetes/lima check-sso`
   `make -C kubernetes/kind check-sso-e2e`
   `make -C kubernetes/lima check-sso-e2e`
+  `make -C kubernetes/kind check-sso-working`
+  `make -C kubernetes/lima check-sso-working`
 - App-specific progress:
   `make -C kubernetes/kind check-app APP=<name>`
   `make -C kubernetes/lima check-app APP=<name>`

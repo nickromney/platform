@@ -113,7 +113,7 @@ include $(STAGE_LADDER_MK)
 VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := $(KUBERNETES_STAGE_READONLY_HELPERS)
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file readiness prereqs image-signing-prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig ensure-k3s-api-tunnel ensure-k3s-shared-port-tunnels ensure-image-cache sync-image-cache build-workload-images build-local-platform-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render idp-api backstage idp-sdk idp-mcp show-urls reset state-reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file readiness prereqs image-signing-prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig ensure-k3s-api-tunnel ensure-k3s-shared-port-tunnels ensure-image-cache sync-image-cache build-workload-images build-local-platform-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e check-sso-working gitea-sync launchpad-render idp-api backstage idp-sdk idp-mcp show-urls reset state-reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 MAKE_UNKNOWN_GOAL_GUARD_DEFER_GOALS := $(VALID_STAGES)
 
 # `make -n` is not a preview here, for the same reason it is not one in
@@ -240,6 +240,7 @@ help:
 	@echo "  make check-security"
 	@echo "  make check-sso"
 	@echo "  make check-sso-e2e"
+	@echo "  make check-sso-working"
 	@echo "  make check-stage-monotonicity"
 	@echo "  make check-version [CHECK_VERSION_INCLUDE_CANARY=1] [CHECK_VERSION_INCLUDE_ALPHA=1] [CHECK_VERSION_INCLUDE_PRERELEASE=1]"
 	@echo "  make configure-k3s-apiserver-oidc"
@@ -952,6 +953,11 @@ check-sso-e2e: workflow-validate-stage
 	)"; \
 	eval "$$sso_env"; \
 	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" SSO_E2E_ENABLE_BACKSTAGE="$${SSO_E2E_ENABLE_BACKSTAGE}" STAGE_TFVARS="$${STAGE_TFVARS}" STAGE_TFVARS_FILES="$${STAGE_TFVARS_FILES}" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh" $(READONLY_MODE_FLAG)
+
+.PHONY: check-sso-working
+check-sso-working: workflow-validate-stage
+	@$(MAKE) assert-lima-active >/dev/null
+	@$(MAKE) check-sso-e2e SSO_E2E_PROJECT=working
 
 .PHONY: launchpad-render
 launchpad-render:
