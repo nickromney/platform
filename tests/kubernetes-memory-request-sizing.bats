@@ -104,7 +104,7 @@ PY
   [ "${status}" -eq 0 ]
 }
 
-@test "memory request tunables default to the value they replaced so default profiles are unchanged" {
+@test "memory request tunables default to the measured local-cluster reservations" {
   run uv run --isolated python - <<'PY'
 from __future__ import annotations
 
@@ -116,8 +116,10 @@ repo_root = Path(os.environ["REPO_ROOT"])
 variables_tf = (repo_root / "terraform/kubernetes/variables.tf").read_text(encoding="utf-8")
 
 expected_defaults = {
-    "metrics_server_memory_request": "200Mi",
-    "oauth2_proxy_session_store_memory_request": "64Mi",
+    "metrics_server_memory_request": "100Mi",
+    "oauth2_proxy_memory_request": "24Mi",
+    "oauth2_proxy_cpu_request": "25m",
+    "oauth2_proxy_session_store_memory_request": "24Mi",
 }
 
 for name, default in expected_defaults.items():
@@ -126,8 +128,7 @@ for name, default in expected_defaults.items():
     )
     assert block, f"{name} is not declared in variables.tf"
     assert f'default     = "{default}"' in block.group(0), (
-        f"{name} default moved; the point of the tunable is that default "
-        f"profiles keep their previous reservation"
+        f"{name} default moved off the measured local-cluster reservation"
     )
 
 # The tunables have to actually reach the manifests, or the preset overlay is
@@ -143,20 +144,18 @@ PY
   [ "${status}" -eq 0 ]
 }
 
-@test "the local-8gb overlay lowers every request tunable it names below the declared default" {
+@test "the local-8gb overlay does not restate request tunables that already match the default" {
   run uv run --isolated python - <<'PY'
 from __future__ import annotations
 
 import json
 import os
-import re
 from pathlib import Path
 
 repo_root = Path(os.environ["REPO_ROOT"])
 options = json.loads(
     (repo_root / "kubernetes/workflow/options.json").read_text(encoding="utf-8")
 )
-variables_tf = (repo_root / "terraform/kubernetes/variables.tf").read_text(encoding="utf-8")
 
 overlay = next(
     preset["overlay"]
@@ -164,28 +163,16 @@ overlay = next(
     if preset["id"] == "local-8gb" and preset["group"] == "resource_profile"
 )
 
-expected = {
-    "oauth2_proxy_memory_request": "24Mi",
-    "oauth2_proxy_session_store_memory_request": "24Mi",
-    "metrics_server_memory_request": "100Mi",
-}
-for key, value in expected.items():
-    assert overlay.get(key) == value, (key, overlay.get(key))
-
-
-def mib(quantity: str) -> int:
-    match = re.fullmatch(r"(\d+)(Mi|Gi)", quantity)
-    assert match, quantity
-    return int(match.group(1)) * (1024 if match.group(2) == "Gi" else 1)
-
-
-for key in expected:
-    block = re.search(rf'^variable "{key}" \{{\n(?:.*\n)*?^\}}$', variables_tf, re.M)
-    assert block, key
-    default = re.search(r'default\s+= "([^"]+)"', block.group(0)).group(1)
-    assert mib(overlay[key]) < mib(default), (
-        f"{key}: overlay {overlay[key]} does not reduce the {default} default"
-    )
+# Request tunables now default to the measured local-cluster reservations.
+# local-8gb must not re-state them: a profile may only reduce, and repeating
+# the default would fail the "overlay < default" contract.
+for key in (
+    "oauth2_proxy_memory_request",
+    "oauth2_proxy_cpu_request",
+    "oauth2_proxy_session_store_memory_request",
+    "metrics_server_memory_request",
+):
+    assert key not in overlay, key
 PY
 
   [ "${status}" -eq 0 ]
