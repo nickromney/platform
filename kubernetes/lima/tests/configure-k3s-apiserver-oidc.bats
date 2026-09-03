@@ -56,6 +56,12 @@ EOF
   run grep -Fn 'oidc-issuer-url=${OIDC_ISSUER_URL}' "${SHARED_SCRIPT}"
   [ "${status}" -eq 0 ]
 
+  run grep -Fn 'oidc-username-prefix=-' "${SHARED_SCRIPT}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'oidc-groups-prefix=-' "${SHARED_SCRIPT}"
+  [ "${status}" -eq 0 ]
+
   run grep -Fn "kubectl get --raw='/readyz'" "${SHARED_SCRIPT}"
   [ "${status}" -eq 0 ]
 }

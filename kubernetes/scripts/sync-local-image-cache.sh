@@ -104,11 +104,14 @@ mirror_remote_image() {
     return 0
   fi
 
-  # With the containerd image store (the default for recent Docker Engine on
-  # Linux) a multi-arch reference stays an index locally, and pushing a tag
-  # that points at one fails with "does not provide any platform". The classic
-  # store used by Docker Desktop resolves to a single image, so this never
-  # showed up there. Copy registry-to-registry instead, which handles both.
+  # With the containerd image store a multi-arch reference stays an index
+  # locally, and pushing a tag that points at one fails with "does not provide
+  # any platform". Docker Desktop 29 also uses that store
+  # (overlayfs / io.containerd.snapshotter.v1), so this is no longer Linux-only.
+  # Copy registry-to-registry instead, which handles indexes. stderr is still
+  # discarded here; when both paths fail the warn is unexplained. Tracked in
+  # https://github.com/nickromney/platform/issues/225 (cert-manager/jetstack
+  # images warn on kind 900 apply even after this fallback).
   if docker buildx imagetools create --tag "${cache_ref}" "${source_ref}" >/dev/null 2>&1; then
     return 0
   fi
