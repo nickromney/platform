@@ -4027,6 +4027,59 @@ def grafana_plugin_catalog_build_input_contract_violations(repo_root: Path) -> t
     if url_template.count("{version}") != 2:
         violations.append("grafana-victorialogs plugin_archive.url_template should include {version} twice")
 
+    variables_tf = (repo_root / "terraform" / "kubernetes" / "variables.tf").read_text(encoding="utf-8")
+    plugin_version_match = re.search(
+        r'variable "grafana_victoria_logs_plugin_version" \{.*?default\s+=\s+"([^"]+)"',
+        variables_tf,
+        re.S,
+    )
+    grafana_image_tag_match = re.search(
+        r'variable "grafana_image_tag" \{.*?default\s+=\s+"([^"]+)"',
+        variables_tf,
+        re.S,
+    )
+    plugin_url_match = re.search(
+        r'variable "grafana_victoria_logs_plugin_url" \{.*?default\s+=\s+"([^"]+)"',
+        variables_tf,
+        re.S,
+    )
+    plugin_version = plugin_version_match.group(1) if plugin_version_match else ""
+    grafana_image_tag = grafana_image_tag_match.group(1) if grafana_image_tag_match else ""
+    plugin_url = plugin_url_match.group(1) if plugin_url_match else ""
+    grafana_base_tag = str(build.get("grafana_base_image", {}).get("tag", ""))
+    if grafana_image_tag and grafana_base_tag and grafana_image_tag != grafana_base_tag:
+        violations.append(
+            f"grafana_image_tag default {grafana_image_tag!r} should match grafana-victorialogs grafana_base_image.tag {grafana_base_tag!r}"
+        )
+    expected_tag = f"{grafana_base_tag}-v{plugin_version}" if grafana_base_tag and plugin_version else ""
+    actual_tag = str(grafana.get("default_tag", ""))
+    if not expected_tag:
+        violations.append(
+            "could not derive grafana-victorialogs default_tag from grafana_base_image.tag and grafana_victoria_logs_plugin_version"
+        )
+    elif actual_tag != expected_tag:
+        violations.append(
+            f"grafana-victorialogs default_tag should be {expected_tag!r} (grafana {grafana_base_tag} + plugin {plugin_version}), got {actual_tag!r}"
+        )
+    if (
+        plugin_version
+        and plugin_url
+        and (f"/v{plugin_version}/" not in plugin_url or f"v{plugin_version}.zip" not in plugin_url)
+    ):
+        violations.append(
+            f"grafana_victoria_logs_plugin_url default should pin plugin {plugin_version}, got {plugin_url!r}"
+        )
+    if expected_tag:
+        kind_tfvars = (repo_root / "kubernetes" / "kind" / "targets" / "kind.tfvars").read_text(encoding="utf-8")
+        lima_tfvars = (repo_root / "kubernetes" / "lima" / "targets" / "lima.tfvars").read_text(encoding="utf-8")
+        for label, content, host in (
+            ("kind.tfvars", kind_tfvars, "host.docker.internal:5002"),
+            ("lima.tfvars", lima_tfvars, "host.lima.internal:5002"),
+        ):
+            expected_ref = f"{host}/platform/grafana-victorialogs:{expected_tag}"
+            if expected_ref not in content:
+                violations.append(f"{label} grafana ref should be {expected_ref}")
+
     fingerprint_sources = set(grafana.get("fingerprint_sources", []))
     for source in (
         "kubernetes/kind/images/grafana-victorialogs/Dockerfile",

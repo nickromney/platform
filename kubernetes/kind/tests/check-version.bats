@@ -374,7 +374,7 @@ EOF
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; \
     image_catalog_version_check_projection | awk -F '\t' '\$2 == \"sentiment-api\" { print \$1, \$2, \$6 } \$2 == \"grafana-victorialogs\" { print \$1, \$2, \$6 }'; \
     if image_ref_is_internal 'host.lima.internal:5002/platform/sentiment-api:0.1.0'; then echo catalog-local; else echo external; fi; \
-    image_catalog_version_check_status_for_ref 'host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.29.0'"
+    image_catalog_version_check_status_for_ref 'host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.31.0'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"workload sentiment-api local"* ]]
