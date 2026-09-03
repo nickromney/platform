@@ -345,10 +345,10 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 512Mi
+              memory: 256Mi
             limits:
               cpu: "1"
-              memory: 2Gi
+              memory: 768Mi
           securityContext:
             runAsNonRoot: true
             runAsUser: 101
@@ -648,7 +648,7 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 512Mi
+              memory: 256Mi
             limits:
               cpu: 500m
               memory: 1Gi
@@ -783,7 +783,7 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 512Mi
+              memory: 256Mi
             limits:
               cpu: 500m
               memory: 1Gi
