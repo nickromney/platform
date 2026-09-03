@@ -55,6 +55,9 @@ brew install bun node
 On the host, `make -C kubernetes/kind 900 apply` runs `check-gateway-urls` and `check-sso-e2e` before it
 returns success, so `bun` and `node` are part of the practical stage-900
 toolchain.
+`make check-sso-working` is the optional second Playwright suite: every app must
+show real data (Hubble service map, listed repos, populated dashboards), not
+just a logged-in 200. It is not part of `900 apply`.
 `node` provides `npm` and `npx`; Playwright stays project-local in the repo.
 
 Optional tools:

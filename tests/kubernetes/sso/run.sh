@@ -279,6 +279,7 @@ SSO_E2E_BASE_PORT_VALUE="${SSO_E2E_BASE_PORT:-$(tfvar_value gateway_https_host_p
 SSO_E2E_HOST_RESOLVER_RULES_VALUE="${SSO_E2E_HOST_RESOLVER_RULES:-}"
 SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET_VALUE="${SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET:-}"
 SSO_E2E_TEST_GREP_VALUE="${SSO_E2E_TEST_GREP:-}"
+SSO_E2E_PROJECT_VALUE="${SSO_E2E_PROJECT:-smoke}"
 if [ "${SSO_E2E_BASE_PORT_VALUE}" = "443" ]; then
   SSO_E2E_BASE_PORT_VALUE=""
 fi
@@ -301,9 +302,27 @@ if [ -z "${SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET_VALUE}" ] \
 fi
 
 bun install --frozen-lockfile
-test_args=()
+case "${SSO_E2E_PROJECT_VALUE}" in
+  smoke|working) ;;
+  *)
+    echo "SSO_E2E_PROJECT must be smoke or working, got: ${SSO_E2E_PROJECT_VALUE}" >&2
+    exit 1
+    ;;
+esac
+SSO_E2E_PROJECT="${SSO_E2E_PROJECT_VALUE}"
+export SSO_E2E_PROJECT
+docker_test_args=(--project "${SSO_E2E_PROJECT_VALUE}")
+native_test_args=()
 if [ -n "${SSO_E2E_TEST_GREP_VALUE}" ]; then
-  test_args+=(--grep "${SSO_E2E_TEST_GREP_VALUE}")
+  docker_test_args+=(--grep "${SSO_E2E_TEST_GREP_VALUE}")
+  native_test_args+=(--grep "${SSO_E2E_TEST_GREP_VALUE}")
+fi
+if [ "${SSO_E2E_PROJECT_VALUE}" = "working" ]; then
+  native_script="test:working"
+  native_headed_script="test:working:headed"
+else
+  native_script="test"
+  native_headed_script="test:headed"
 fi
 
 case "${PLATFORM_PLAYWRIGHT_MODE}" in
@@ -315,7 +334,7 @@ case "${PLATFORM_PLAYWRIGHT_MODE}" in
     fi
     ;;
   docker)
-    run_playwright_in_docker "$(playwright_core_version)" "${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" ${test_args[@]+"${test_args[@]}"}
+    run_playwright_in_docker "$(playwright_core_version)" "${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" ${docker_test_args[@]+"${docker_test_args[@]}"}
     exit 0
     ;;
   *)
@@ -336,7 +355,7 @@ if [ "${HEADED:-0}" = "1" ]; then
   SSO_E2E_HOST_RESOLVER_RULES="${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" \
   SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET="${SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET_VALUE}" \
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
-  bun run test:headed -- ${test_args[@]+"${test_args[@]}"}
+  bun run "${native_headed_script}" -- ${native_test_args[@]+"${native_test_args[@]}"}
 else
   SSO_E2E_ENABLE_HEADLAMP="${SSO_E2E_ENABLE_HEADLAMP}" \
   SSO_E2E_ENABLE_VICTORIA_LOGS="${SSO_E2E_ENABLE_VICTORIA_LOGS}" \
@@ -349,5 +368,5 @@ else
   SSO_E2E_HOST_RESOLVER_RULES="${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" \
   SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET="${SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET_VALUE}" \
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
-  bun run test -- ${test_args[@]+"${test_args[@]}"}
+  bun run "${native_script}" -- ${native_test_args[@]+"${native_test_args[@]}"}
 fi

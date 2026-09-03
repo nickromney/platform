@@ -35,7 +35,10 @@ deployed:
 
 A cluster is "working" when `check-sso-e2e` passes, not when `check-health`
 does. Health checks remain useful for diagnosing *why* something is broken; they
-do not establish that anything serves.
+do not establish that anything serves. `check-sso-e2e` is still the apply-path
+bar. `check-sso-working` is the optional second suite that follows every enabled
+app and requires real data (a Hubble service map, listed Gitea repos, Argo
+applications, and so on) rather than login plus HTTP 200.
 
 Every E2E target must be gated on the toggle that decides whether its backend
 exists, following the `SSO_E2E_ENABLE_*` pattern already in the suite: derived

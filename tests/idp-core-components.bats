@@ -689,7 +689,7 @@ PY
   realm_tf="${REPO_ROOT}/terraform/kubernetes/sso.tf"
   reconcile_script="${REPO_ROOT}/terraform/kubernetes/scripts/reconcile-keycloak-realm.sh"
   launchpad="${REPO_ROOT}/terraform/kubernetes/config/platform-launchpad.apps.json"
-  e2e="${REPO_ROOT}/tests/kubernetes/sso/tests/sso-smoke.spec.ts"
+  e2e="${REPO_ROOT}/tests/kubernetes/sso/lib/harness.ts"
 
   run rg -n 'resource "kubernetes_secret_v1" "keycloak_bootstrap_admin"' "${realm_tf}"
   [ "${status}" -eq 0 ]

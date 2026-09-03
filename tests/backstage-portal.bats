@@ -125,7 +125,7 @@ gitops_tf = (repo_root / "terraform/kubernetes/gitops.tf").read_text(encoding="u
 sync_script = (repo_root / "terraform/kubernetes/scripts/sync-gitea-policies.sh").read_text(encoding="utf-8")
 kind_makefile = (repo_root / "kubernetes/kind/Makefile").read_text(encoding="utf-8")
 sso_run = (repo_root / "tests/kubernetes/sso/run.sh").read_text(encoding="utf-8")
-sso_spec = (repo_root / "tests/kubernetes/sso/tests/sso-smoke.spec.ts").read_text(encoding="utf-8")
+sso_spec = (repo_root / "tests/kubernetes/sso/lib/harness.ts").read_text(encoding="utf-8")
 build_script = (repo_root / "kubernetes/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
 
 assert 'variable "enable_backstage"' in variables_tf

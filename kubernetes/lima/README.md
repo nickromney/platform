@@ -34,6 +34,7 @@ Useful follow-ups:
 ```bash
 make -C kubernetes/lima 900 check-health DRY_RUN=1
 make -C kubernetes/lima check-sso-e2e
+make -C kubernetes/lima check-sso-working
 make -C kubernetes/lima exercise-k3s-oidc-recovery OIDC_RECOVERY_FORMAT=json
 make -C kubernetes/lima status
 make -C kubernetes/lima reset AUTO_APPROVE=1

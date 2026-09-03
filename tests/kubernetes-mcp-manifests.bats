@@ -423,7 +423,9 @@ from pathlib import Path
 
 repo_root = Path(os.environ["REPO_ROOT"])
 sso_run = (repo_root / "tests/kubernetes/sso/run.sh").read_text(encoding="utf-8")
-sso_spec = (repo_root / "tests/kubernetes/sso/tests/sso-smoke.spec.ts").read_text(encoding="utf-8")
+sso_spec = (repo_root / "tests/kubernetes/sso/lib/harness.ts").read_text(encoding="utf-8") + "\n" + (
+    repo_root / "tests/kubernetes/sso/tests/sso-smoke.spec.ts"
+).read_text(encoding="utf-8")
 
 assert "SSO_E2E_ENABLE_MCP" in sso_run, "runner must expose an MCP feature toggle"
 assert "SSO_E2E_TEST_GREP" in sso_run, "runner must allow focused MCP E2E execution"

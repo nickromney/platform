@@ -6,7 +6,7 @@ setup() {
 }
 
 @test "local Kubernetes variants share the stage-first read-only helper surface" {
-  expected="check-health check-security check-rbac check-gateway-urls show-urls check-sso check-sso-e2e"
+  expected="check-health check-security check-rbac check-gateway-urls show-urls check-sso check-sso-e2e check-sso-working"
 
   for variant in kind lima; do
     run bash -c 'make -pn -C "$1" __noop__ 2>/dev/null | awk -F " := " '"'"'/^VALID_STAGE_HELPERS :=/{ print $2; exit }'"'" \

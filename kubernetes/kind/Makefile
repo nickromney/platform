@@ -141,7 +141,7 @@ VALID_STAGE_HELPERS := $(KUBERNETES_STAGE_READONLY_HELPERS)
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state state-snapshot state-restore check-stage-monotonicity check-docker-daemon check-memory check-kind-state ensure-kind-running ensure-node-host-alias check-node-host-alias check-policy-drift install-host-alias-timer uninstall-host-alias-timer check-kubeconfig check-kind-host-ports check-lima-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status dhi-creds-offline docker-health docker-prune-estimate docker-safe-clean memory-report stop-kind stop start-kind start prereqs playwright-install image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state state-snapshot state-restore check-stage-monotonicity check-docker-daemon check-memory check-kind-state ensure-kind-running ensure-node-host-alias check-node-host-alias check-policy-drift install-host-alias-timer uninstall-host-alias-timer check-kubeconfig check-kind-host-ports check-lima-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e check-sso-working exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status dhi-creds-offline docker-health docker-prune-estimate docker-safe-clean memory-report stop-kind stop start-kind start prereqs playwright-install image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 MAKE_UNKNOWN_GOAL_GUARD_DEFER_GOALS := $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
@@ -280,6 +280,7 @@ help:
 	@echo "  make"
 	@echo "  make check-sso"
 	@echo "  make check-sso-e2e                            Docker-backed browser SSO end-to-end app checks (Playwright)"
+	@echo "  make check-sso-working                        Deeper browser suite: every app must show real data, not just login"
 	@echo "  make exercise-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=nginx-rollout]"
 	@echo "  make check-stage-monotonicity"
 	@echo "  make check-version [CHECK_VERSION_FORMAT=text|json] [CHECK_VERSION_INCLUDE_CANARY=1] [CHECK_VERSION_INCLUDE_ALPHA=1] [CHECK_VERSION_INCLUDE_PRERELEASE=1]"
@@ -1003,6 +1004,12 @@ check-sso-e2e: workflow-validate-stage
 	)"; \
 	eval "$$sso_env"; \
 	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" SSO_E2E_ENABLE_BACKSTAGE="$${SSO_E2E_ENABLE_BACKSTAGE}" STAGE_TFVARS="$${STAGE_TFVARS}" STAGE_TFVARS_FILES="$${STAGE_TFVARS_FILES}" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh" $(READONLY_MODE_FLAG)
+
+.PHONY: check-sso-working
+check-sso-working: workflow-validate-stage
+	@$(MAKE) ensure-kind-kubeconfig >/dev/null
+	@$(MAKE) assert-kind-active >/dev/null
+	@$(MAKE) check-sso-e2e SSO_E2E_PROJECT=working
 
 .PHONY: exercise-oidc-recovery
 exercise-oidc-recovery:

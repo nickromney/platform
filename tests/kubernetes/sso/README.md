@@ -6,6 +6,28 @@ for the endpoints that support it.
 They target the shared `*.127.0.0.1.sslip.io` endpoints, so they work against the Kind or Lima platform stacks.
 The operator-facing HTTPS origin is `:443` on all three targets. Lima still uses `:8443` for its raw local forwarder behind the Docker proxy, but the browser tests should hit the shared `https://*.127.0.0.1.sslip.io/` surface.
 By default they now perform the deeper app actions. Set `SSO_E2E_VERIFY_APP_ACTIONS=0` only when you explicitly want login-only coverage.
+
+`check-sso-e2e` is the apply-path smoke suite (`SSO_E2E_PROJECT=smoke`). It proves
+login and the existing post-login actions. That is not enough for surfaces that
+can return HTTP 200 while still being empty. Hubble UI is the example: oauth2
+login succeeds and the namespace query string is set, but the page can still
+say `No data found to render a service map`. Cilium Gateway ingress is
+`reserved:host`, which Hubble UI hides, so a map only appears once in-namespace
+pod-to-pod traffic exists.
+
+The second suite is `check-sso-working` (`SSO_E2E_PROJECT=working`). It follows
+every enabled target and requires a working contract: Hubble must render a
+service map after generating UAT traffic, Gitea must list repositories, Argo CD
+must show applications, APIM must show routes, Grafana must return dashboards,
+and so on. A new SSO target without a working contract fails the suite at load
+time. This suite is not part of `900 apply`; run it when you want the stronger
+"is it actually working" bar.
+
+```bash
+make -C kubernetes/kind check-sso-working
+SSO_E2E_TEST_GREP="hubble-admin: is working" make -C kubernetes/kind check-sso-working
+```
+
 When `enable_victoria_logs=true` in the active stage tfvars, the Grafana smoke path also verifies the `victorialogs` datasource/plugin and the `platform-logs` dashboard.
 The developer portal smoke path signs in through oauth2-proxy, verifies Backstage renders the software catalog without the Guest sign-in flow, and checks browser API traffic does not target localhost.
 The Portal API smoke path is also browser-authenticated through SSO and verifies `/api/v1/runtime` and `/api/v1/catalog/apps` return JSON after login.
@@ -47,6 +69,7 @@ Required local tooling:
 
 ```bash
 bun run test
+bun run test:working
 ```
 
 Headed mode:
