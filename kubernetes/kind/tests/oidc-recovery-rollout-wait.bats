@@ -139,30 +139,13 @@ EOF
   chmod +x "${STUB_DIR}/kubectl"
 }
 
-write_facts() {
-  printf '{"cilium_gateway_api": %s}\n' "$1" >"${BATS_TEST_TMPDIR}/operator-facts.json"
-}
-
 run_gateway_ip() {
   run env "PATH=${STUB_DIR}:${PATH}" "STUB_STATE_DIR=${BATS_TEST_TMPDIR}" \
-    "OPERATOR_FACTS_FILE=${BATS_TEST_TMPDIR}/operator-facts.json" \
     bash -c "source '${LIB}'; $1"
 }
 
-@test "the NGINX path resolves the gateway to the internal Service clusterIP" {
+@test "the gateway resolves to the node running the host-network listener" {
   write_gateway_ip_stub "10.96.72.111" "172.18.0.3"
-  write_facts false
-
-  run_gateway_ip "resolve_gateway_ingress_ip kind-local-control-plane"
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"10.96.72.111"* ]]
-  [[ "${output}" != *"172.18.0.3"* ]]
-}
-
-@test "the cilium path resolves the gateway to the node running the host-network listener" {
-  write_gateway_ip_stub "10.96.72.111" "172.18.0.3"
-  write_facts true
 
   run_gateway_ip "resolve_gateway_ingress_ip kind-local-control-plane"
 
@@ -171,26 +154,4 @@ run_gateway_ip() {
   # endpoints -- taking it is the bug, so it must not be what comes back.
   [[ "${output}" == *"172.18.0.3"* ]]
   [[ "${output}" != *"10.96.72.111"* ]]
-}
-
-@test "a missing operator facts file falls back to the NGINX path" {
-  write_gateway_ip_stub "10.96.72.111" "172.18.0.3"
-  rm -f "${BATS_TEST_TMPDIR}/operator-facts.json"
-
-  run_gateway_ip "resolve_gateway_ingress_ip kind-local-control-plane"
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"10.96.72.111"* ]]
-}
-
-@test "cilium_gateway_api_enabled reads the operator facts contract" {
-  write_gateway_ip_stub "10.96.72.111" "172.18.0.3"
-
-  write_facts true
-  run_gateway_ip "cilium_gateway_api_enabled"
-  [ "${status}" -eq 0 ]
-
-  write_facts false
-  run_gateway_ip "cilium_gateway_api_enabled"
-  [ "${status}" -ne 0 ]
 }

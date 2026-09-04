@@ -172,9 +172,6 @@ print_debug_context() {
   echo "Pods in platform-gateway:"
   kubectl -n platform-gateway get pods -o wide --show-labels || true
   echo ""
-  echo "Pods in nginx-gateway:"
-  kubectl -n nginx-gateway get pods -o wide --show-labels || true
-  echo ""
   echo "Pods labeled for gateway-name=platform-gateway (all namespaces):"
   kubectl get pods -A -l gateway.networking.k8s.io/gateway-name=platform-gateway -o wide --show-labels || true
   echo ""
@@ -471,58 +468,40 @@ kubectl get nodes >/dev/null 2>&1 || fail "kubectl cannot reach the cluster"
 ok "kubectl can reach the cluster"
 
 echo ""
-if [[ "${CILIUM_GATEWAY_API}" == "true" ]]; then
-  # Cilium has no gateway deployment: Envoy runs inside the cilium-agent
-  # DaemonSet, so the GatewayClass is the thing that says the controller is live.
-  echo "Gateway controller (cilium):"
-  gwc_accepted=$(kubectl get gatewayclass cilium -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}' 2>/dev/null || true)
-  if [[ "${gwc_accepted}" == "True" ]]; then
-    ok "cilium GatewayClass Accepted=True"
-  else
-    fail_soft "cilium GatewayClass Accepted=$(reported_or_not "${gwc_accepted}")"
-  fi
-
-  if [[ "${ADMIN_ROUTE_ALLOWLIST_ENABLED}" == "1" ]]; then
-    # The policy attaches to Cilium's reserved:ingress endpoint, where the
-    # original client CIDR still exists. Backends only see reserved:ingress, so
-    # checking a backend policy here would prove nothing about the allowlist.
-    allowlist_selector=$(kubectl get ccnp cilium-gateway-admin-allowlist -o jsonpath='{.spec.endpointSelector.matchExpressions[?(@.key=="reserved:ingress")].operator}' 2>/dev/null || true)
-    if [[ "${allowlist_selector}" == "Exists" ]]; then
-      ok "Cilium admin allowlist selects reserved:ingress"
-    else
-      fail_soft "Cilium admin allowlist policy is missing or does not select reserved:ingress"
-    fi
-
-    allowlist_cidrs=$(kubectl get ccnp cilium-gateway-admin-allowlist -o jsonpath='{.spec.ingress[0].fromCIDRSet[*].cidr}' 2>/dev/null || true)
-    missing_cidrs=()
-    while IFS= read -r configured_cidr; do
-      [[ -z "${configured_cidr}" ]] && continue
-      if [[ " ${allowlist_cidrs} " != *" ${configured_cidr} "* ]]; then
-        missing_cidrs+=("${configured_cidr}")
-      fi
-    done < <(tfvar_list_entries "" admin_route_allowlist_cidrs)
-    if [[ "${#missing_cidrs[@]}" -eq 0 ]]; then
-      ok "Cilium admin allowlist contains every configured CIDR"
-    else
-      fail_soft "Cilium admin allowlist is missing configured CIDR(s): ${missing_cidrs[*]}"
-    fi
-  fi
+# Cilium has no gateway deployment: Envoy runs inside the cilium-agent
+# DaemonSet, so the GatewayClass is the thing that says the controller is live.
+echo "Gateway controller (cilium):"
+gwc_accepted=$(kubectl get gatewayclass cilium -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}' 2>/dev/null || true)
+if [[ "${gwc_accepted}" == "True" ]]; then
+  ok "cilium GatewayClass Accepted=True"
 else
-  echo "Gateway controller (nginx-gateway):"
+  fail_soft "cilium GatewayClass Accepted=$(reported_or_not "${gwc_accepted}")"
 fi
 
-if [[ "${CILIUM_GATEWAY_API}" != "true" ]]; then
-if kubectl -n nginx-gateway get deploy nginx-gateway >/dev/null 2>&1; then
-  desired=$(kubectl -n nginx-gateway get deploy nginx-gateway -o jsonpath='{.spec.replicas}' 2>/dev/null || true)
-  ready=$(kubectl -n nginx-gateway get deploy nginx-gateway -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)
-  if [[ -n "${ready}" && -n "${desired}" && "${ready}" == "${desired}" ]]; then
-    ok "nginx-gateway ready (${ready}/${desired})"
+if [[ "${ADMIN_ROUTE_ALLOWLIST_ENABLED}" == "1" ]]; then
+  # The policy attaches to Cilium's reserved:ingress endpoint, where the
+  # original client CIDR still exists. Backends only see reserved:ingress, so
+  # checking a backend policy here would prove nothing about the allowlist.
+  allowlist_selector=$(kubectl get ccnp cilium-gateway-admin-allowlist -o jsonpath='{.spec.endpointSelector.matchExpressions[?(@.key=="reserved:ingress")].operator}' 2>/dev/null || true)
+  if [[ "${allowlist_selector}" == "Exists" ]]; then
+    ok "Cilium admin allowlist selects reserved:ingress"
   else
-    warn "nginx-gateway not fully ready (ready=${ready:-0} desired=$(reported_or_not "${desired}"))"
+    fail_soft "Cilium admin allowlist policy is missing or does not select reserved:ingress"
   fi
-else
-  fail_soft "nginx-gateway deployment missing in namespace nginx-gateway"
-fi
+
+  allowlist_cidrs=$(kubectl get ccnp cilium-gateway-admin-allowlist -o jsonpath='{.spec.ingress[0].fromCIDRSet[*].cidr}' 2>/dev/null || true)
+  missing_cidrs=()
+  while IFS= read -r configured_cidr; do
+    [[ -z "${configured_cidr}" ]] && continue
+    if [[ " ${allowlist_cidrs} " != *" ${configured_cidr} "* ]]; then
+      missing_cidrs+=("${configured_cidr}")
+    fi
+  done < <(tfvar_list_entries "" admin_route_allowlist_cidrs)
+  if [[ "${#missing_cidrs[@]}" -eq 0 ]]; then
+    ok "Cilium admin allowlist contains every configured CIDR"
+  else
+    fail_soft "Cilium admin allowlist is missing configured CIDR(s): ${missing_cidrs[*]}"
+  fi
 fi
 
 echo ""
@@ -557,30 +536,18 @@ if kubectl -n platform-gateway get svc ${PLATFORM_GATEWAY_SERVICE} >/dev/null 2>
   else
     fail_soft "NodePort not found on service ${PLATFORM_GATEWAY_SERVICE}"
   fi
-  if [[ "${CILIUM_GATEWAY_API}" == "true" ]]; then
-    # Cilium's gateway Service has no selector and no Endpoints object at all --
-    # the listener is Envoy inside cilium-agent, not a pod. It publishes a
-    # sentinel EndpointSlice (192.192.192.192:9999) purely so the Service looks
-    # backed, so counting pod endpoints here would always fail. The Programmed
-    # condition checked above is the real readiness signal in this mode.
-    slice_count=$(kubectl -n platform-gateway get endpointslices -l "kubernetes.io/service-name=${PLATFORM_GATEWAY_SERVICE}" -o name 2>/dev/null | wc -l | tr -d ' ')
-    if [[ "${slice_count:-0}" -gt 0 ]]; then
-      ok "Cilium gateway Service present (host-network Envoy; no pod endpoints by design)"
-    else
-      fail_soft "No EndpointSlice for service ${PLATFORM_GATEWAY_SERVICE}"
-      if [[ "${EXTENDED}" -eq 1 ]]; then
-        print_debug_context
-      fi
-    fi
+  # Cilium's gateway Service has no selector and no Endpoints object at all --
+  # the listener is Envoy inside cilium-agent, not a pod. It publishes a
+  # sentinel EndpointSlice (192.192.192.192:9999) purely so the Service looks
+  # backed, so counting pod endpoints here would always fail. The Programmed
+  # condition checked above is the real readiness signal in this mode.
+  slice_count=$(kubectl -n platform-gateway get endpointslices -l "kubernetes.io/service-name=${PLATFORM_GATEWAY_SERVICE}" -o name 2>/dev/null | wc -l | tr -d ' ')
+  if [[ "${slice_count:-0}" -gt 0 ]]; then
+    ok "Cilium gateway Service present (host-network Envoy; no pod endpoints by design)"
   else
-    endpoints=$(kubectl -n platform-gateway get endpoints ${PLATFORM_GATEWAY_SERVICE} -o jsonpath='{range .subsets[*].addresses[*]}{.ip}{" "}{end}' 2>/dev/null || true)
-    if [[ -n "${endpoints}" ]]; then
-      ok "Endpoints: ${endpoints}"
-    else
-      fail_soft "No endpoints for service ${PLATFORM_GATEWAY_SERVICE}"
-      if [[ "${EXTENDED}" -eq 1 ]]; then
-        print_debug_context
-      fi
+    fail_soft "No EndpointSlice for service ${PLATFORM_GATEWAY_SERVICE}"
+    if [[ "${EXTENDED}" -eq 1 ]]; then
+      print_debug_context
     fi
   fi
 else
@@ -701,8 +668,7 @@ echo ""
 #
 # Measured, those defaults match what the NGINX config asked for. But a default
 # is not an enforcement: a Cilium or Envoy bump could move it with nothing to
-# notice. So assert the outcome rather than the setting, which also covers the
-# NGINX path for free.
+# notice. So assert the outcome rather than the setting.
 probe_tls_posture() {
   local connect_host probe_sni proto cipher
   local -a weak_ciphers=(RC4-SHA DES-CBC3-SHA AES128-SHA NULL-SHA)

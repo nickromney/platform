@@ -69,7 +69,6 @@ for i in "${!TFVARS_FILES[@]}"; do
 done
 
 operator_facts_load
-CILIUM_GATEWAY_API="$(operator_facts_bool cilium_gateway_api false 2>/dev/null || echo false)"
 
 admin_host() {
   local app="$1"
@@ -242,28 +241,6 @@ load_approved_image_prefixes() {
   done < <(approved_image_prefixes_from_policy)
 }
 
-expected_platform_gateway_tls_directives() {
-  awk '
-    /^[[:space:]]*value: \|$/ { in_value=1; next }
-    in_value {
-      if ($0 ~ /^  [^ ]/) {
-        exit
-      }
-      line=$0
-      sub(/^        /, "", line)
-      if (line ~ /^[[:space:]]*$/ || line ~ /^[[:space:]]*#/) {
-        next
-      }
-      print line
-    }
-  ' "${STACK_DIR}/apps/platform-gateway/tls-hardening.yaml"
-}
-
-live_platform_gateway_nginx_conf() {
-  kubectl -n platform-gateway exec deploy/platform-gateway-nginx -- \
-    sh -c 'find /etc/nginx -type f ! -path "*/secrets/*" -exec cat {} + 2>/dev/null' 2>/dev/null || true
-}
-
 platform_gateway_headers() {
   local probe_port port_suffix=""
   probe_port="$(gateway_https_probe_port)"
@@ -277,47 +254,21 @@ platform_gateway_headers_ready() {
     echo "${headers}" | grep -qi "x-content-type-options.*nosniff"
 }
 
-platform_gateway_config_ready() {
-  local nginx_conf="$1"
-  local directive=""
-
-  [[ -n "${nginx_conf}" ]] || return 1
-
-  while IFS= read -r directive; do
-    [[ -z "${directive}" ]] && continue
-    printf '%s\n' "${nginx_conf}" | grep -Fq -- "${directive}" || return 1
-  done < <(expected_platform_gateway_tls_directives)
-
-  return 0
-}
-
 PLATFORM_GATEWAY_HEADERS=""
-PLATFORM_GATEWAY_NGINX_CONF=""
 
 wait_for_platform_gateway_hardening() {
   local deadline=$((SECONDS + 60))
 
   while (( SECONDS < deadline )); do
     PLATFORM_GATEWAY_HEADERS="$(platform_gateway_headers)"
-    if [[ "${CILIUM_GATEWAY_API}" == "true" ]]; then
-      if platform_gateway_headers_ready "${PLATFORM_GATEWAY_HEADERS}"; then
-        return 0
-      fi
-    else
-      PLATFORM_GATEWAY_NGINX_CONF="$(live_platform_gateway_nginx_conf)"
-      if platform_gateway_headers_ready "${PLATFORM_GATEWAY_HEADERS}" &&
-        platform_gateway_config_ready "${PLATFORM_GATEWAY_NGINX_CONF}"; then
-        return 0
-      fi
+    if platform_gateway_headers_ready "${PLATFORM_GATEWAY_HEADERS}"; then
+      return 0
     fi
 
     sleep 3
   done
 
   PLATFORM_GATEWAY_HEADERS="$(platform_gateway_headers)"
-  if [[ "${CILIUM_GATEWAY_API}" != "true" ]]; then
-    PLATFORM_GATEWAY_NGINX_CONF="$(live_platform_gateway_nginx_conf)"
-  fi
   return 1
 }
 
@@ -394,25 +345,8 @@ if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
     fi
 
     # NGF used SnippetsFilter to reject TLS 1.2. Cilium Gateway has no
-    # equivalent, so TLS 1.2 stays available there (TLS 1.3 still negotiates).
-    if [[ "${CILIUM_GATEWAY_API}" == "true" ]]; then
-      skip "TLS 1.2 rejection is NGF-only; Cilium Gateway keeps 1.2 available"
-    else
-    tls12_info=$(echo | openssl s_client \
-      -connect "127.0.0.1:${probe_port}" \
-      -servername "$(admin_host argocd)" \
-      -tls1_2 2>&1 || true)
-
-    if echo "${tls12_info}" | grep -qE "alert protocol version|no protocols available|handshake failure|wrong version"; then
-      ok "TLS 1.2 correctly rejected by platform gateway (negative test)"
-    else
-      if echo "${tls12_info}" | grep -q "TLSv1.2"; then
-        fail_soft "TLS 1.2 still accepted by platform gateway (should be TLS 1.3 only)"
-      else
-        warn "TLS 1.2 test inconclusive (gateway may not be reachable)"
-      fi
-    fi
-    fi
+    # equivalent, so TLS 1.2 stays available (TLS 1.3 still negotiates).
+    skip "TLS 1.2 rejection was NGF-only; Cilium Gateway keeps 1.2 available"
   else
     skip "openssl not found; skipping black-box TLS probes"
   fi
@@ -452,46 +386,10 @@ if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
 
   echo ""
   echo "--- Platform gateway config integrity ---"
-  if [[ "${CILIUM_GATEWAY_API}" == "true" ]]; then
-    skip "NGINX Gateway Fabric config checks skipped (Cilium owns Gateway API; NGF is a migration reference)"
-  else
-  controller_args=$(kubectl -n nginx-gateway get deploy nginx-gateway \
-    -o go-template='{{range (index .spec.template.spec.containers 0).args}}{{println .}}{{end}}' 2>/dev/null || true)
-  if printf '%s\n' "${controller_args}" | grep -Fxq -- "--snippets"; then
-    ok "NGINX Gateway controller has snippets enabled"
-  else
-    fail_soft "NGINX Gateway controller is missing --snippets, so SnippetsPolicy will not take effect"
-  fi
-
-  clusterrole_yaml=$(kubectl get clusterrole nginx-gateway -o yaml 2>/dev/null || true)
-  if printf '%s\n' "${clusterrole_yaml}" | grep -Fq "snippetspolicies"; then
-    ok "NGINX Gateway ClusterRole allows SnippetsPolicy watch access"
-  else
-    fail_soft "NGINX Gateway ClusterRole is missing SnippetsPolicy RBAC"
-  fi
-  if printf '%s\n' "${clusterrole_yaml}" | grep -Fq "snippetsfilters"; then
-    ok "NGINX Gateway ClusterRole allows SnippetsFilter watch access"
-  else
-    fail_soft "NGINX Gateway ClusterRole is missing SnippetsFilter RBAC"
-  fi
-
-  nginx_conf="${PLATFORM_GATEWAY_NGINX_CONF}"
-  if [[ -z "${nginx_conf}" ]]; then
-    nginx_conf=$(live_platform_gateway_nginx_conf)
-  fi
-  if [[ -z "${nginx_conf}" ]]; then
-    fail_soft "Could not read live platform gateway NGINX config"
-  else
-    while IFS= read -r directive; do
-      [[ -z "${directive}" ]] && continue
-      if printf '%s\n' "${nginx_conf}" | grep -Fq -- "${directive}"; then
-        ok "Rendered NGINX config includes: ${directive}"
-      else
-        fail_soft "Rendered NGINX config missing expected directive: ${directive}"
-      fi
-    done < <(expected_platform_gateway_tls_directives)
-  fi
-  fi
+  # Cilium terminates Gateway API traffic in its own Envoy, which has no
+  # rendered config to read back the way NGINX Gateway Fabric did. The security
+  # headers checked above are the observable contract.
+  skip "no gateway config to inspect (Cilium terminates in Envoy)"
 else
   skip "Gateway TLS checks skipped (enable_gateway_tls=${EXPECT_GATEWAY_TLS:-unset})"
 fi

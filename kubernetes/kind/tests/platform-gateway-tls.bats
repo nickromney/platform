@@ -134,18 +134,20 @@ PY
   fi
 }
 
-@test "check-security verifies rendered platform gateway nginx directives" {
+# The NGINX directive checks went with NGINX Gateway Fabric: they read
+# apps/platform-gateway/tls-hardening.yaml, a Gateway-scoped SnippetsPolicy the
+# cutover deleted, and exec'd into a platform-gateway-nginx Deployment that no
+# longer exists. Cilium terminates in its own Envoy and has no rendered config
+# to read back.
+@test "check-security reads its inputs from tfvars and the image registry policy" {
   script="${REPO_ROOT}/terraform/kubernetes/scripts/check-security.sh"
 
   grep -Fq "TFVARS_FILES=()" "${script}"
   grep -Fq 'TFVARS_FILES+=("${2:-}")' "${script}"
   grep -Fq "approved_image_prefixes_from_policy" "${script}"
   grep -Fq "restrict-image-registries.yaml" "${script}"
-  grep -Fq "expected_platform_gateway_tls_directives" "${script}"
-  grep -Fq "live_platform_gateway_nginx_conf" "${script}"
-  grep -Fq "Rendered NGINX config includes:" "${script}"
-  grep -Fq "Rendered NGINX config missing expected directive:" "${script}"
   grep -Fq "app.kubernetes.io/name=sentiment-api" "${script}"
+  ! grep -Fq "live_platform_gateway_nginx_conf" "${script}"
 }
 
 @test "image registry policy no longer blanket-trusts Docker Hub" {
@@ -159,7 +161,7 @@ PY
   ! grep -Fq 'docker.io/*"' "${policy}"
 }
 
-@test "oidc post-restart recovery script performs a controlled nginx gateway restart after kube-apiserver restart" {
+@test "oidc post-restart recovery script performs a controlled gateway restart after kube-apiserver restart" {
   script="${REPO_ROOT}/terraform/kubernetes/scripts/recover-kind-cluster-after-apiserver-restart.sh"
   helper="${REPO_ROOT}/terraform/kubernetes/scripts/kind-apiserver-oidc-lib.sh"
 
@@ -171,10 +173,12 @@ PY
   grep -Fq "restart_deployment()" "${helper}"
   grep -Fq 'rollout restart "deploy/${deploy_name}"' "${helper}"
   grep -Fq 'retry_webhook_fail 12 kubectl -n "${namespace}" rollout restart "deploy/${deploy_name}"' "${helper}"
-  grep -Fq 'restart_deployment "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}"' "${script}"
+  # Cilium has no gateway control-plane Deployment and no gateway Service with
+  # endpoints. Recycling cilium-operator is what re-establishes the watch.
+  grep -Fq 'restart_deployment "${CILIUM_NAMESPACE}" "${CILIUM_OPERATOR_DEPLOY_NAME}"' "${script}"
   grep -Fq 'wait_for_deployment_rollout_with_early_recycle \' "${script}"
-  grep -Fq '"nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})"' "${script}"
-  grep -Fq 'wait_for_service_endpoints "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_SERVICE}" "${GATEWAY_DEPLOY_WAIT_SECONDS}"' "${script}"
+  grep -Fq '"cilium operator (${CILIUM_NAMESPACE}/${CILIUM_OPERATOR_DEPLOY_NAME})"' "${script}"
+  ! grep -Fq 'NGINX_GATEWAY_NAMESPACE' "${script}"
 }
 
 @test "oidc apiserver patch script stops at apiserver readiness and leaves recovery to explicit follow-up steps" {

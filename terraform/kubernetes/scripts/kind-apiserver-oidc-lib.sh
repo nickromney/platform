@@ -55,10 +55,6 @@ resolve_gateway_ingress_ip() {
 PLATFORM_GATEWAY_NAME="${PLATFORM_GATEWAY_NAME:-platform-gateway}"
 PLATFORM_GATEWAY_TLS_SECRET="${PLATFORM_GATEWAY_TLS_SECRET:-platform-gateway-tls}"
 
-# NGF is retired. This predicate remains temporarily because recovery helpers
-# share their Cilium implementation through this narrow seam.
-cilium_gateway_api_enabled() { return 0; }
-
 NGINX_GATEWAY_NAMESPACE="${NGINX_GATEWAY_NAMESPACE:-nginx-gateway}"
 NGINX_GATEWAY_DEPLOY_NAME="${NGINX_GATEWAY_DEPLOY_NAME:-nginx-gateway}"
 CILIUM_NAMESPACE="${CILIUM_NAMESPACE:-kube-system}"
@@ -345,33 +341,6 @@ restart_deployment() {
 
   ok "restarting ${description}"
   retry_webhook_fail 12 kubectl -n "${namespace}" rollout restart "deploy/${deploy_name}" >/dev/null
-}
-
-recycle_gateway_data_plane() {
-  local pod_names
-  local pod_name
-
-  pod_names="$(
-    kubectl -n "${PLATFORM_GATEWAY_NAMESPACE}" get pods \
-      -l "app.kubernetes.io/name=${GATEWAY_DEPLOY_NAME}" \
-      -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true
-  )"
-
-  if [[ -z "${pod_names}" ]]; then
-    warn "no pods found for ${PLATFORM_GATEWAY_NAMESPACE}/${GATEWAY_DEPLOY_NAME}; waiting for deployment rollout instead"
-  else
-    while IFS= read -r pod_name; do
-      [[ -n "${pod_name}" ]] || continue
-      warn "recycling gateway data-plane pod: ${PLATFORM_GATEWAY_NAMESPACE}/${pod_name}"
-      kubectl -n "${PLATFORM_GATEWAY_NAMESPACE}" delete pod "${pod_name}" --wait=false >/dev/null 2>&1 || true
-    done <<< "${pod_names}"
-  fi
-
-  wait_for_deployment_rollout \
-    "${PLATFORM_GATEWAY_NAMESPACE}" \
-    "${GATEWAY_DEPLOY_NAME}" \
-    "${GATEWAY_DEPLOY_WAIT_SECONDS}" \
-    "gateway data plane (${PLATFORM_GATEWAY_NAMESPACE}/${GATEWAY_DEPLOY_NAME})"
 }
 
 deployment_selector() {

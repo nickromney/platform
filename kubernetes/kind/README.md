@@ -347,7 +347,7 @@ flowchart LR
 
 | Stage | Intent | Main toggles |
 | --- | --- | --- |
-| `100` | Make the cluster available. | `worker_count=0`, `cilium_gateway_api=true`, `cilium_kube_proxy_replacement=true`, `cni_provider="none"`, `kind_disable_default_cni=true` |
+| `100` | Make the cluster available. | `worker_count=0`, `cilium_kube_proxy_replacement=true`, `cni_provider="none"`, `kind_disable_default_cni=true` |
 | `200` | Install Cilium as the CNI. | `cni_provider="cilium"` |
 | `300` | Add Hubble on top of Cilium. | `enable_hubble=true` |
 | `400` | Add Argo CD for GitOps. | `enable_argocd=true`, `argocd_applicationset_enabled=false`, `argocd_notifications_enabled=false` |
@@ -380,7 +380,7 @@ flowchart TB
 - `worker_count = 0` creates a single-node cluster. Terraform clears the control-plane `NoSchedule` taint for that topology with a kubeadm config patch, so workloads still schedule.
 - `worker_count = 1` creates a 2-node cluster: 1 control-plane node and 1 worker node. Use `KIND_WORKER_COUNT=1` when you explicitly want that shape.
 - `KIND_WORKER_COUNT` pins the worker count at the wrapper layer. `0` means 1 total node, `1` means 2 total nodes, `2` means 3 total nodes, and so on. Leave it unset to let the stage baseline decide. The `local-8gb` resource profile does not change node count.
-- `cilium_gateway_api = true` and `cilium_kube_proxy_replacement = true` are the kind ingress substrate. NGINX Gateway Fabric is not installed.
+- `cilium_kube_proxy_replacement = true` is the kind ingress substrate. Cilium owns Gateway API; NGINX Gateway Fabric is not installed.
 - `cni_provider = "none"` and `kind_disable_default_cni = true` mean there is no working pod network yet.
 - `kubeconfig_context = ""` leaves bootstrap free to create the cluster before the final context name exists.
 
