@@ -12,14 +12,14 @@ setup() {
   ! rg -q "gateway\.nginx\.org|NginxProxy|Snippets" "${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway"
 }
 
-@test "platform gateway routes declare core Gateway API security headers" {
+@test "platform gateway route rendering declares core Gateway API security headers" {
   gateway_manifest="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway/gateway.yaml"
-  routes="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes"
+  rewrite_script="${REPO_ROOT}/terraform/kubernetes/scripts/rewrite-gateway-route-filters.pl"
 
   grep -Fq "gatewayClassName: cilium" "${gateway_manifest}"
-  rg -q 'type: ResponseHeaderModifier' "${routes}"
-  rg -q 'name: Strict-Transport-Security' "${routes}"
-  rg -q 'name: X-Content-Type-Options' "${routes}"
+  rg -q 'type: ResponseHeaderModifier' "${rewrite_script}"
+  rg -q 'name: Strict-Transport-Security' "${rewrite_script}"
+  rg -q 'name: X-Content-Type-Options' "${rewrite_script}"
 }
 
 @test "platform gateway certificate covers every declared gateway route hostname" {

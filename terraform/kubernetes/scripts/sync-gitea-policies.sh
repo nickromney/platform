@@ -2059,7 +2059,7 @@ render_gateway_routes_for_cilium() {
       # Keycloak admin needs same-origin framing for its browser storage check;
       # every other route keeps the gateway default of DENY.
       frame_options="DENY"
-      if grep -q "name: keycloak-admin" "${route_file}"; then
+      if grep -qE 'name: keycloak-admin|^  name: keycloak$' "${route_file}"; then
         frame_options="SAMEORIGIN"
       fi
 
