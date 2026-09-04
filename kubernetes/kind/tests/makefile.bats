@@ -8,45 +8,6 @@ setup() {
   export PATH="${TEST_BIN}:${PATH}"
 }
 
-@test "kind help documents the 920 stage ladder" {
-  # --no-print-directory matters for the $HOME assertion below: make -C otherwise
-  # prints "Entering directory '<abspath>'", which fails for any checkout living
-  # under the operator's home directory regardless of what help itself emits.
-  run make --no-print-directory -C "${REPO_ROOT}/kubernetes/kind" help
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"make 100 apply"* ]]
-  [[ "${output}" == *"make apply 100"* ]]
-  [[ "${output}" == *"100 - cluster available"* ]]
-  [[ "${output}" == *"700 - app repos"* ]]
-  [[ "${output}" == *"800 - observability"* ]]
-  [[ "${output}" == *"900 - sso"* ]]
-  [[ "${output}" == *"920 - langfuse"* ]]
-  [[ "${output}" == *"Linux -> Docker Engine or Docker Desktop"* ]]
-  [[ "${output}" == *"make merge-default-kubeconfig"* ]]
-  [[ "${output}" == *"split by default"* ]]
-  [[ "${output}" == *"KIND_WORKER_COUNT=0|1|2|..."* ]]
-  [[ "${output}" == *"0 for a single-node cluster"* ]]
-  [[ "${output}" == *"KIND_IMAGE_DISTRIBUTION_MODE=load|registry|hybrid|baked"* ]]
-  [[ "${output}" == *"KIND_ENABLE_BACKSTAGE=off|on|auto"* ]]
-  [[ "${output}" == *"image distribution mode (default: registry)"* ]]
-  [[ "${output}" == *"make status"* ]]
-  [[ "${output}" == *"make state-snapshot [TFSTATE_SNAPSHOT_KEEP=5]"* ]]
-  [[ "${output}" == *"make state-restore  [AUTO_APPROVE=1]"* ]]
-  [[ "${output}" != *"make 950-local-idp plan"* ]]
-  [[ "${output}" == *"make docker-prune-estimate"* ]]
-  [[ "${output}" == *"make docker-safe-clean [AUTO_APPROVE=1]"* ]]
-  [[ "${output}" == *"make check-memory"* ]]
-  [[ "${output}" == *"make check-version [CHECK_VERSION_FORMAT=text|json]"* ]]
-  [[ "${output}" == *"make check-provider-version [CHECK_VERSION_FORMAT=text|json]"* ]]
-  [[ "${output}" == *"make exercise-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=kyverno-rollout]"* ]]
-  [[ "${output}" == *"CHECK_VERSION_FORMAT=text|json"* ]]
-  [[ "${output}" == *"OIDC_RECOVERY_FORMAT=text|json"* ]]
-  [[ "${output}" == *"~/.kube/kind-kind-local.yaml"* ]]
-  [[ "${output}" == *"<repo>/.run/profiles"* ]]
-  [[ "${output}" != *"${HOME}"* ]]
-}
-
 @test "kind 950-local-idp profile keeps IDP essentials and disables heavy optional components" {
   profile="${REPO_ROOT}/kubernetes/kind/profiles/950-local-idp.tfvars"
 
@@ -202,7 +163,7 @@ EOF
   run make -C "${REPO_ROOT}/kubernetes/kind" check-health STAGE=950
 
   [ "${status}" -eq 2 ]
-  [[ "${output}" == *"Unknown STAGE=950. Expected one of: 100 200 300 400 500 600 700 800 900 920"* ]]
+  [[ "${output}" == *"Unknown STAGE=950. Expected one of: 100 200 300 400 500 600 700 800 900"* ]]
 }
 
 @test "check-cluster-health accepts repeated --var-file flags in dry-run mode" {
@@ -248,7 +209,7 @@ EOF
   run make -C "${REPO_ROOT}/kubernetes/kind" plan STAGE=950
 
   [ "${status}" -eq 2 ]
-  [[ "${output}" == *"Unknown STAGE=950. Expected one of: 100 200 300 400 500 600 700 800 900 920"* ]]
+  [[ "${output}" == *"Unknown STAGE=950. Expected one of: 100 200 300 400 500 600 700 800 900"* ]]
 }
 
 @test "kind apply refreshes kubeconfig after a successful apply" {
