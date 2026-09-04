@@ -1,51 +1,3 @@
-# NGINX Gateway Fabric is retained as a pre-Cilium-Gateway migration
-# reference. Kind stages enable cilium_gateway_api, which keeps this
-# Application at count 0. Do not restore it as an operator-selectable path.
-resource "kubectl_manifest" "argocd_app_nginx_gateway_fabric" {
-  count = var.enable_gateway_tls && var.enable_argocd && !var.enable_app_of_apps && !var.cilium_gateway_api ? 1 : 0
-
-  yaml_body = <<__YAML__
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: nginx-gateway-fabric
-  namespace: ${var.argocd_namespace}
-  annotations:
-    argocd.argoproj.io/sync-wave: "-4"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  destination:
-    namespace: nginx-gateway
-    server: https://kubernetes.default.svc
-  source:
-    repoURL: ${local.policies_repo_url_cluster}
-    targetRevision: main
-    path: apps/nginx-gateway-fabric
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-      - ServerSideApply=true
-      - SkipDryRunOnMissingResource=true
-__YAML__
-
-  wait              = true
-  validate_schema   = false
-  force_conflicts   = false
-  server_side_apply = false
-
-  depends_on = [
-    kubernetes_secret_v1.argocd_repo_policies,
-    null_resource.sync_gitea_policies_repo,
-    null_resource.argocd_repo_server_restart,
-    null_resource.wait_for_gateway_bootstrap_crds,
-  ]
-}
-
 resource "kubectl_manifest" "argocd_app_platform_gateway" {
   count = var.enable_gateway_tls && var.enable_argocd && !var.enable_app_of_apps ? 1 : 0
 
@@ -86,7 +38,7 @@ __YAML__
     kubernetes_secret_v1.argocd_repo_policies,
     null_resource.sync_gitea_policies_repo,
     null_resource.argocd_repo_server_restart,
-    kubectl_manifest.argocd_app_nginx_gateway_fabric,
+    null_resource.wait_for_gateway_bootstrap_crds,
   ]
 }
 

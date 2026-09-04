@@ -1,5 +1,4 @@
 resources:
-  - azure-auth-nginx-gateway-ingress.yaml
   - deny-cloud-metadata-egress.yaml
   - approved-egress-cidrs.yaml
   - application-baseline.yaml
@@ -28,5 +27,4 @@ resources:
   - sso-hardened.yaml
   - gitea-hardened.yaml
   - gitea-runner-hardened.yaml
-  - nginx-gateway-hardened.yaml
   - platform-gateway-hardened.yaml

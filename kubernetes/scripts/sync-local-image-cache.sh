@@ -79,6 +79,10 @@ mirror_remote_image() {
   local repo=""
   local tag=""
   local cache_ref=""
+  local push_log=""
+  local imagetools_log=""
+  local push_error=""
+  local imagetools_error=""
 
   IFS=$'\t' read -r repo tag < <(registry_cache_repo_and_tag "${source_ref}")
   cache_ref="${CACHE_PUSH_HOST}/${repo}:${tag}"
@@ -100,23 +104,35 @@ mirror_remote_image() {
     warn "could not tag ${source_ref} as ${cache_ref}"
     return 0
   fi
-  if docker push "${cache_ref}" >/dev/null 2>&1; then
+  push_log="$(mktemp)"
+  if docker push "${cache_ref}" >"${push_log}" 2>&1; then
+    rm -f "${push_log}"
     return 0
   fi
+  push_error="$(tr '\n' ' ' <"${push_log}" | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+  rm -f "${push_log}"
 
   # With the containerd image store a multi-arch reference stays an index
   # locally, and pushing a tag that points at one fails with "does not provide
   # any platform". Docker Desktop 29 also uses that store
   # (overlayfs / io.containerd.snapshotter.v1), so this is no longer Linux-only.
-  # Copy registry-to-registry instead, which handles indexes. stderr is still
-  # discarded here; when both paths fail the warn is unexplained. Tracked in
-  # https://github.com/nickromney/platform/issues/225 (cert-manager/jetstack
-  # images warn on kind 900 apply even after this fallback).
-  if docker buildx imagetools create --tag "${cache_ref}" "${source_ref}" >/dev/null 2>&1; then
+  # Copy registry-to-registry instead, which handles indexes. --prefer-index=false
+  # preserves the source descriptor instead of wrapping it in a fresh index;
+  # registry:2 accepts the resulting manifest for the cert-manager images on
+  # Docker Desktop's containerd image store.
+  imagetools_log="$(mktemp)"
+  if docker buildx imagetools create --prefer-index=false --tag "${cache_ref}" "${source_ref}" >"${imagetools_log}" 2>&1; then
+    rm -f "${imagetools_log}"
     return 0
   fi
+  imagetools_error="$(tr '\n' ' ' <"${imagetools_log}" | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+  rm -f "${imagetools_log}"
 
-  warn "could not push ${cache_ref}"
+  # This cache is an acceleration, not the source of truth: preserve the
+  # workload's normal upstream pull fallback, but make an uncacheable image
+  # diagnosable in one apply log. Do not suppress either error; the old warning
+  # hid whether the local store or the registry-to-registry copy had failed.
+  warn "could not cache ${cache_ref}; docker push: ${push_error:-no diagnostic}; imagetools: ${imagetools_error:-no diagnostic}"
 }
 
 image_stream() {

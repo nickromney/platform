@@ -20,10 +20,8 @@ spec:
         values:
           - authentication-proxy
   ingress:
-    - fromEndpoints:
-        - matchLabels:
-            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
-            "k8s:app.kubernetes.io/name": platform-gateway-nginx
+    - fromEntities:
+        - ingress
       toPorts:
         - ports:
             - port: "4180"

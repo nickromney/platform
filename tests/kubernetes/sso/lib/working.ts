@@ -136,11 +136,11 @@ async function authChatShellWorks(page: Page) {
   }
 }
 
-async function generateUatWorkloadTraffic(page: Page) {
+async function generateWorkloadTraffic(page: Page, hostname: string) {
   const sentiment = {
-    name: 'sentiment-uat',
-    url: platformUrl('sentiment.uat'),
-    segment: 'uat' as const,
+    name: hostname,
+    url: platformUrl(hostname),
+    segment: hostname.endsWith('.uat') ? ('uat' as const) : ('dev' as const),
     flow: 'oauth2-proxy' as const,
   }
   await gotoWithGatewayRetry(page, sentiment.url)
@@ -155,19 +155,19 @@ async function generateUatWorkloadTraffic(page: Page) {
     await completeOidcLogin(page, user.login, user.password)
     await page.waitForURL((u) => u.host === new URL(sentiment.url).host, { timeout: 60_000 })
   }
-  expect(await isOauth2ProxyForbiddenPage(page), `Could not open Sentiment UAT to generate Hubble traffic; url=${page.url()}`).toBe(false)
+  expect(await isOauth2ProxyForbiddenPage(page), `Could not open ${hostname} to generate Hubble traffic; url=${page.url()}`).toBe(false)
   await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => undefined)
 }
 
-export async function hubbleUatServiceMapWorks(page: Page, target: Target) {
-  await hubbleSelectNamespace(page, target.url, 'uat')
+async function hubbleNamespaceServiceMapWorks(page: Page, target: Target, namespace: 'dev' | 'uat', trafficHostname: string) {
+  await hubbleSelectNamespace(page, target.url, namespace)
   const trafficPage = await page.context().newPage()
   try {
     await expect
       .poll(
         async () => {
-          if (INCLUDE_SENTIMENT && INCLUDE_UAT_APPS) {
-            await generateUatWorkloadTraffic(trafficPage)
+          if (INCLUDE_SENTIMENT && (namespace === 'dev' || INCLUDE_UAT_APPS)) {
+            await generateWorkloadTraffic(trafficPage, trafficHostname)
           }
           if (await hubbleServiceMapHasRenderableData(page)) return 'map'
           const text = await bodyText(page)
@@ -175,7 +175,7 @@ export async function hubbleUatServiceMapWorks(page: Page, target: Target) {
         },
         {
           message:
-            'Hubble UI for namespace=uat still has no service map. Cilium Gateway traffic is reserved:host and hidden; in-namespace router/API hops should still appear after Sentiment UAT is loaded.',
+            `Hubble UI for namespace=${namespace} still has no service map. Cilium Gateway traffic is reserved:host and hidden; in-namespace router/API hops should still appear after ${trafficHostname} is loaded.`,
           timeout: 120_000,
         },
       )
@@ -184,6 +184,11 @@ export async function hubbleUatServiceMapWorks(page: Page, target: Target) {
     await trafficPage.close().catch(() => undefined)
   }
   await expect(page.locator('body')).not.toContainText(HUBBLE_EMPTY_SERVICE_MAP)
+}
+
+export async function hubbleUatServiceMapWorks(page: Page, target: Target) {
+  await hubbleNamespaceServiceMapWorks(page, target, 'uat', 'sentiment.uat')
+  await hubbleNamespaceServiceMapWorks(page, target, 'dev', 'sentiment.dev')
 }
 
 const WORKING_BY_NAME: Record<string, WorkingFn> = {

@@ -5,24 +5,21 @@ setup() {
   setup_repo_root
 }
 
-@test "nginx gateway controller enables snippet support for platform gateway hardening" {
-  manifest="${REPO_ROOT}/terraform/kubernetes/apps/nginx-gateway-fabric/deploy.yaml"
+@test "platform gateway is implemented by Cilium Gateway API" {
+  manifest="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway/gateway.yaml"
 
-  grep -Fq -- "--snippets" "${manifest}"
-  grep -Fq "snippetspolicies" "${manifest}"
-  grep -Fq "snippetsfilters" "${manifest}"
+  grep -Fq "gatewayClassName: cilium" "${manifest}"
+  ! rg -q "gateway\.nginx\.org|NginxProxy|Snippets" "${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway"
 }
 
-@test "platform gateway manifests declare compatible modern TLS and hardening directives" {
+@test "platform gateway routes declare core Gateway API security headers" {
   gateway_manifest="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway/gateway.yaml"
-  hardening_manifest="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway/tls-hardening.yaml"
+  routes="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes"
 
-  grep -Fq "nginx.org/ssl-protocols: TLSv1.2 TLSv1.3" "${gateway_manifest}"
-  grep -Fq 'nginx.org/ssl-prefer-server-ciphers: "off"' "${gateway_manifest}"
-  grep -Fq "ssl_conf_command Ciphersuites TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256;" "${hardening_manifest}"
-  grep -Fq "ssl_session_tickets off;" "${hardening_manifest}"
-  grep -Fq 'add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;' "${hardening_manifest}"
-  grep -Fq 'add_header X-Content-Type-Options "nosniff" always;' "${hardening_manifest}"
+  grep -Fq "gatewayClassName: cilium" "${gateway_manifest}"
+  rg -q 'type: ResponseHeaderModifier' "${routes}"
+  rg -q 'name: Strict-Transport-Security' "${routes}"
+  rg -q 'name: X-Content-Type-Options' "${routes}"
 }
 
 @test "platform gateway certificate covers every declared gateway route hostname" {

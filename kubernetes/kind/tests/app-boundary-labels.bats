@@ -51,9 +51,9 @@ setup() {
   apim_manifest="${REPO_ROOT}/terraform/kubernetes/apps/apim/all.yaml"
   observability_manifest="${REPO_ROOT}/terraform/kubernetes/apps/argocd-apps/80-observability.namespace.yaml"
   platform_gateway_manifest="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway/namespace.yaml"
+  platform_gateway_resource="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway/gateway.yaml"
   gateway_routes_manifest="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes/namespace.yaml"
   gateway_routes_sso_manifest="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes-sso/namespace.yaml"
-  nginx_gateway_manifest="${REPO_ROOT}/terraform/kubernetes/apps/nginx-gateway-fabric/deploy.yaml"
 
   grep -Fq '"platform.publiccloudexperiments.net/namespace-role" = "application"' "${dev_ns}"
   grep -Fq '"platform.publiccloudexperiments.net/environment"    = "dev"' "${dev_ns}"
@@ -79,7 +79,7 @@ setup() {
   grep -Fq '"platform.publiccloudexperiments.net/namespace-role": shared' "${platform_gateway_manifest}"
   grep -Fq '"platform.publiccloudexperiments.net/namespace-role": shared' "${gateway_routes_manifest}"
   grep -Fq '"platform.publiccloudexperiments.net/namespace-role": shared' "${gateway_routes_sso_manifest}"
-  grep -Fq '"platform.publiccloudexperiments.net/namespace-role": platform' "${nginx_gateway_manifest}"
+  grep -Fq 'gatewayClassName: cilium' "${platform_gateway_resource}"
 }
 
 @test "cilium render keeps external egress on app backends and APIM next hops only" {

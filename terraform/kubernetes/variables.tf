@@ -245,12 +245,6 @@ variable "enable_cilium_node_encryption" {
   default     = false
 }
 
-variable "cilium_gateway_api" {
-  description = "Let Cilium implement Gateway API through its L7 (Envoy) proxy, creating a `cilium` GatewayClass. Requires cilium_kube_proxy_replacement. Kind stages enable this from stage 100. NGINX Gateway Fabric remains in-tree as a migration reference for lima and tofu tests, not as a supported kind operator path. On kind this also needs host-network mode, because Cilium's Gateway controller otherwise creates a LoadBalancer service and kind has no provider. This is a cutover, not a parallel run: the platform Gateway, its NGF-only resources, and the host 443 mapping all switch together, because host 443 can only point at one container port and Cilium binds 443 directly rather than through a NodePort."
-  type        = bool
-  default     = false
-}
-
 variable "cilium_gateway_api_host_network_node_labels" {
   description = "Node labels selecting where the Cilium Gateway API Envoy listeners bind on the host network. Must select the node that carries the kind extraPortMappings, which in this repo is the control plane. Empty means all nodes."
   type        = map(string)
@@ -378,8 +372,8 @@ variable "admin_route_allowlist_cidrs" {
   default     = []
 
   validation {
-    condition     = alltrue([for cidr in var.admin_route_allowlist_cidrs : trimspace(cidr) != ""])
-    error_message = "admin_route_allowlist_cidrs entries must not be empty."
+    condition     = alltrue([for cidr in var.admin_route_allowlist_cidrs : trimspace(cidr) != "" && can(cidrhost(trimspace(cidr), 0))])
+    error_message = "admin_route_allowlist_cidrs entries must be non-empty CIDRs."
   }
 }
 
@@ -1133,13 +1127,6 @@ check "enable_cilium_policy_audit_mode_requires_cilium_provider" {
   assert {
     condition     = !var.enable_cilium_policy_audit_mode || lower(var.cni_provider) == "cilium"
     error_message = "enable_cilium_policy_audit_mode requires cni_provider=cilium."
-  }
-}
-
-check "cilium_gateway_api_requires_kube_proxy_replacement" {
-  assert {
-    condition     = !var.cilium_gateway_api || var.cilium_kube_proxy_replacement
-    error_message = "cilium_gateway_api requires cilium_kube_proxy_replacement=true."
   }
 }
 

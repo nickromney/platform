@@ -113,6 +113,24 @@ allowlist = [
     re.compile(r'level=info msg="manifest cache (hit|miss):'),
     # Grafana logs transient sqlite lock retries at info level during dashboard provisioning/startup.
     re.compile(r'level=info msg="Database locked, sleeping then retrying" error="database is locked"'),
+    # Grafana's frontend probes its optional public-dashboard endpoint whenever
+    # an authenticated dashboard is opened. This stack does not enable public
+    # dashboards, so its expected 404 is not a failed dashboard query.
+    re.compile(r'grafana: .*path=/api/dashboards/uid/[^/]+/public-dashboards status=404 .*errorReason=NotFound'),
+    # Browser navigation intentionally cancels long-lived Hubble ControlStream
+    # subscriptions. The UI has already rendered the service map at this point.
+    re.compile(r'hubble-ui: .*failed to send server status notification.*error="channel closed"'),
+    re.compile(r'hubble-ui: .*first tick failed.*error="context canceled"'),
+    # Argo's browser API clients can cancel a streaming watch or issue an
+    # unauthenticated probe before the OIDC redirect completes. These are info
+    # records, not controller reconciliation failures.
+    re.compile(r'argocd-server: .*grpc\.code=(Canceled|Unauthenticated).*grpc\.method=(Watch|List)'),
+    # A client navigation can close Grafana's response before it has finished
+    # streaming; this is not an application-side request failure.
+    re.compile(r'grafana: .*level=error msg="Error writing to response".*broken pipe'),
+    # The local gRPC client closes its etcd attempt during teardown; retain
+    # genuine dial failures but ignore this explicit cancellation only.
+    re.compile(r'grpc: addrConn\.createTransport failed to connect to .*127\.0\.0\.1:2379.*operation was canceled'),
 ]
 violations: list[str] = []
 for row in rows:
@@ -141,4 +159,50 @@ PY
   fi
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated recent VictoriaLogs error quality"* ]]
+}
+
+@test "VictoriaLogs contains structured records from a dev workload" {
+  [ "${PLATFORM_LIVE_CHECKS:-0}" = "1" ] || skip "set PLATFORM_LIVE_CHECKS=1 to run live VictoriaLogs dev-log check"
+  command -v kubectl >/dev/null || skip "kubectl is required"
+  command -v curl >/dev/null || skip "curl is required"
+  kubectl --kubeconfig "${KUBECONFIG}" --context "${KUBECTX}" -n observability get pod victoria-logs-victoria-logs-single-server-0 >/dev/null 2>&1 || skip "VictoriaLogs is not running"
+
+  local port="19430"
+  kubectl --kubeconfig "${KUBECONFIG}" --context "${KUBECTX}" -n observability port-forward pod/victoria-logs-victoria-logs-single-server-0 "${port}:9428" >/tmp/platform-victorialogs-dev-port-forward.log 2>&1 &
+  local pf_pid="$!"
+  trap 'kill "${pf_pid}" >/dev/null 2>&1 || true' RETURN
+
+  for _ in {1..40}; do
+    if curl -fsS "http://127.0.0.1:${port}/health" >/dev/null 2>&1 || curl -fsS "http://127.0.0.1:${port}/" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 0.25
+  done
+
+  run uv run --isolated python - <<'PY'
+from __future__ import annotations
+
+import json
+import os
+import urllib.parse
+import urllib.request
+
+port = os.environ.get("VICTORIALOGS_DEV_TEST_PORT", "19430")
+url = f"http://127.0.0.1:{port}/select/logsql/query?{urllib.parse.urlencode({'query': 'k8s.namespace.name:dev', 'limit': '100'})}"
+with urllib.request.urlopen(url, timeout=20) as response:
+    rows = [json.loads(line) for line in response.read().decode("utf-8").splitlines() if line.strip()]
+
+workloads = {"sentiment-api", "sentiment-router", "subnetcalc-api", "subnetcalc-router", "auth-chat", "chatgpt-sim"}
+matching = [row for row in rows if row.get("k8s.deployment.name") in workloads and row.get("_msg")]
+assert matching, "VictoriaLogs has no structured records from a known dev workload"
+print(f"validated {len(matching)} structured dev workload log record(s)")
+PY
+
+  if [ "${status}" -ne 0 ]; then
+    printf '%s\n' "${output}"
+    printf '%s\n' "--- port-forward log ---"
+    cat /tmp/platform-victorialogs-dev-port-forward.log
+  fi
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"structured dev workload log record"* ]]
 }

@@ -993,14 +993,8 @@ EXPECT_BACKSTAGE=$(tfvar_or_default enable_backstage false)
 EXPECT_APP_REPO_SUBNET_CALC=$(expected_from_tfvars enable_app_repo_subnetcalc)
 EXPECT_APP_REPO_SENTIMENT=$(expected_from_tfvars enable_app_repo_sentiment)
 EXPECT_UAT_APPS=$(expected_from_tfvars enable_uat_apps)
-EXPECT_CILIUM_GATEWAY_API=$(expected_from_tfvars cilium_gateway_api)
-# Cilium serves the Gateway from cilium-gateway-<gateway-name>; NGINX Gateway
-# Fabric serves it from a NodePort Service it names after the Gateway.
-if [[ "${EXPECT_CILIUM_GATEWAY_API}" == "true" ]]; then
-  PLATFORM_GATEWAY_SERVICE="cilium-gateway-platform-gateway"
-else
-  PLATFORM_GATEWAY_SERVICE="platform-gateway-nginx"
-fi
+# Cilium serves the Gateway from a generated Service.
+PLATFORM_GATEWAY_SERVICE="cilium-gateway-platform-gateway"
 EXPECT_LANGFUSE=$(expected_from_tfvars enable_langfuse)
 EXPECT_LANGFUSE_DEMOS=$(expected_from_tfvars enable_langfuse_demos)
 EXPECT_PREFER_EXTERNAL_WORKLOAD_IMAGES=$(expected_from_tfvars prefer_external_workload_images)
@@ -1729,9 +1723,6 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
 
   if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
     gateway_apps=(cert-manager cert-manager-config platform-gateway platform-gateway-routes)
-    if [[ "${EXPECT_CILIUM_GATEWAY_API}" != "true" ]]; then
-      gateway_apps+=(nginx-gateway-fabric)
-    fi
     for app in "${gateway_apps[@]}"; do
       if argocd_app_exists "${ARGOCD_NS}" "${app}"; then
         msg=$(argocd_app_query "${ARGOCD_NS}" "${app}" '[.status.conditions[]? | select(.type == "ComparisonError") | .message // ""] | join("")')
@@ -1748,12 +1739,6 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
       gateways.gateway.networking.k8s.io
       httproutes.gateway.networking.k8s.io
     )
-    if [[ "${EXPECT_CILIUM_GATEWAY_API}" != "true" ]]; then
-      gateway_crds+=(
-        nginxgateways.gateway.nginx.org
-        nginxproxies.gateway.nginx.org
-      )
-    fi
     for crd in "${gateway_crds[@]}"; do
       if kubectl get crd "${crd}" >/dev/null 2>&1; then
         established=$(kubectl get crd "${crd}" -o jsonpath='{.status.conditions[?(@.type=="Established")].status}' 2>/dev/null || true)

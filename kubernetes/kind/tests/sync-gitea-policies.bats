@@ -1794,14 +1794,7 @@ seed_platform_gateway_app() {
   mkdir -p "${gateway_dir}"
   touch \
     "${gateway_dir}/namespace.yaml" \
-    "${gateway_dir}/gateway.yaml" \
-    "${gateway_dir}/gateway-cilium.yaml" \
-    "${gateway_dir}/gateway-service.yaml" \
-    "${gateway_dir}/nginxproxy.yaml" \
-    "${gateway_dir}/proxysettingspolicy-oauth-response-buffers.yaml" \
-    "${gateway_dir}/tls-hardening.yaml" \
-    "${gateway_dir}/agent-tls-bootstrap.yaml"
-  printf 'gatewayClassName: cilium\n' >"${gateway_dir}/gateway-cilium.yaml"
+    "${gateway_dir}/gateway.yaml"
 
   shared_policies="${repo_dir}/cluster-policies/cilium/shared"
   mkdir -p "${shared_policies}"
@@ -1811,19 +1804,14 @@ resources:
   - argocd-hardened.yaml
   - cilium-gateway-ingress.yaml
 EOF
-  printf 'gatewayClassName: nginx\n' >"${gateway_dir}/gateway.yaml"
+  printf 'gatewayClassName: cilium\n' >"${gateway_dir}/gateway.yaml"
   cat >"${gateway_dir}/kustomization.yaml" <<'EOF'
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: platform-gateway
 resources:
   - namespace.yaml
-  - agent-tls-bootstrap.yaml
   - gateway.yaml
-  - gateway-service.yaml
-  - nginxproxy.yaml
-  - proxysettingspolicy-oauth-response-buffers.yaml
-  - tls-hardening.yaml
 EOF
 }
 
@@ -1880,19 +1868,14 @@ EOF
   [[ "${output}" != *"cilium-gateway-platform-gateway.platform-gateway.svc.cluster.local"* ]]
 }
 
-@test "platform gateway render keeps the NGINX shape when cilium gateway api is off" {
+@test "platform gateway render is Cilium-only" {
   seed_platform_gateway_app
 
-  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=false; source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; cat '${gateway_dir}/gateway.yaml'; find '${gateway_dir}' -maxdepth 1 -type f -print"
+  run bash -lc "source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; cat '${gateway_dir}/gateway.yaml'; find '${gateway_dir}' -maxdepth 1 -type f -print"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"gatewayClassName: nginx"* ]]
-  [[ "${output}" == *"nginxproxy.yaml"* ]]
-  [[ "${output}" == *"tls-hardening.yaml"* ]]
-  [[ "${output}" == *"agent-tls-bootstrap.yaml"* ]]
-  # The Cilium variant is staged in the source tree but must not reach a
-  # NGINX-mode policy repo, where it would be an unreferenced stray manifest.
-  [[ "${output}" != *"gateway-cilium.yaml"* ]]
+  [[ "${output}" == *"gatewayClassName: cilium"* ]]
+  [[ "${output}" != *"nginxproxy.yaml"* ]]
 }
 
 @test "platform gateway render swaps to the cilium gateway and drops NGF-only resources" {
@@ -1938,14 +1921,13 @@ EOF
   [[ "${output}" == *"argocd-hardened.yaml"* ]]
 }
 
-@test "platform gateway render prunes the reserved ingress policy on the NGINX path" {
+@test "platform gateway render retains the reserved ingress policy" {
   seed_platform_gateway_app
 
-  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=false; source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; find '${shared_policies}' -maxdepth 1 -type f -print; cat '${shared_policies}/kustomization.yaml'"
+  run bash -lc "source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; find '${shared_policies}' -maxdepth 1 -type f -print; cat '${shared_policies}/kustomization.yaml'"
 
   [ "${status}" -eq 0 ]
-  # reserved:ingress only ever describes Cilium's Envoy, so it is dead weight here.
-  [[ "${output}" != *"cilium-gateway-ingress.yaml"* ]]
+  [[ "${output}" == *"cilium-gateway-ingress.yaml"* ]]
   [[ "${output}" == *"argocd-hardened.yaml"* ]]
 }
 
@@ -2050,15 +2032,47 @@ EOF
   [[ "${output}" == *"httproute-argocd.yaml"* ]]
 }
 
-@test "cilium route render refuses to silently drop a configured admin allowlist" {
+@test "cilium route render turns a configured admin allowlist into a reserved ingress policy" {
   seed_gateway_routes
+  mkdir -p "${repo_dir}/cluster-policies/cilium/shared"
+  printf 'resources:\n' >"${repo_dir}/cluster-policies/cilium/shared/kustomization.yaml"
+  cat >"${routes_dir}/httproute-argocd.yaml" <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: argocd
+spec:
+  hostnames:
+    - argocd.admin.example.test
+  rules:
+    - filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: SnippetsFilter
+            name: admin-allowlist
+EOF
+  cat >"${routes_dir}/httproute-public.yaml" <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: public
+spec:
+  hostnames:
+    - subnetcalc.example.test
+  rules: []
+EOF
 
-  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true ADMIN_ROUTE_ALLOWLIST_CIDRS='10.0.0.0/8'; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'"
+  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true ADMIN_ROUTE_ALLOWLIST_CIDRS='10.0.0.0/8'; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; cat '${repo_dir}/cluster-policies/cilium/shared/cilium-gateway-admin-allowlist.yaml'; cat '${repo_dir}/cluster-policies/cilium/shared/kustomization.yaml'"
 
-  # There is no core Gateway API equivalent of the NGINX IP allowlist, so
-  # rendering the routes without it would quietly widen admin access.
-  [ "${status}" -ne 0 ]
-  [[ "${output}" == *"ADMIN_ROUTE_ALLOWLIST_CIDRS"* ]]
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"name: cilium-gateway-admin-allowlist"* ]]
+  [[ "${output}" == *"key: reserved:ingress"* ]]
+  [[ "${output}" == *"cidr: 10.0.0.0/8"* ]]
+  [[ "${output}" == *'host: "^argocd\\.admin\\.example\\.test$"'* ]]
+  [[ "${output}" == *"cidr: 0.0.0.0/0"* ]]
+  [[ "${output}" == *'host: "^subnetcalc\\.example\\.test$"'* ]]
+  [[ "${output}" == *"- cilium-gateway-admin-allowlist.yaml"* ]]
 }
 
 @test "the NGINX path leaves the routes and their filters untouched" {

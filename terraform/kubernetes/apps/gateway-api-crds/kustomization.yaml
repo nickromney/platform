@@ -3,5 +3,3 @@ kind: Kustomization
 resources:
   # Gateway API CRDs pinned in-repo for deterministic bootstrap.
   - gateway-api-crds.yaml
-  # NGINX Gateway Fabric CRDs.
-  - crds.yaml

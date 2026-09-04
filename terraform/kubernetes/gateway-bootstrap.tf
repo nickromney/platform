@@ -1,20 +1,11 @@
 data "kubectl_file_documents" "gateway_api_crds" {
   count = var.enable_gateway_tls || var.enable_agentgateway_ai_gateway ? 1 : 0
 
-  content = file("${local.stack_dir}/apps/nginx-gateway-fabric-crds/gateway-api-crds.yaml")
-}
-
-data "kubectl_file_documents" "nginx_gateway_fabric_crds" {
-  count = var.enable_gateway_tls ? 1 : 0
-
-  content = file("${local.stack_dir}/apps/nginx-gateway-fabric-crds/crds.yaml")
+  content = file("${local.stack_dir}/apps/gateway-api-crds/gateway-api-crds.yaml")
 }
 
 locals {
-  gateway_bootstrap_crd_manifests = var.enable_gateway_tls || var.enable_agentgateway_ai_gateway ? merge(
-    data.kubectl_file_documents.gateway_api_crds[0].manifests,
-    var.enable_gateway_tls ? data.kubectl_file_documents.nginx_gateway_fabric_crds[0].manifests : {},
-  ) : {}
+  gateway_bootstrap_crd_manifests = var.enable_gateway_tls || var.enable_agentgateway_ai_gateway ? data.kubectl_file_documents.gateway_api_crds[0].manifests : {}
 
   # Only CustomResourceDefinitions, because the readiness wait below polls
   # `kubectl get crd <name>`. The upstream Gateway API bundle also ships a
@@ -24,7 +15,6 @@ locals {
   # every apply.
   gateway_bootstrap_crd_names = var.enable_gateway_tls || var.enable_agentgateway_ai_gateway ? sort(distinct(concat(
     [for doc in data.kubectl_file_documents.gateway_api_crds[0].documents : yamldecode(doc).metadata.name if yamldecode(doc).kind == "CustomResourceDefinition"],
-    var.enable_gateway_tls ? [for doc in data.kubectl_file_documents.nginx_gateway_fabric_crds[0].documents : yamldecode(doc).metadata.name if yamldecode(doc).kind == "CustomResourceDefinition"] : [],
   ))) : []
 }
 
@@ -91,63 +81,18 @@ __YAML__
 }
 
 data "kubernetes_nodes" "platform_gateway_alias" {
-  count = var.enable_sso && var.cilium_gateway_api ? 1 : 0
+  count = var.enable_sso ? 1 : 0
 }
 
 locals {
   # In-cluster clients (Headlamp, Argo CD, Langfuse) resolve the public Keycloak
   # hostname via hostAliases. Cilium Envoy is on the node's host network, so the
-  # node InternalIP is the address that answers on 443. The NGF ClusterIP exists
-  # only on the migration path.
+  # node InternalIP is the address that answers on 443.
   platform_gateway_sso_alias_ip = (
-    var.enable_sso && var.cilium_gateway_api ? [
+    var.enable_sso ? [
       for addr in flatten([
         for node in data.kubernetes_nodes.platform_gateway_alias[0].nodes : node.status[0].addresses
       ]) : addr.address if addr.type == "InternalIP" && can(cidrnetmask("${addr.address}/32"))
-    ][0] :
-    var.enable_sso ? kubernetes_service_v1.platform_gateway_nginx_internal[0].spec[0].cluster_ip :
-    ""
+    ][0] : ""
   )
-}
-
-resource "kubernetes_service_v1" "platform_gateway_nginx_internal" {
-  count = var.enable_sso && !var.cilium_gateway_api ? 1 : 0
-
-  metadata {
-    name      = "platform-gateway-nginx-internal"
-    namespace = "platform-gateway"
-  }
-
-  spec {
-    type = "ClusterIP"
-
-    selector = {
-      "app.kubernetes.io/instance"             = "nginx-gateway"
-      "app.kubernetes.io/managed-by"           = "nginx-gateway-nginx"
-      "app.kubernetes.io/name"                 = "platform-gateway-nginx"
-      "gateway.networking.k8s.io/gateway-name" = "platform-gateway"
-    }
-
-    port {
-      name        = "https"
-      port        = 443
-      target_port = 443
-      protocol    = "TCP"
-    }
-
-    dynamic "port" {
-      for_each = var.gateway_https_host_port == 443 ? [] : [var.gateway_https_host_port]
-
-      content {
-        name        = "https-host-port"
-        port        = port.value
-        target_port = 443
-        protocol    = "TCP"
-      }
-    }
-  }
-
-  depends_on = [
-    kubectl_manifest.namespace_platform_gateway,
-  ]
 }
