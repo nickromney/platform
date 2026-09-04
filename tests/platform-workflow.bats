@@ -26,7 +26,7 @@ setup() {
   run "${SCRIPT}" options --execute --output json
   [ "${status}" -eq 0 ]
   [[ "${output}" == *'"id": "700"'* ]]
-  [[ "${output}" == *'"id": "920"'* ]]
+  [[ "${output}" == *'"id": "900"'* ]]
   [[ "${output}" == *'"sentiment"'* ]]
   [[ "${output}" == *'"subnetcalc"'* ]]
   [[ "${output}" == *'"preset_groups"'* ]]
@@ -58,15 +58,6 @@ EOF
   action_metadata_lookups="$(grep -c '.action_metadata' "${jq_log}" || true)"
   [ "${registry_lookups}" -eq 0 ]
   [ "${action_metadata_lookups}" -eq 0 ]
-}
-
-@test "platform workflow previews stage 920 Langfuse commands" {
-  run "${SCRIPT}" preview --execute --variant kind --stage 920 --action plan --output json
-
-  [ "${status}" -eq 0 ]
-  run jq -r '.stage, .stage_metadata.label, (.contract_requirements | map(.id) | join(",")), .command' <<<"${output}"
-  [ "${status}" -eq 0 ]
-  [ "${output}" = $'920\nlangfuse\ncluster-access,ingress,observability,identity\nmake -C kubernetes/kind 920 plan' ]
 }
 
 @test "platform workflow preview generates app override tfvars and command" {

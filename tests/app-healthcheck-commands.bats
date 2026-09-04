@@ -89,7 +89,6 @@ run_go_healthcheck() {
   run_go_healthcheck "apps/apim-simulator/app" "apim-simulator"
   run_go_healthcheck "apps/chatgpt-sim/app" "chatgpt-sim"
   run_go_healthcheck "apps/idp-core/app" "idp-core"
-  run_go_healthcheck "apps/langfuse-demos/app" "langfuse-demos"
   run_go_healthcheck "apps/platform-mcp/app" "platform-mcp"
   run_go_healthcheck "apps/sentiment/app" "sentiment"
   run_go_healthcheck "apps/subnetcalc/app" "subnetcalc"

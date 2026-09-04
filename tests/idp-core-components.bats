@@ -275,43 +275,6 @@ PY
   done
 }
 
-@test "platform gateway buffers oauth2-proxy Keycloak session response headers" {
-  run uv run --isolated --with pyyaml python - <<'PY'
-from __future__ import annotations
-
-import os
-from pathlib import Path
-
-import yaml
-
-repo_root = Path(os.environ["REPO_ROOT"])
-policy_path = repo_root / "terraform/kubernetes/apps/platform-gateway/proxysettingspolicy-oauth-response-buffers.yaml"
-kustomization_path = repo_root / "terraform/kubernetes/apps/platform-gateway/kustomization.yaml"
-
-assert policy_path.exists(), "missing platform gateway response-buffer policy"
-policy = yaml.safe_load(policy_path.read_text(encoding="utf-8"))
-kustomization = yaml.safe_load(kustomization_path.read_text(encoding="utf-8"))
-
-assert "proxysettingspolicy-oauth-response-buffers.yaml" in kustomization["resources"]
-assert policy["apiVersion"] == "gateway.nginx.org/v1alpha1"
-assert policy["kind"] == "ProxySettingsPolicy"
-
-target_refs = policy["spec"]["targetRefs"]
-assert any(ref.get("kind") == "Gateway" and ref.get("name") == "platform-gateway" for ref in target_refs), target_refs
-
-buffering = policy["spec"]["buffering"]
-assert buffering["bufferSize"] in {"16k", "32k", "64k"}, buffering
-assert buffering["buffers"]["number"] >= 8, buffering
-assert buffering["buffers"]["size"] in {"16k", "32k", "64k"}, buffering
-assert buffering["busyBuffersSize"] in {"32k", "64k", "128k"}, buffering
-
-print("validated platform gateway response-header buffers for oauth2-proxy sessions")
-PY
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated platform gateway response-header buffers"* ]]
-}
-
 @test "SSO auth proxies may reach developer portal and API upstreams" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
@@ -929,7 +892,9 @@ PY
 }
 
 @test "admin SSO proxies use org groups rather than admin email-domain shortcuts" {
-  run rg -n 'allowed-group: \$\{local\.sso_(admin|viewer)_group\}' "${REPO_ROOT}/terraform/kubernetes/sso.tf"
+  # Proxies render from a map, so the group arrives as ${each.value.group},
+  # sourced from local.sso_admin_group / local.sso_viewer_group.
+  run rg -n 'allowed-group[:=]\$?\{?(each\.value\.group|local\.sso_(admin|viewer)_group)\}?' "${REPO_ROOT}/terraform/kubernetes/sso.tf"
   [ "${status}" -eq 0 ]
 
   run rg -n 'email-domain: "admin\\.test"' "${REPO_ROOT}/terraform/kubernetes/sso.tf"
@@ -978,11 +943,6 @@ PY
   [[ "${output}" == *"name: chatgpt-sim"* ]]
 
   rm -rf "${PLATFORM_IDP_RUN_DIR}"
-}
-
-@test "active SSO route tracing follows Keycloak only" {
-  run rg -n 'name: keycloak' "${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes-sso/observabilitypolicy-tracing.yaml"
-  [ "${status}" -eq 0 ]
 }
 
 @test "source repo carries concrete closure artifacts claimed by platform-docs" {

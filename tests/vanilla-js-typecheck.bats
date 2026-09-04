@@ -575,21 +575,6 @@ PY
   [[ "${output}" == *"validated ChatGPT Sim browser discovery API contract"* ]]
 }
 
-@test "Langfuse browser capability renderer keeps typed config strings" {
-  run python3 - <<PY
-from pathlib import Path
-
-from tests.app_contracts import langfuse_browser_capability_contract_violations
-
-violations = langfuse_browser_capability_contract_violations(Path("${REPO_ROOT}"))
-assert not violations, violations
-print("validated Langfuse browser capability contract")
-PY
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated Langfuse browser capability contract"* ]]
-}
-
 @test "browser JavaScript tests share public unknown contract helpers" {
   run python3 - <<PY
 from pathlib import Path
@@ -598,7 +583,6 @@ from tests.app_contracts import (
     apim_browser_api_contract_violations,
     browser_public_unknown_contract_violations,
     chatgpt_browser_api_contract_violations,
-    langfuse_browser_capability_contract_violations,
     shared_idp_browser_contract_violations,
 )
 
@@ -616,12 +600,10 @@ contract_lines = [
 assert callable(apim_browser_api_contract_violations)
 assert callable(browser_public_unknown_contract_violations)
 assert callable(chatgpt_browser_api_contract_violations)
-assert callable(langfuse_browser_capability_contract_violations)
 assert callable(shared_idp_browser_contract_violations)
 assert "apim_browser_api_contract_violations" in content
 assert "browser_public_unknown_contract_violations" in content
 assert "chatgpt_browser_api_contract_violations" in content
-assert "langfuse_browser_capability_contract_violations" in content
 assert "shared_idp_browser_contract_violations" in content
 assert not any("Record<string, unknown>" in line for line in contract_lines), "browser public unknown policy should move to tests/app_contracts.py"
 assert not any("unknown\\\\[\\\\]" in line for line in contract_lines), "browser public unknown policy should move to tests/app_contracts.py"

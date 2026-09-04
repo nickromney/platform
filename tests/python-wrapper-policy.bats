@@ -44,7 +44,6 @@ tests/app-healthcheck-commands.bats
 tests/app-layout-consistency.bats
 tests/application-surface-projection.bats
 tests/docs-content-current.bats
-tests/langfuse-demos.bats
 tests/sso-e2e-app-toggles.bats
 tests/subnetcalc-go-only.bats
 tests/validate-app-runtime-surfaces.bats

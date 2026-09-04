@@ -136,7 +136,7 @@ PY
   [[ "${output}" == *"validated MCP GitOps manifests"* ]]
 }
 
-@test "MCP Cilium policies bridge only APIM, SSO, observability and langfuse-demos to MCP workloads" {
+@test "MCP Cilium policies bridge only APIM, SSO and observability to MCP workloads" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
@@ -176,10 +176,10 @@ ingress = platform_policy["spec"]["ingress"] + inspector_policy["spec"]["ingress
 #
 # This replaced two loose set comparisons that between them could not see a
 # source. One collected only endpoints carrying k8s:app.kubernetes.io/name, so
-# the langfuse-demos rule added by #189 -- which selects on part-of instead --
-# was invisible to it, and the other compared namespaces alone. Any new label
-# key could slip through the same way. Comparing full selectors means a source
-# is either listed here or the test fails.
+# a rule selecting on part-of instead was invisible to it, and the other
+# compared namespaces alone. Any new label key could slip through the same way.
+# Comparing full selectors means a source is either listed here or the test
+# fails.
 actual = sorted(
     (
         tuple(port["port"] for to_port in rule.get("toPorts", []) for port in to_port["ports"]),
@@ -196,14 +196,6 @@ expected = sorted(
             (
                 ("k8s:app.kubernetes.io/name", "subnetcalc-apim-simulator"),
                 ("k8s:io.kubernetes.pod.namespace", "apim"),
-            ),
-        ),
-        # dev/langfuse-demos reaching platform-mcp on 8080, added by #189.
-        (
-            ("8080",),
-            (
-                ("k8s:app.kubernetes.io/part-of", "langfuse-demos"),
-                ("k8s:io.kubernetes.pod.namespace", "dev"),
             ),
         ),
         (

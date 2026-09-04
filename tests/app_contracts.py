@@ -4704,6 +4704,7 @@ def dockerfile_runtime_user_contract_violations(
 def go_app_dockerfile_runtime_contract_violations(repo_root: Path) -> tuple[str, ...]:
     copy_lines = {
         "apim-simulator": "COPY --chown=65532:65532 app/.run/apim-simulator /apim-simulator",
+        "auth-chat": "COPY --chown=65532:65532 .run/auth-chat /auth-chat",
         "chatgpt-sim": "COPY --chown=65532:65532 .run/chatgpt-sim /chatgpt-sim",
         "idp-core": "COPY --chown=65532:65532 apps/idp-core/app/.run/idp-core /usr/local/bin/idp-core",
         "platform-mcp": "COPY --chown=65532:65532 .run/platform-mcp /platform-mcp",
@@ -6156,6 +6157,7 @@ def platform_mcp_inventory_expectations() -> dict[str, dict[str, Any]]:
 def go_app_makefile_workflow_contract_violations(repo_root: Path) -> tuple[str, ...]:
     help_headings = {
         "apim-simulator": "APIM Simulator app:",
+        "auth-chat": "Auth Chat app:",
         "chatgpt-sim": "ChatGPT Sim app:",
         "idp-core": "IDP Core app:",
         "platform-mcp": "Platform MCP app:",
@@ -6200,7 +6202,9 @@ def go_app_makefile_workflow_contract_violations(repo_root: Path) -> tuple[str, 
             violations.append(f"{app_name} missing Makefile help heading contract")
         elif expected_heading not in content:
             violations.append(f"{relative_path} help should include {expected_heading}")
-        if "Build the Linux binary used by compose/kind images" not in content:
+        # auth-chat ships no compose file, so it says "kind images" rather than
+        # "compose/kind images". Require the description, not one exact wording.
+        if not re.search(r"build-linux\s+Build the Linux binary used by \S*kind images", content):
             violations.append(f"{relative_path} help should describe build-linux")
         for target in ("test", "build", "build-linux", "clean"):
             if f"  {target}" not in content:
