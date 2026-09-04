@@ -55,11 +55,8 @@ resolve_gateway_ingress_ip() {
 PLATFORM_GATEWAY_NAME="${PLATFORM_GATEWAY_NAME:-platform-gateway}"
 PLATFORM_GATEWAY_TLS_SECRET="${PLATFORM_GATEWAY_TLS_SECRET:-platform-gateway-tls}"
 
-NGINX_GATEWAY_NAMESPACE="${NGINX_GATEWAY_NAMESPACE:-nginx-gateway}"
-NGINX_GATEWAY_DEPLOY_NAME="${NGINX_GATEWAY_DEPLOY_NAME:-nginx-gateway}"
 CILIUM_NAMESPACE="${CILIUM_NAMESPACE:-kube-system}"
 CILIUM_OPERATOR_DEPLOY_NAME="${CILIUM_OPERATOR_DEPLOY_NAME:-cilium-operator}"
-NGINX_GATEWAY_SERVICE="${NGINX_GATEWAY_SERVICE:-nginx-gateway}"
 KYVERNO_NAMESPACE="${KYVERNO_NAMESPACE:-kyverno}"
 KYVERNO_ADMISSION_DEPLOY_NAME="${KYVERNO_ADMISSION_DEPLOY_NAME:-kyverno-admission-controller}"
 KYVERNO_ADMISSION_SERVICE="${KYVERNO_ADMISSION_SERVICE:-kyverno-svc}"
@@ -694,14 +691,15 @@ wait_for_deployment_recovery_after_apiserver_restart() {
   fi
 }
 
+# Cilium's Gateway data plane is the Envoy inside cilium-agent, so there is no
+# gateway Deployment to roll out and no gateway Service with pod endpoints. The
+# Programmed condition is the only readiness signal the gateway publishes here.
 kind_oidc_post_restart_dependencies_healthy() {
   local gateway_programmed=""
 
   deployment_rollout_ready_quick "${KYVERNO_NAMESPACE}" "${KYVERNO_ADMISSION_DEPLOY_NAME}" || return 1
   service_has_endpoints "${KYVERNO_NAMESPACE}" "${KYVERNO_ADMISSION_SERVICE}" || return 1
   deployment_rollout_ready_quick "${KYVERNO_NAMESPACE}" "${KYVERNO_CLEANUP_DEPLOY_NAME}" || return 1
-  deployment_rollout_ready_quick "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}" || return 1
-  service_has_endpoints "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_SERVICE}" || return 1
   gateway_programmed="$(gateway_condition_status "Programmed")"
   [[ "${gateway_programmed}" == "True" ]]
 }

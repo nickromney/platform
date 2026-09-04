@@ -18,12 +18,12 @@ state_file="${KUBECTL_STATE_FILE:?}"
 state="$(cat "${state_file}" 2>/dev/null || printf 'healthy')"
 joined="$*"
 
-if [[ "${joined}" == *" get deploy nginx-gateway -o name"* ]]; then
-  printf '%s\n' "deployment.apps/nginx-gateway"
+if [[ "${joined}" == *" get deploy kyverno-admission-controller -o name"* ]]; then
+  printf '%s\n' "deployment.apps/kyverno-admission-controller"
   exit 0
 fi
 
-if [[ "${joined}" == *" rollout restart deploy/nginx-gateway"* ]]; then
+if [[ "${joined}" == *" rollout restart deploy/kyverno-admission-controller"* ]]; then
   printf '%s' "degraded" >"${state_file}"
   exit 0
 fi
@@ -105,7 +105,7 @@ EOF
   run jq -r '[.ok, .status_code, .status_group, (.forced | tostring), .preflight_state, .postflight_state, .force_mode, .recovery_exit_code] | @tsv' <<<"${json_output}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = $'true\tforced_recovery_succeeded\tsuccess\ttrue\thealthy\thealthy\tnginx-rollout\t0' ]
+  [ "${output}" = $'true\tforced_recovery_succeeded\tsuccess\ttrue\thealthy\thealthy\tkyverno-rollout\t0' ]
 
   run jq -e '.steps[] | select(.step == "force" and .outcome == "performed")' <<<"${json_output}"
 

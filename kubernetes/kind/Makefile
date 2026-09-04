@@ -71,7 +71,7 @@ DRY_RUN ?= 0
 CHECK_VERSION_FORMAT ?= text
 TOFU_TEST_TIMEOUT_SECONDS ?= 600
 OIDC_RECOVERY_FORMAT ?= text
-OIDC_RECOVERY_FORCE_MODE ?= nginx-rollout
+OIDC_RECOVERY_FORCE_MODE ?= kyverno-rollout
 TFSTATE_SNAPSHOT_KEEP ?= 5
 READONLY_MODE_FLAG := $(if $(filter 1,$(DRY_RUN)),--dry-run,--execute)
 STATE_RESTORE_MODE_FLAG := $(if $(filter 1,$(AUTO_APPROVE)),--execute,--dry-run)
@@ -281,7 +281,7 @@ help:
 	@echo "  make check-sso"
 	@echo "  make check-sso-e2e                            Docker-backed browser SSO end-to-end app checks (Playwright)"
 	@echo "  make check-sso-working                        Deeper browser suite: every app must show real data, not just login"
-	@echo "  make exercise-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=nginx-rollout]"
+	@echo "  make exercise-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=kyverno-rollout]"
 	@echo "  make check-stage-monotonicity"
 	@echo "  make check-version [CHECK_VERSION_FORMAT=text|json] [CHECK_VERSION_INCLUDE_CANARY=1] [CHECK_VERSION_INCLUDE_ALPHA=1] [CHECK_VERSION_INCLUDE_PRERELEASE=1]"
 	@echo "  make discover-images                          Dump images from running cluster"
@@ -360,7 +360,7 @@ help:
 	@echo "  KIND_ENABLE_BACKSTAGE=off|on|auto                    -> Backstage portal gate (default: off; auto requires >=10GiB Docker memory)"
 	@echo "  CHECK_VERSION_FORMAT=text|json                       -> render version audits as human text or machine-readable JSON (default: text)"
 	@echo "  OIDC_RECOVERY_FORMAT=text|json                       -> render the OIDC recovery exercise as human text or machine-readable JSON (default: text)"
-	@echo "  OIDC_RECOVERY_FORCE_MODE=nginx-rollout               -> controlled perturbation used to force the explicit recovery branch (default: nginx-rollout)"
+	@echo "  OIDC_RECOVERY_FORCE_MODE=kyverno-rollout             -> controlled perturbation used to force the explicit recovery branch (default: kyverno-rollout)"
 	@echo "  PLATFORM_PROFILE_MODE=off|on|trace                   -> capture apply/plan timings and logs under $(DISPLAY_PLATFORM_PROFILE_DIR)"
 	@echo "  PLATFORM_TIMEOUT_SCALE=1|2|3                         -> multiply readiness waits for slower hosts (default: 1)"
 

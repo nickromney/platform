@@ -41,7 +41,7 @@ The two helper scripts below are meant for the workflow you described:
   - the endpoint must expose the Hubble Relay gRPC API itself, not the Hubble
     UI/admin route
   - defaults to the namespaces we actually ship if you do not pass explicit
-    filters: `argocd`, `dev`, `kyverno`, `nginx-gateway`, `observability`
+    filters: `argocd`, `dev`, `kyverno`, `observability`
 - `terraform/kubernetes/scripts/hubble-summarise-flows.sh`
   - turns raw `jsonpb` into deterministic traffic summaries
   - supports `edges`, `world`, `dns`, and `drops` reports
@@ -195,7 +195,6 @@ Useful focused reports:
   --server localhost:4245 \
   --since 15m \
   --namespace argocd \
-  --namespace nginx-gateway \
   | ./hubble-summarise-flows.sh \
       --report world \
       --direction egress
@@ -213,7 +212,7 @@ Useful focused reports:
 ./hubble-capture-flows.sh \
   --server localhost:4245 \
   --since 15m \
-  --namespace nginx-gateway \
+  --namespace platform-gateway \
   | ./hubble-summarise-flows.sh \
       --report drops
 ```

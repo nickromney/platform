@@ -113,7 +113,7 @@ EOF
   [[ "${output}" == *"--namespace argocd"* ]]
   [[ "${output}" == *"--namespace dev"* ]]
   [[ "${output}" == *"--namespace kyverno"* ]]
-  [[ "${output}" == *"--namespace nginx-gateway"* ]]
+  [[ "${output}" != *"--namespace nginx-gateway"* ]]
   [[ "${output}" == *"--namespace observability"* ]]
 }
 

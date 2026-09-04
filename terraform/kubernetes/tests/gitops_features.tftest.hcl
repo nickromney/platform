@@ -275,8 +275,15 @@ run "gateway_stack_stays_off_nginx_gateway_fabric" {
     error_message = "Expected the platform Gateway app to remain when Cilium owns Gateway API"
   }
 
+  # Matching the trailing comma made this assertion load-bearing on formatting
+  # rather than meaning: `depends_on = [null_resource.check_kind_cluster_health_after_oidc]`
+  # carries the dependency, is what `tofu fmt` leaves alone, and contains no
+  # comma after the reference, so the old form passed with the dependency in
+  # place. Match any reference instead. sso.tf declares the resource as
+  # `resource "null_resource" "check_kind_cluster_health_after_oidc"`, which does
+  # not contain the dotted address, so only a real reference trips this.
   assert {
-    condition     = !strcontains(file("${path.module}/sso.tf"), "null_resource.check_kind_cluster_health_after_oidc,")
+    condition     = length(regexall("null_resource\\.check_kind_cluster_health_after_oidc", file("${path.module}/sso.tf"))) == 0
     error_message = "Expected OIDC ClusterRoleBindings to apply even when post-OIDC health is still failing"
   }
 }
