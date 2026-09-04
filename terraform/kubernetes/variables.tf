@@ -452,16 +452,34 @@ variable "argocd_chart_version" {
   default     = "10.2.1"
 }
 
-variable "argocd_image_repository" {
-  description = "Argo CD container image repository used by the argo-cd Helm chart."
+variable "prefer_hardened_component_images" {
+  description = "Use Docker Hardened Images for upstream components that publish a version-matched dhi.io tag, instead of the vendor's own image. Smaller and signed, but the hardened images differ in runtime user and filesystem layout, so each component is opted in individually rather than swapped wholesale."
+  type        = bool
+  default     = false
+}
+
+variable "argocd_hardened_image_repository" {
+  description = "Docker Hardened Images repository for Argo CD, used when prefer_hardened_component_images is true."
   type        = string
   default     = "dhi.io/argocd"
 }
 
-variable "argocd_image_tag" {
-  description = "Argo CD container image tag used by the argo-cd Helm chart."
+variable "argocd_hardened_image_tag" {
+  description = "Docker Hardened Images tag for Argo CD, used when prefer_hardened_component_images is true. Must track argocd_image_tag version for version."
   type        = string
   default     = "3.4.5-debian13"
+}
+
+variable "argocd_image_repository" {
+  description = "Argo CD container image repository used by the argo-cd Helm chart when prefer_hardened_component_images is false."
+  type        = string
+  default     = "quay.io/argoproj/argocd"
+}
+
+variable "argocd_image_tag" {
+  description = "Argo CD container image tag used by the argo-cd Helm chart when prefer_hardened_component_images is false."
+  type        = string
+  default     = "v3.4.5"
 }
 
 variable "provision_argocd" {

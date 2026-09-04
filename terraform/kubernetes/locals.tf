@@ -461,6 +461,8 @@ locals {
     local.external_platform_grafana_repository != "" &&
     local.external_platform_grafana_tag != ""
   )
+  argocd_image_repository_effective          = var.prefer_hardened_component_images ? var.argocd_hardened_image_repository : var.argocd_image_repository
+  argocd_image_tag_effective                 = var.prefer_hardened_component_images ? var.argocd_hardened_image_tag : var.argocd_image_tag
   hardened_image_registry_effective          = var.prefer_external_platform_images && local.external_platform_hardened_registry != "" ? local.external_platform_hardened_registry : var.hardened_image_registry
   grafana_image_registry_effective           = local.use_external_platform_grafana ? local.external_platform_grafana_registry : var.grafana_image_registry
   grafana_image_repository_effective         = local.use_external_platform_grafana ? local.external_platform_grafana_repository : var.grafana_image_repository
@@ -1051,8 +1053,8 @@ locals {
   argocd_values = {
     global = {
       image = {
-        repository = var.argocd_image_repository
-        tag        = var.argocd_image_tag
+        repository = local.argocd_image_repository_effective
+        tag        = local.argocd_image_tag_effective
       }
     }
 
