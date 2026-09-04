@@ -59,8 +59,6 @@ run "sso_enabled_argocd_oidc_disabled" {
           [for app in values(local.sso_mcp_console_proxy_apps) : "${app.public_url}/oauth2/callback"],
           [for app in values(local.sso_auth_chat_proxy_apps) : "${app.public_url}/oauth2/callback"],
           [for app in values(local.sso_chatgpt_sim_proxy_apps) : "${app.public_url}/oauth2/callback"],
-          [for app in values(local.sso_langfuse_proxy_apps) : "${app.public_url}/oauth2/callback"],
-          [for app in values(local.sso_langfuse_demo_proxy_apps) : "${app.public_url}/oauth2/callback"],
         )),
         toset(local.sso_oauth2_proxy_redirect_uris),
       )) == 0,

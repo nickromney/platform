@@ -64,7 +64,6 @@ assert canonical_go_app_names() == (
     "auth-chat",
     "chatgpt-sim",
     "idp-core",
-    "langfuse-demos",
     "platform-mcp",
     "sentiment",
     "subnetcalc",
@@ -78,7 +77,7 @@ assert canonical_local_app_layout_names() == (
     "sentiment",
     "subnetcalc",
 )
-assert len(image_catalog_expectations()) == 9
+assert len(image_catalog_expectations()) == 8
 assert "canonical_go_app_names" in content, "layout contracts should call the shared canonical app list"
 assert "canonical_local_app_layout_names" in content, "layout contracts should call the shared local app layout list"
 assert "discovered_go_app_names" in content, "Go app contracts should check the filesystem app list"
@@ -367,7 +366,7 @@ print(f"validated {len(canonical_go_app_names())} minimal Go app dependency cont
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 8 minimal Go app dependency contract(s)"* ]]
+  [[ "${output}" == *"validated 7 minimal Go app dependency contract(s)"* ]]
 }
 
 @test "Platform MCP config uses shared apphttp env parsing" {
@@ -385,23 +384,6 @@ PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated Platform MCP shared env parsing"* ]]
-}
-
-@test "Langfuse demos config uses shared apphttp env parsing" {
-  run python3 - <<PY
-from pathlib import Path
-
-from tests.app_contracts import langfuse_demos_config_env_contract_violations
-
-repo = Path("${REPO_ROOT}")
-violations = langfuse_demos_config_env_contract_violations(repo)
-assert not violations, violations
-
-print("validated Langfuse demos shared env parsing")
-PY
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated Langfuse demos shared env parsing"* ]]
 }
 
 @test "ChatGPT Sim config uses shared apphttp env parsing" {
@@ -476,7 +458,7 @@ print(f"validated {len(image_catalog_expectations())} canonical image catalog en
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 9 canonical image catalog entry and shared source contract(s)"* ]]
+  [[ "${output}" == *"validated 8 canonical image catalog entry and shared source contract(s)"* ]]
 }
 
 @test "in-scope Go app workflows include shared modules when their go.mod uses them" {

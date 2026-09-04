@@ -26,8 +26,6 @@ enable_app_repo_subnetcalc     = true
 enable_subnetcalc_apim_gateway = false
 enable_apim_simulator          = false
 enable_agentgateway_ai_gateway = false
-enable_langfuse                = false
-enable_langfuse_demos          = false
 
 # Use host-built images through the kind host-local registry instead of the
 # in-cluster Actions runner and repo mounts.

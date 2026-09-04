@@ -1,4 +1,4 @@
-VALID_STAGES := 100 200 300 400 500 600 700 800 900 920
+VALID_STAGES := 100 200 300 400 500 600 700 800 900
 KUBERNETES_STAGE_READONLY_HELPERS := check-health check-security check-rbac check-gateway-urls show-urls check-sso check-sso-e2e check-sso-working
 
 STAGE_FILE_REL_100 := stages/100-cluster.tfvars
@@ -10,7 +10,6 @@ STAGE_FILE_REL_600 := stages/600-policies.tfvars
 STAGE_FILE_REL_700 := stages/700-app-repos.tfvars
 STAGE_FILE_REL_800 := stages/800-gateway-tls.tfvars
 STAGE_FILE_REL_900 := stages/900-sso.tfvars
-STAGE_FILE_REL_920 := stages/920-langfuse.tfvars
 
 STAGE_DESC_KIND_100 := cluster available
 STAGE_DESC_KIND_200 := cilium
@@ -21,7 +20,6 @@ STAGE_DESC_KIND_600 := policies
 STAGE_DESC_KIND_700 := app repos
 STAGE_DESC_KIND_800 := observability
 STAGE_DESC_KIND_900 := sso
-STAGE_DESC_KIND_920 := langfuse
 
 STAGE_DESC_LIMA_100 := cluster available
 STAGE_DESC_LIMA_200 := cilium
@@ -32,4 +30,3 @@ STAGE_DESC_LIMA_600 := policies
 STAGE_DESC_LIMA_700 := app repos
 STAGE_DESC_LIMA_800 := observability
 STAGE_DESC_LIMA_900 := sso
-STAGE_DESC_LIMA_920 := langfuse

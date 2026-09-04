@@ -36,7 +36,6 @@ spec:
                 - headlamp
                 - gitea
                 - gitea-runner
-                - langfuse
       validate:
         allowExistingViolations: true
         message: >-
@@ -76,7 +75,6 @@ spec:
                       - "docker.io/curlimages/*"
                       - "docker.io/grafana/*"
                       - "docker.io/groundnuty/*"
-                      - "docker.io/langfuse/*"
                       - "docker.io/postgres:*"
                       - "docker.io/redis:*"
                       - "docker.io/victoriametrics/*"

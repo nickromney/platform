@@ -33,10 +33,6 @@ quay.io/jetstack/cert-manager-webhook:v1.21.1
 quay.io/jetstack/cert-manager-cainjector:v1.21.1
 quay.io/jetstack/cert-manager-startupapicheck:v1.21.1
 
-docker.io/clickhouse/clickhouse-server:25.5.11
-docker.io/altinity/clickhouse-operator:0.21.2
-docker.io/altinity/metrics-exporter:0.21.2
-docker.io/groundnuty/k8s-wait-for:v2.0
 
 # --- Prometheus (chart 29.27.0) ---
 quay.io/prometheus/prometheus:v3.14.0
@@ -65,15 +61,6 @@ docker.io/postgres:17.6
 
 # --- oauth2-proxy (chart 10.7.0) ---
 dhi.io/oauth2-proxy:7.15.3-debian13
-
-# --- Langfuse (stage 920) ---
-docker.io/langfuse/langfuse:3
-docker.io/langfuse/langfuse-worker:3
-docker.io/postgres:17.6-alpine
-docker.io/redis:8.2.7-alpine
-docker.io/clickhouse/clickhouse-server:25.5.11
-cgr.dev/chainguard/minio:latest
-cgr.dev/chainguard/busybox:latest
 
 # --- OpenTelemetry Collector (chart 0.170.0) ---
 otel/opentelemetry-collector-contrib:0.158.0

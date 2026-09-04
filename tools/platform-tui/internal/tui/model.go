@@ -278,8 +278,7 @@ func fallbackWorkflowOptions() workflowOptions {
 			{ID: "700", Label: "app-repos", Shortcut: "7", AppToggles: true, GuidedHint: "7 selects 700 app repos: app toggles start here because app repos exist."},
 			{ID: "800", Label: "observability", Shortcut: "8", AppToggles: true, GuidedHint: "8 selects 800 observability: app toggles remain available for workload coverage."},
 			{ID: "900", Label: "sso", Shortcut: "9", AppToggles: true, GuidedHint: "9 selects 900 sso: app toggles remain available for end-to-end local apps."},
-			{ID: "920", Label: "langfuse", Shortcut: "l", AppToggles: true, GuidedHint: "l selects 920 langfuse: add Langfuse on top of the authenticated platform."},
-		},
+			},
 		ActionMetadata: []actionOption{
 			{ID: "readiness", Label: "readiness"},
 			{ID: "plan", Label: "plan", SupportsAppToggles: true},
@@ -1150,8 +1149,6 @@ func (m Model) stageHint(item menuItem) string {
 		return "8 selects 800 observability: app toggles remain available for workload coverage."
 	case "900":
 		return "9 selects 900 sso: app toggles remain available for end-to-end local apps."
-	case "920":
-		return "l selects 920 langfuse: add Langfuse on top of the authenticated platform."
 	case "reset":
 		return "r resets the selected variant through the workflow script."
 	case "state-reset":

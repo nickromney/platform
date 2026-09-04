@@ -34,7 +34,6 @@ def canonical_go_app_names() -> tuple[str, ...]:
         "auth-chat",
         "chatgpt-sim",
         "idp-core",
-        "langfuse-demos",
         "platform-mcp",
         "sentiment",
         "subnetcalc",
@@ -162,8 +161,6 @@ def _launchpad_selected_tiles(launchpad: dict[str, Any]) -> list[dict[str, Any]]
         "ENABLE_HEADLAMP",
         "ENABLE_APP_REPO_SENTIMENT",
         "ENABLE_APP_REPO_SUBNETCALC",
-        "ENABLE_LANGFUSE",
-        "ENABLE_LANGFUSE_DEMOS",
     }
     return sorted(
         (
@@ -524,181 +521,6 @@ def _makefile_target_body(content: str, target: str) -> str:
     pattern = rf"^{re.escape(target)}:[^\n]*\n((?:\t.*\n|[ \t]*\n)*)"
     match = re.search(pattern, content, re.MULTILINE)
     return match.group(1) if match else ""
-
-
-def langfuse_demo_rollout_surface_contract_violations(repo_root: Path) -> tuple[str, ...]:
-    files = {
-        "stage": repo_root / "kubernetes/kind/stages/920-langfuse.tfvars",
-        "variables": repo_root / "terraform/kubernetes/variables.tf",
-        "locals": repo_root / "terraform/kubernetes/locals.tf",
-        "workload_apps": repo_root / "terraform/kubernetes/workload-apps.tf",
-        "app_of_apps": repo_root / "terraform/kubernetes/apps/argocd-apps/82-langfuse-demos.application.yaml",
-        "routes_kustomization": repo_root / "terraform/kubernetes/apps/platform-gateway-routes-sso/kustomization.yaml",
-        "demo_referencegrant": repo_root / "terraform/kubernetes/apps/platform-gateway-routes-sso/referencegrant-sso-langfuse-demos.yaml",
-        "prometheus": repo_root / "terraform/kubernetes/apps/argocd-apps/90-prometheus.application.yaml",
-        "grafana": repo_root / "terraform/kubernetes/apps/argocd-apps/95-grafana.application.yaml",
-        "image_catalog": repo_root / "kubernetes/workflow/image-catalog.json",
-        "image_builder": repo_root / "kubernetes/scripts/build-local-platform-images.sh",
-        "sync_script": repo_root / "terraform/kubernetes/scripts/sync-gitea-policies.sh",
-        "launchpad": repo_root / "terraform/kubernetes/config/platform-launchpad.apps.json",
-        "catalog": repo_root / "catalog/platform-apps.json",
-    }
-    texts = {name: path.read_text(encoding="utf-8") for name, path in files.items()}
-    violations: list[str] = []
-
-    required_fragments = {
-        "variables": ("enable_langfuse_demos",),
-        "locals": ("langfuse_trace_chat_public_host",),
-        "workload_apps": ("argocd_app_langfuse_demos",),
-        "app_of_apps": ("path: apps/langfuse-demos",),
-        "prometheus": (
-            "job_name: langfuse-demos",
-            "langfuse-demos",
-            "__meta_kubernetes_pod_annotation_prometheus_io_scrape",
-        ),
-        "grafana": (
-            "Langfuse Agent Flow",
-            "Langfuse Trace Chat DEV",
-            "Langfuse Tool Agent DEV",
-            "Langfuse Eval Runner DEV",
-            "Langfuse MCP Agent DEV",
-            "https://langfuse.dev.127.0.0.1.sslip.io",
-            "langfuse_demo_llm_calls_total",
-            'langfuse_demo_runs_total{job=\\"langfuse-demos\\"}',
-            'langfuse_demo_langfuse_batches_total{job=\\"langfuse-demos\\"}',
-        ),
-        "image_catalog": (
-            '"id": "langfuse-demos"',
-            "apps/shared/idpauth",
-            "apps/langfuse-demos/app/go.sum",
-        ),
-        "image_builder": (
-            "langfuse_demos_source_tag=",
-            'image_build_catalog_build_and_push platform langfuse-demos langfuse-demos "${langfuse_demos_source_tag}"',
-        ),
-        "sync_script": (
-            "EXTERNAL_PLATFORM_IMAGE_LANGFUSE_DEMOS",
-            "render_platform_launchpad_dashboard",
-            "render-platform-launchpad.sh",
-        ),
-        "routes_kustomization": ("referencegrant-sso-langfuse-demos.yaml",),
-    }
-
-    if re.search(r"(?m)^enable_langfuse_demos\s*=\s*true$", texts["stage"]) is None:
-        violations.append("stage 920 should enable Langfuse demos")
-
-    for file_name, fragments in required_fragments.items():
-        for fragment in fragments:
-            if fragment not in texts[file_name]:
-                violations.append(f"{file_name} missing {fragment}")
-
-    for name in langfuse_demo_runtime_names():
-        if f"httproute-{name}.yaml" not in texts["routes_kustomization"]:
-            violations.append(f"routes kustomization missing httproute-{name}.yaml")
-        if f"oauth2-proxy-{name}" not in texts["demo_referencegrant"]:
-            violations.append(f"Langfuse demo ReferenceGrant missing oauth2-proxy-{name}")
-        for surface in ("grafana", "launchpad"):
-            if name not in texts[surface]:
-                violations.append(f"{surface} missing {name}")
-
-    image_catalog = json.loads(texts["image_catalog"])
-    platform_image_ids = {item["id"] for item in image_catalog["platform_images"]}
-    if "langfuse-demos" not in platform_image_ids:
-        violations.append("image catalog platform images missing langfuse-demos")
-
-    launchpad = json.loads(texts["launchpad"])
-    launchpad_tiles = {tile["title"]: tile for tile in launchpad["tiles"]}
-    for title, url, required_toggle, deployment in langfuse_launchpad_tile_expectations():
-        tile = launchpad_tiles.get(title)
-        if tile is None:
-            violations.append(f"Launchpad missing {title}")
-            continue
-        if tile.get("url") != url:
-            violations.append(f"{title} Launchpad URL should be {url}")
-        if tile.get("owner") != "platform":
-            violations.append(f"{title} Launchpad owner should be platform")
-        if required_toggle not in tile.get("requires", []):
-            violations.append(f"{title} Launchpad requires should include {required_toggle}")
-        if deployment not in tile.get("expr", ""):
-            violations.append(f"{title} Launchpad expression should reference {deployment}")
-
-    service_catalog = json.loads(texts["catalog"])
-    apps = {app["name"]: app for app in service_catalog["applications"]}
-    for app_name, route in langfuse_service_catalog_route_expectations():
-        app = apps.get(app_name)
-        if app is None:
-            violations.append(f"platform app catalog missing {app_name}")
-            continue
-        if app.get("owner") != "platform":
-            violations.append(f"{app_name} owner should be platform")
-        if app.get("source", {}).get("path") not in {
-            "apps/langfuse-demos",
-            "terraform/kubernetes/apps/langfuse",
-        }:
-            violations.append(f"{app_name} source path should point at Langfuse app sources")
-        if not any(environment.get("route") == route for environment in app.get("environments", [])):
-            violations.append(f"{app_name} should expose route {route}")
-        scorecard = app.get("scorecard", {})
-        if scorecard.get("has_health_endpoint") is not True:
-            violations.append(f"{app_name} scorecard should declare a health endpoint")
-        if scorecard.get("has_network_policy") is not True:
-            violations.append(f"{app_name} scorecard should declare a network policy")
-
-    return tuple(violations)
-
-
-def langfuse_demo_runtime_names() -> tuple[str, ...]:
-    return (
-        "langfuse-trace-chat",
-        "langfuse-tool-agent",
-        "langfuse-eval-runner",
-        "langfuse-mcp-agent",
-    )
-
-
-def langfuse_launchpad_tile_expectations() -> tuple[tuple[str, str, str, str], ...]:
-    return (
-        (
-            "Langfuse",
-            "https://langfuse.dev.127.0.0.1.sslip.io",
-            "ENABLE_LANGFUSE",
-            "langfuse-web",
-        ),
-        (
-            "Langfuse Trace Chat DEV",
-            "https://lf-chat.dev.127.0.0.1.sslip.io",
-            "ENABLE_LANGFUSE_DEMOS",
-            "langfuse-trace-chat",
-        ),
-        (
-            "Langfuse Tool Agent DEV",
-            "https://lf-agent.dev.127.0.0.1.sslip.io",
-            "ENABLE_LANGFUSE_DEMOS",
-            "langfuse-tool-agent",
-        ),
-        (
-            "Langfuse Eval Runner DEV",
-            "https://lf-evals.dev.127.0.0.1.sslip.io",
-            "ENABLE_LANGFUSE_DEMOS",
-            "langfuse-eval-runner",
-        ),
-        (
-            "Langfuse MCP Agent DEV",
-            "https://lf-mcp.dev.127.0.0.1.sslip.io",
-            "ENABLE_LANGFUSE_DEMOS",
-            "langfuse-mcp-agent",
-        ),
-    )
-
-
-def langfuse_service_catalog_route_expectations() -> tuple[tuple[str, str], ...]:
-    return (
-        ("langfuse", "https://langfuse.dev.127.0.0.1.sslip.io"),
-        ("langfuse-trace-chat", "https://lf-chat.dev.127.0.0.1.sslip.io"),
-        ("langfuse-tool-agent", "https://lf-agent.dev.127.0.0.1.sslip.io"),
-        ("langfuse-eval-runner", "https://lf-evals.dev.127.0.0.1.sslip.io"),
-        ("langfuse-mcp-agent", "https://lf-mcp.dev.127.0.0.1.sslip.io"),
-    )
 
 
 def kubernetes_workload_container_hardening_contract_violations(repo_root: Path) -> tuple[str, ...]:
@@ -1064,10 +886,6 @@ def chatgpt_sim_kubernetes_runtime_contract_violations(repo_root: Path) -> tuple
                 "LLM_MODEL": "Qwen3.5-9B-MLX-4bit",
                 "LLM_TIMEOUT_SECONDS": "1",
                 "LLM_MAX_TOKENS": "32",
-                "LANGFUSE_HOST": "http://langfuse-web.langfuse.svc.cluster.local:3000",
-                "LANGFUSE_PUBLIC_KEY": "pk-lf-local-platform",
-                "LANGFUSE_SECRET_KEY": "sk-lf-local-platform",
-                "LANGFUSE_TIMEOUT_SECONDS": "1",
             }
             for key, expected in expected_env.items():
                 if env.get(key) != expected:
@@ -1100,9 +918,6 @@ def chatgpt_sim_kubernetes_runtime_contract_violations(repo_root: Path) -> tuple
     expected_policy_fragments = (
         '"k8s:app.kubernetes.io/name": agentgateway-ai-gateway',
         'port: "80"',
-        '"k8s:io.kubernetes.pod.namespace": langfuse',
-        '"k8s:app.kubernetes.io/name": langfuse',
-        'port: "3000"',
     )
     for fragment in expected_policy_fragments:
         if fragment not in policy_text:
@@ -1401,7 +1216,6 @@ def canonical_browser_app_names() -> tuple[str, ...]:
     return (
         "apim-simulator",
         "chatgpt-sim",
-        "langfuse-demos",
         "sentiment",
         "subnetcalc",
     )
@@ -1655,14 +1469,6 @@ def chatgpt_browser_api_contract_violations(repo_root: Path) -> tuple[str, ...]:
     )
 
 
-def langfuse_browser_capability_contract_violations(repo_root: Path) -> tuple[str, ...]:
-    app_js = repo_root / "apps" / "langfuse-demos" / "app" / "internal" / "app" / "web" / "app.js"
-    content = app_js.read_text(encoding="utf-8")
-    if "@param {unknown[]} items" in content:
-        return ("Langfuse browser capability renderer should not expose unknown[] items",)
-    return ()
-
-
 def shared_appshell_json_contract_violations(repo_root: Path) -> tuple[str, ...]:
     paths = (
         repo_root / "apps" / "shared" / "appshell" / "app-shell.js",
@@ -1709,12 +1515,6 @@ def shared_appshell_json_contract_violations(repo_root: Path) -> tuple[str, ...]
     apim_app = repo_root / "apps" / "apim-simulator" / "app" / "internal" / "app" / "web" / "app.js"
     if ".textContent = prettyJSON(" in apim_app.read_text(encoding="utf-8"):
         violations.append("APIM Simulator should render diagnostic JSON through shared renderJSONInto")
-    langfuse_app = repo_root / "apps" / "langfuse-demos" / "app" / "internal" / "app" / "web" / "app.js"
-    langfuse_content = langfuse_app.read_text(encoding="utf-8")
-    if "await fetch(" in langfuse_content:
-        violations.append("Langfuse demos should use shared app shell fetchText")
-    if "await fetchJSON(" in langfuse_content and "method: \"POST\"" in langfuse_content:
-        violations.append("Langfuse demos should use shared app shell postJSON for run submission")
 
     apim_app = repo_root / "apps" / "apim-simulator" / "app" / "internal" / "app" / "web" / "app.js"
     apim_content = apim_app.read_text(encoding="utf-8")
@@ -3148,7 +2948,7 @@ def hardened_go_command_http_contract_violations(repo_root: Path) -> tuple[str, 
 
 
 def go_app_upstream_json_decode_contract_violations(repo_root: Path) -> tuple[str, ...]:
-    upstream_apps = ("chatgpt-sim", "langfuse-demos", "platform-mcp")
+    upstream_apps = ("chatgpt-sim", "platform-mcp")
     violations: list[str] = []
 
     for app_name in upstream_apps:
@@ -3186,27 +2986,6 @@ def platform_mcp_config_env_contract_violations(repo_root: Path) -> tuple[str, .
     shared = (repo_root / "apps" / "shared" / "apphttp" / "apphttp.go").read_text(encoding="utf-8")
     if "func EnvBool(" not in shared:
         violations.append("apps/shared/apphttp/apphttp.go missing func EnvBool(")
-
-    return tuple(violations)
-
-
-def langfuse_demos_config_env_contract_violations(repo_root: Path) -> tuple[str, ...]:
-    config_path = repo_root / "apps" / "langfuse-demos" / "app" / "internal" / "app" / "config.go"
-    content = config_path.read_text(encoding="utf-8")
-    violations: list[str] = []
-
-    for helper_name in ("getenv", "secondsDuration"):
-        if re.search(rf"(?m)^func {helper_name}\(", content):
-            violations.append(f"{config_path.relative_to(repo_root)} should use shared apphttp env helpers")
-    for fragment in ("apphttp.Env(", "apphttp.EnvSeconds("):
-        if fragment not in content:
-            violations.append(f"{config_path.relative_to(repo_root)} missing {fragment}")
-    if '"strconv"' in content:
-        violations.append(f"{config_path.relative_to(repo_root)} should not parse env numbers locally")
-
-    shared = (repo_root / "apps" / "shared" / "apphttp" / "apphttp.go").read_text(encoding="utf-8")
-    if "func EnvSeconds(" not in shared:
-        violations.append("apps/shared/apphttp/apphttp.go missing func EnvSeconds(")
 
     return tuple(violations)
 
@@ -3256,7 +3035,6 @@ def image_catalog_expectations() -> tuple[ImageCatalogExpectation, ...]:
     return (
         ImageCatalogExpectation("chatgpt-sim", "apps/chatgpt-sim/app", "chatgpt-sim"),
         ImageCatalogExpectation("idp-core", ".", "idp-core"),
-        ImageCatalogExpectation("langfuse-demos", "apps/langfuse-demos/app", "langfuse-demos"),
         ImageCatalogExpectation("platform-mcp", "apps/platform-mcp/app", "platform-mcp"),
         ImageCatalogExpectation("sentiment-api", "apps/sentiment/app", "sentiment"),
         ImageCatalogExpectation("sentiment-auth-ui", "apps/sentiment/app", "sentiment"),
@@ -3647,7 +3425,6 @@ def _app_image_ids_by_root() -> dict[str, tuple[str, ...]]:
         "apps/apim-simulator/app": ("subnetcalc-apim-simulator",),
         "apps/chatgpt-sim/app": ("chatgpt-sim",),
         "apps/idp-core/app": ("idp-core",),
-        "apps/langfuse-demos/app": ("langfuse-demos",),
         "apps/platform-mcp/app": ("platform-mcp",),
         "apps/sentiment/app": ("sentiment-api", "sentiment-auth-ui"),
         "apps/subnetcalc/app": ("subnetcalc-api", "subnetcalc-frontend"),
@@ -4229,7 +4006,6 @@ def image_catalog_target_tfvars_projection_contract_violations(repo_root: Path) 
     }
     required_image_tags = (
         ("platform-mcp", "platform"),
-        ("langfuse-demos", "platform"),
         ("sentiment-api", "platform"),
     )
     violations: list[str] = []
@@ -4451,12 +4227,6 @@ def local_platform_image_build_spec_contract_violations(repo_root: Path) -> tupl
             "dockerfile": "Dockerfile",
             "tag": "default",
         },
-        "langfuse-demos": {
-            "context": "apps/langfuse-demos/app",
-            "dockerfile": "Dockerfile",
-            "tag": "default",
-            "prebuild": "make -C apps/langfuse-demos/app build-linux",
-        },
     }
 
     for image_id, expected_build in expected_builds.items():
@@ -4487,10 +4257,6 @@ def local_platform_image_build_spec_contract_violations(repo_root: Path) -> tupl
             violations.append(f"build script should not hard-code {fragment}")
 
     required_app_sources = {
-        "langfuse-demos": (
-            "apps/langfuse-demos/app/internal",
-            "apps/langfuse-demos/app/internal/app/web",
-        ),
         "chatgpt-sim": (
             "apps/chatgpt-sim/app/internal",
             "apps/chatgpt-sim/app/internal/app/web",
@@ -4508,7 +4274,7 @@ def local_platform_image_build_spec_contract_violations(repo_root: Path) -> tupl
         _missing_shared_fingerprint_sources_by_image(
             repo_root,
             images,
-            ("chatgpt-sim", "idp-core", "langfuse-demos", "platform-mcp"),
+            ("chatgpt-sim", "idp-core", "platform-mcp"),
         )
     )
 
@@ -4940,7 +4706,6 @@ def go_app_dockerfile_runtime_contract_violations(repo_root: Path) -> tuple[str,
         "apim-simulator": "COPY --chown=65532:65532 app/.run/apim-simulator /apim-simulator",
         "chatgpt-sim": "COPY --chown=65532:65532 .run/chatgpt-sim /chatgpt-sim",
         "idp-core": "COPY --chown=65532:65532 apps/idp-core/app/.run/idp-core /usr/local/bin/idp-core",
-        "langfuse-demos": "COPY --chown=65532:65532 .run/langfuse-demos /langfuse-demos",
         "platform-mcp": "COPY --chown=65532:65532 .run/platform-mcp /platform-mcp",
         "sentiment": "COPY --chown=65532:65532 .run/sentiment /sentiment",
         "subnetcalc": "COPY --chown=65532:65532 .run/subnetcalc /subnetcalc",
@@ -5801,7 +5566,6 @@ def app_owned_catalog_files(repo_root: Path) -> tuple[Path, ...]:
 def backstage_local_catalog_files(repo_root: Path) -> tuple[Path, ...]:
     return (
         repo_root / "apps" / "backstage" / "catalog" / "entities.yaml",
-        repo_root / "apps" / "backstage" / "catalog" / "apps" / "langfuse" / "catalog-info.yaml",
         *app_owned_catalog_files(repo_root),
     )
 
@@ -5876,101 +5640,6 @@ def backstage_app_catalog_mirror_contract_violations(repo_root: Path) -> tuple[s
     return tuple(violations)
 
 
-def platform_mcp_langfuse_inventory_contract_violations(repo_root: Path) -> tuple[str, ...]:
-    catalog = json.loads((repo_root / "catalog" / "platform-apps.json").read_text(encoding="utf-8"))
-    apps = {app["name"]: app for app in catalog.get("applications", [])}
-    violations: list[str] = []
-
-    for app_name, expected in platform_mcp_langfuse_inventory_expectations().items():
-        app = apps.get(app_name)
-        if app is None:
-            violations.append(f"platform app catalog missing {app_name}")
-            continue
-
-        if app.get("owner") != expected["owner"]:
-            violations.append(f"{app_name} owner should be {expected['owner']}")
-        if app.get("source", {}).get("path") != expected["source_path"]:
-            violations.append(f"{app_name} source.path should be {expected['source_path']}")
-        if app.get("deployment", {}).get("applications") != expected["applications"]:
-            violations.append(f"{app_name} deployment applications should be {expected['applications']}")
-        if app.get("scorecard", {}).get("has_network_policy") is not True:
-            violations.append(f"{app_name} should record network policy evidence")
-
-        environments = app.get("environments", [])
-        if not any(
-            environment.get("name") == expected["environment"]
-            and environment.get("namespace") == expected["namespace"]
-            and environment.get("route") == expected["route"]
-            for environment in environments
-        ):
-            violations.append(
-                f"{app_name} should expose {expected['environment']} in {expected['namespace']} at {expected['route']}"
-            )
-
-    return tuple(violations)
-
-
-def platform_mcp_langfuse_inventory_expectations() -> dict[str, dict[str, Any]]:
-    return {
-        "platform-mcp": {
-            "owner": "platform",
-            "source_path": "apps/platform-mcp",
-            "applications": ["mcp"],
-            "environment": "local",
-            "namespace": "mcp",
-            "route": "https://mcp.127.0.0.1.sslip.io/mcp",
-        },
-        "mcp-inspector": {
-            "owner": "platform",
-            "source_path": "apps/platform-mcp",
-            "applications": ["mcp"],
-            "environment": "local",
-            "namespace": "mcp",
-            "route": "https://mcp-console.127.0.0.1.sslip.io",
-        },
-        "langfuse": {
-            "owner": "platform",
-            "source_path": "terraform/kubernetes/apps/langfuse",
-            "applications": ["langfuse"],
-            "environment": "local",
-            "namespace": "langfuse",
-            "route": "https://langfuse.dev.127.0.0.1.sslip.io",
-        },
-        "langfuse-trace-chat": {
-            "owner": "platform",
-            "source_path": "apps/langfuse-demos",
-            "applications": ["langfuse-demos"],
-            "environment": "dev",
-            "namespace": "dev",
-            "route": "https://lf-chat.dev.127.0.0.1.sslip.io",
-        },
-        "langfuse-tool-agent": {
-            "owner": "platform",
-            "source_path": "apps/langfuse-demos",
-            "applications": ["langfuse-demos"],
-            "environment": "dev",
-            "namespace": "dev",
-            "route": "https://lf-agent.dev.127.0.0.1.sslip.io",
-        },
-        "langfuse-eval-runner": {
-            "owner": "platform",
-            "source_path": "apps/langfuse-demos",
-            "applications": ["langfuse-demos"],
-            "environment": "dev",
-            "namespace": "dev",
-            "route": "https://lf-evals.dev.127.0.0.1.sslip.io",
-        },
-        "langfuse-mcp-agent": {
-            "owner": "platform",
-            "source_path": "apps/langfuse-demos",
-            "applications": ["langfuse-demos"],
-            "environment": "dev",
-            "namespace": "dev",
-            "route": "https://lf-mcp.dev.127.0.0.1.sslip.io",
-        },
-    }
-
-
 def application_surface_projection_contract_violations(repo_root: Path) -> tuple[str, ...]:
     catalog = json.loads((repo_root / "catalog" / "platform-apps.json").read_text(encoding="utf-8"))
     surfaces = {
@@ -5987,14 +5656,9 @@ def application_surface_projection_contract_violations(repo_root: Path) -> tuple
     }
     expected_selectors = {
         "apim-simulator": "app.kubernetes.io/name=subnetcalc-apim-simulator",
-        "langfuse": "app.kubernetes.io/name=langfuse",
-        "langfuse-trace-chat": "app.kubernetes.io/name=langfuse-trace-chat",
-        "langfuse-tool-agent": "app.kubernetes.io/name=langfuse-tool-agent",
         # Omitted when the app was added, so the default `app=<name>` was
         # expected while the catalog correctly used the same shape as its three
         # siblings above. The catalog was right; this table had the gap.
-        "langfuse-mcp-agent": "app.kubernetes.io/name=langfuse-mcp-agent",
-        "langfuse-eval-runner": "app.kubernetes.io/name=langfuse-eval-runner",
     }
     docs = backstage_production_catalog_documents(repo_root)
     components = {
@@ -6307,131 +5971,6 @@ def preload_image_artifact_contract_violations(repo_root: Path) -> tuple[str, ..
     return tuple(violations)
 
 
-def langfuse_runtime_image_refs() -> tuple[str, ...]:
-    return (
-        "docker.io/langfuse/langfuse:3",
-        "docker.io/langfuse/langfuse-worker:3",
-        "docker.io/postgres:17.6-alpine",
-        "docker.io/redis:8.2.7-alpine",
-        "docker.io/clickhouse/clickhouse-server:25.5.11",
-        "cgr.dev/chainguard/minio:latest",
-        "cgr.dev/chainguard/busybox:latest",
-    )
-
-
-def langfuse_registry_policy_patterns() -> tuple[str, ...]:
-    return (
-        '"docker.io/langfuse/*"',
-        '"docker.io/postgres:*"',
-        '"docker.io/redis:*"',
-        '"docker.io/clickhouse/*"',
-        '"cgr.dev/*"',
-    )
-
-
-def langfuse_image_artifact_contract_violations(repo_root: Path) -> tuple[str, ...]:
-    violations: list[str] = []
-    policy = (
-        repo_root
-        / "terraform"
-        / "kubernetes"
-        / "cluster-policies"
-        / "kyverno"
-        / "shared"
-        / "restrict-image-registries.yaml"
-    ).read_text(encoding="utf-8")
-
-    for required_policy in langfuse_registry_policy_patterns():
-        if required_policy not in policy:
-            violations.append(f"restrict-image-registries.yaml missing {required_policy}")
-
-    for relative_path in preload_image_snapshot_files():
-        lines = (repo_root / relative_path).read_text(encoding="utf-8").splitlines()
-        for image_ref in langfuse_runtime_image_refs():
-            if image_ref not in lines:
-                violations.append(f"{relative_path} missing Langfuse preload image {image_ref}")
-        for retired_prefix in ("dhi.io/langfuse:", "dhi.io/postgres:", "dhi.io/redis:"):
-            if any(line.startswith(retired_prefix) for line in lines):
-                violations.append(f"{relative_path} should not include retired {retired_prefix} image")
-        if any("bitnamilegacy" in line for line in lines if "langfuse" in line.lower()):
-            violations.append(f"{relative_path} should not include Bitnami legacy Langfuse images")
-
-    docs = load_yaml_all(repo_root / "terraform" / "kubernetes" / "apps" / "langfuse" / "all.yaml")
-    redis = next(
-        (
-            doc
-            for doc in docs
-            if doc
-            and doc.get("kind") == "StatefulSet"
-            and doc.get("metadata", {}).get("name") == "langfuse-redis"
-        ),
-        None,
-    )
-    if not redis:
-        violations.append("terraform/kubernetes/apps/langfuse/all.yaml missing langfuse-redis StatefulSet")
-    else:
-        redis_pod_spec = redis["spec"]["template"]["spec"]
-        redis_container = redis_pod_spec["containers"][0]
-        if redis_pod_spec.get("securityContext", {}).get("fsGroup") != 1000:
-            violations.append("langfuse-redis pod securityContext should set fsGroup 1000")
-        container_security = redis_container.get("securityContext", {})
-        if container_security.get("runAsUser") != 999:
-            violations.append("langfuse-redis container securityContext should set runAsUser 999")
-        if container_security.get("runAsGroup") != 1000:
-            violations.append("langfuse-redis container securityContext should set runAsGroup 1000")
-
-    network_policy = next(
-        (
-            doc
-            for doc in docs
-            if doc
-            and doc.get("kind") == "NetworkPolicy"
-            and doc.get("metadata", {}).get("name") == "langfuse-runtime"
-        ),
-        None,
-    )
-    if not network_policy:
-        violations.append("terraform/kubernetes/apps/langfuse/all.yaml missing langfuse-runtime NetworkPolicy")
-        return tuple(violations)
-
-    if network_policy.get("metadata", {}).get("namespace") != "langfuse":
-        violations.append("langfuse-runtime NetworkPolicy should live in the langfuse namespace")
-    spec = network_policy.get("spec", {})
-    if set(spec.get("policyTypes", [])) != {"Ingress", "Egress"}:
-        violations.append("langfuse-runtime NetworkPolicy should enforce ingress and egress")
-
-    ingress_ports = {
-        str(port["port"])
-        for rule in spec.get("ingress", [])
-        for port in rule.get("ports", [])
-    }
-    egress_ports = {
-        str(port["port"])
-        for rule in spec.get("egress", [])
-        for port in rule.get("ports", [])
-    }
-    for required_port in ("3000", "3030", "5432", "6379", "8123", "9000"):
-        if required_port not in ingress_ports:
-            violations.append(f"langfuse-runtime NetworkPolicy ingress missing port {required_port}")
-        if required_port not in egress_ports:
-            violations.append(f"langfuse-runtime NetworkPolicy egress missing port {required_port}")
-
-    dns_rules = [
-        rule
-        for rule in spec.get("egress", [])
-        if any(str(port["port"]) == "53" for port in rule.get("ports", []))
-    ]
-    dns_peers = [peer for rule in dns_rules for peer in rule.get("to", [])]
-    if not any(
-        peer.get("namespaceSelector", {}).get("matchLabels", {}).get("kubernetes.io/metadata.name") == "kube-system"
-        and peer.get("podSelector", {}).get("matchLabels", {}).get("k8s-app") == "kube-dns"
-        for peer in dns_peers
-    ):
-        violations.append("langfuse-runtime NetworkPolicy should allow egress DNS to kube-dns")
-
-    return tuple(violations)
-
-
 def subnetcalc_frontend_local_replica_contract_violations(repo_root: Path) -> tuple[str, ...]:
     docs = load_yaml_all(repo_root / "terraform" / "kubernetes" / "apps" / "workloads" / "base" / "all.yaml")
     frontend = next(
@@ -6559,12 +6098,66 @@ def go_app_core_makefile_module_contract_violations(repo_root: Path) -> tuple[st
     return tuple(violations)
 
 
+def platform_mcp_inventory_contract_violations(repo_root: Path) -> tuple[str, ...]:
+    catalog = json.loads((repo_root / "catalog" / "platform-apps.json").read_text(encoding="utf-8"))
+    apps = {app["name"]: app for app in catalog.get("applications", [])}
+    violations: list[str] = []
+
+    for app_name, expected in platform_mcp_inventory_expectations().items():
+        app = apps.get(app_name)
+        if app is None:
+            violations.append(f"platform app catalog missing {app_name}")
+            continue
+
+        if app.get("owner") != expected["owner"]:
+            violations.append(f"{app_name} owner should be {expected['owner']}")
+        if app.get("source", {}).get("path") != expected["source_path"]:
+            violations.append(f"{app_name} source.path should be {expected['source_path']}")
+        if app.get("deployment", {}).get("applications") != expected["applications"]:
+            violations.append(f"{app_name} deployment applications should be {expected['applications']}")
+        if app.get("scorecard", {}).get("has_network_policy") is not True:
+            violations.append(f"{app_name} should record network policy evidence")
+
+        environments = app.get("environments", [])
+        if not any(
+            environment.get("name") == expected["environment"]
+            and environment.get("namespace") == expected["namespace"]
+            and environment.get("route") == expected["route"]
+            for environment in environments
+        ):
+            violations.append(
+                f"{app_name} should expose {expected['environment']} in {expected['namespace']} at {expected['route']}"
+            )
+
+    return tuple(violations)
+
+
+def platform_mcp_inventory_expectations() -> dict[str, dict[str, Any]]:
+    return {
+        "platform-mcp": {
+            "owner": "platform",
+            "source_path": "apps/platform-mcp",
+            "applications": ["mcp"],
+            "environment": "local",
+            "namespace": "mcp",
+            "route": "https://mcp.127.0.0.1.sslip.io/mcp",
+        },
+        "mcp-inspector": {
+            "owner": "platform",
+            "source_path": "apps/platform-mcp",
+            "applications": ["mcp"],
+            "environment": "local",
+            "namespace": "mcp",
+            "route": "https://mcp-console.127.0.0.1.sslip.io",
+        },
+    }
+
+
 def go_app_makefile_workflow_contract_violations(repo_root: Path) -> tuple[str, ...]:
     help_headings = {
         "apim-simulator": "APIM Simulator app:",
         "chatgpt-sim": "ChatGPT Sim app:",
         "idp-core": "IDP Core app:",
-        "langfuse-demos": "Langfuse demo apps:",
         "platform-mcp": "Platform MCP app:",
         "sentiment": "Sentiment app:",
         "subnetcalc": "Subnetcalc app:",
