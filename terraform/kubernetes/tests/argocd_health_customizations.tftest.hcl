@@ -26,13 +26,14 @@ run "argocd_health_customizations_present" {
     error_message = "Expected Argo CD to define ReferenceGrant health"
   }
 
+  # ObservabilityPolicy and SnippetsFilter health customizations went with
+  # NGINX Gateway Fabric. Cilium owns Gateway API now and neither CRD is
+  # installed, so a customization naming that API group would be dead config.
   assert {
-    condition     = strcontains(local.argocd_values.configs.cm["resource.customizations.health.gateway.nginx.org_ObservabilityPolicy"], "ObservabilityPolicy applied")
-    error_message = "Expected Argo CD to define ObservabilityPolicy health"
-  }
-
-  assert {
-    condition     = strcontains(local.argocd_values.configs.cm["resource.customizations.health.gateway.nginx.org_SnippetsFilter"], "SnippetsFilter applied")
-    error_message = "Expected Argo CD to define SnippetsFilter health"
+    condition = length([
+      for key in keys(local.argocd_values.configs.cm) : key
+      if strcontains(key, "gateway.nginx.org")
+    ]) == 0
+    error_message = "Expected no Argo CD health customization for the retired NGINX Gateway Fabric API group"
   }
 }
