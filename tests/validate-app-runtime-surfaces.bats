@@ -1289,7 +1289,7 @@ print(f"validated {external_runtime_image_ref_expectation_count()} external imag
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 11 external image expectation(s)"* ]]
+  [[ "${output}" == *"validated 9 external image expectation(s)"* ]]
 }
 
 @test "app runtime tests share external image ref helpers" {
@@ -1404,7 +1404,7 @@ print(f"validated {len(preload_image_snapshot_files())} preload image snapshot(s
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 4 preload image snapshot(s) and 8 lock entry(ies)"* ]]
+  [[ "${output}" == *"validated 3 preload image snapshot(s) and 6 lock entry(ies)"* ]]
 }
 
 @test "app runtime tests share preload image artifact helpers" {

@@ -3,8 +3,6 @@ quay.io/cilium/operator-generic:v1.20.1	quay.io/cilium/operator-generic@sha256:6
 quay.io/cilium/hubble-relay:v1.20.1	quay.io/cilium/hubble-relay@sha256:59be0ae7d475ab9011a5e954618c0f27b5778b17140381425b308b55ba4917f4
 quay.io/cilium/hubble-ui-backend:v0.13.5	quay.io/cilium/hubble-ui-backend@sha256:326d275d38ac5d64c626943e6e1c68bd019f9b0a13d9994e320460e0391b099a
 quay.io/cilium/hubble-ui:v0.13.5	quay.io/cilium/hubble-ui@sha256:573ad7e0dc2180b844fdda80afbe6011e3b9d0cd2c33180ccb9b60bcd08fdb4b
-ghcr.io/nginx/nginx-gateway-fabric:2.5.1	ghcr.io/nginx/nginx-gateway-fabric@sha256:30172fc9bdebd145c250e81500b6112f989afd9956e0e7606f504bf16de28f88
-ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.1	ghcr.io/nginx/nginx-gateway-fabric/nginx@sha256:908376c8bc6b99e48312a212116f3a548805a94619484640617d89ff79514989
 quay.io/argoproj/argocd:v3.4.5	quay.io/argoproj/argocd@sha256:639b204272c87a1e2837aaaf235b0e35d7cff3f5d686692effbe0b277775861d
 ecr-public.aws.com/docker/library/redis:8.2.7-alpine	-
 docker.gitea.com/gitea:1.27.0-rootless	docker.gitea.com/gitea@sha256:c370be7001817d2ce7e5d63a68e6613f95bd0105c34e45a144d577b8a1dd7a66
@@ -54,6 +52,5 @@ dhi.io/python:3.13-debian13	dhi.io/python@sha256:22f91f216bf66293dd8678f3e04041d
 dhi.io/python:3.13-debian13-dev	dhi.io/python@sha256:7da542a1bb18a4bbbf63b1aa2212804cf6c4bc8527a6b3f0fd5a40063a50252b
 python:3.13-slim	python@sha256:8c5de2243cba89f49a93e05cacb78e27058bcaa69c148baac127005da03af39e
 dhi.io/nginx:1.29.5-debian13	dhi.io/nginx@sha256:e7d70fae56c9f86ce4f41d3fb2607ccd042e6a372fc1e6f0768f7d7a4e83c728
-python:3.12.13-alpine3.23	python@sha256:30516d6696a9debb0d9812d5d18a1b8301586423cd8260c38804034ca2413d78
 docker.io/curlimages/curl:8.19.0	docker.io/curlimages/curl@sha256:72310b09e86a27f9a20342247c77a8efd1d28c6e8c4d0d67e14bfa832c661c81
 curlimages/curl:8.19.0	curlimages/curl@sha256:72310b09e86a27f9a20342247c77a8efd1d28c6e8c4d0d67e14bfa832c661c81

@@ -6211,12 +6211,6 @@ def external_runtime_image_ref_expectations() -> dict[str, dict[str, int]]:
             "image: gitea/act_runner:0.4.1": 2,
             "image: kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed": 1,
         },
-        "terraform/kubernetes/apps/nginx-gateway-fabric/deploy.yaml": {
-            "ghcr.io/nginx/nginx-gateway-fabric:2.5.1": 3,
-        },
-        "terraform/kubernetes/apps/platform-gateway/agent-tls-bootstrap.yaml": {
-            "image: python:3.12.13-alpine3.23": 1,
-        },
         "terraform/kubernetes/scripts/check-security.sh": {
             'POLICY_PROBE_IMAGE="curlimages/curl:8.19.0"': 1,
         },
@@ -6246,22 +6240,18 @@ def preload_image_snapshot_files() -> tuple[str, ...]:
     return (
         "kubernetes/kind/preload-images.txt",
         "kubernetes/lima/preload-images.txt",
-        "kubernetes/lima/preload-images.txt",
         "kubernetes/docker-desktop/preload-images.txt",
     )
 
 
 def preload_image_required_refs() -> tuple[str, ...]:
     return (
-        "ghcr.io/nginx/nginx-gateway-fabric:2.5.1",
-        "ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.1",
         "docker:29.4.3-cli",
         "gitea/act_runner:0.4.1",
         "kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed",
         "mcr.microsoft.com/playwright:v1.58.2-noble",
         "dhi.io/golang:1.26-alpine3.23-dev",
         "dhi.io/static:20260413-alpine3.23",
-        "python:3.12.13-alpine3.23",
         "docker.io/curlimages/curl:8.19.0",
         "curlimages/curl:8.19.0",
     )
@@ -6269,6 +6259,9 @@ def preload_image_required_refs() -> tuple[str, ...]:
 
 def preload_image_retired_refs() -> tuple[str, ...]:
     return (
+        "ghcr.io/nginx/nginx-gateway-fabric:2.5.1",
+        "ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.1",
+        "python:3.12.13-alpine3.23",
         "dhi.io/node:22-debian13-dev",
         "golang:1.26.2-alpine3.23",
         "oven/bun:1.3.13",
@@ -6279,12 +6272,10 @@ def preload_image_retired_refs() -> tuple[str, ...]:
 
 def preload_image_lock_refs() -> tuple[str, ...]:
     return (
-        "ghcr.io/nginx/nginx-gateway-fabric:2.5.1",
         "docker:29.4.3-cli",
         "gitea/act_runner:0.4.1",
         "kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed",
         "mcr.microsoft.com/playwright:v1.58.2-noble",
-        "python:3.12.13-alpine3.23",
         "docker.io/curlimages/curl:8.19.0",
         "curlimages/curl:8.19.0",
     )
