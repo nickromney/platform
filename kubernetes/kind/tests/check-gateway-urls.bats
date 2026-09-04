@@ -133,15 +133,8 @@ if [[ "${args}" == "get nodes" ]]; then
   exit 0
 fi
 
-if [[ "${args}" == "-n nginx-gateway get deploy nginx-gateway" ]]; then
-  exit 0
-fi
-if [[ "${args}" == *"-n nginx-gateway get deploy nginx-gateway -o jsonpath="* ]] && printf '%s' "${args}" | grep -Fq '.spec.replicas'; then
-  printf '1'
-  exit 0
-fi
-if [[ "${args}" == *"-n nginx-gateway get deploy nginx-gateway -o jsonpath="* ]] && printf '%s' "${args}" | grep -Fq '.status.readyReplicas'; then
-  printf '1'
+if [[ "${args}" == *"get gatewayclass cilium -o jsonpath="* ]] && printf '%s' "${args}" | grep -Fq 'type=="Accepted"'; then
+  printf 'True'
   exit 0
 fi
 
@@ -161,11 +154,15 @@ if [[ "${args}" == *"-n platform-gateway get gateway platform-gateway -o jsonpat
   exit 0
 fi
 
-if [[ "${args}" == "-n platform-gateway get svc platform-gateway-nginx" ]]; then
+if [[ "${args}" == "-n platform-gateway get svc cilium-gateway-platform-gateway" ]]; then
   exit 0
 fi
-if [[ "${args}" == *"-n platform-gateway get svc platform-gateway-nginx -o jsonpath="* ]] && printf '%s' "${args}" | grep -Fq '.nodePort'; then
+if [[ "${args}" == *"-n platform-gateway get svc cilium-gateway-platform-gateway -o jsonpath="* ]] && printf '%s' "${args}" | grep -Fq '.nodePort'; then
   printf '30070'
+  exit 0
+fi
+if [[ "${args}" == *"get endpointslices -l kubernetes.io/service-name=cilium-gateway-platform-gateway"* ]]; then
+  printf 'endpointslice.discovery.k8s.io/cilium-gateway-platform-gateway-abcde\n'
   exit 0
 fi
 
