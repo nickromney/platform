@@ -97,6 +97,5 @@ python:3.13-slim
 
 # --- Platform support images ---
 dhi.io/nginx:1.29.5-debian13
-python:3.12.13-alpine3.23
 docker.io/curlimages/curl:8.19.0
 curlimages/curl:8.19.0
