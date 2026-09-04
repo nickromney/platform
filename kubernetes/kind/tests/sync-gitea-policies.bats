@@ -1405,7 +1405,15 @@ EOF
   [ "${status}" -eq 0 ]
   grep -Fq '  - subnetcalc-frontend-canary-service.yaml' "${repo_dir}/apps/dev/kustomization.yaml"
   grep -Fq 'path: subnetcalc-frontend-rollout-patch.yaml' "${repo_dir}/apps/dev/kustomization.yaml"
-  grep -Fvq 'subnetcalc-router-gateway-canary-patch.yaml' "${repo_dir}/apps/dev/kustomization.yaml"
+  # `grep -Fvq X file` only asks whether SOME line lacks X, which the seeded
+  # `namespace: dev` line satisfies whatever the renderer writes. Assert that
+  # NO line names the retired NGF hairpin patch.
+  #
+  # This guards against configure_progressive_delivery reintroducing the
+  # hairpin; it does not cover its removal. Nothing here can write that entry,
+  # so the assertion only fails if someone adds the ability. Removal is covered
+  # by "cilium gateway render drops the subnetcalc canary gateway hairpin".
+  ! grep -Fq 'subnetcalc-router-gateway-canary-patch.yaml' "${repo_dir}/apps/dev/kustomization.yaml"
 }
 
 @test "policy repo render vendors subnetcalc frontend canary route and dev ReferenceGrant" {
@@ -1846,7 +1854,7 @@ EOF
         proxy_pass https://platform-gateway-nginx-internal.platform-gateway.svc.cluster.local:443;
 EOF
 
-  run bash -lc "source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; test ! -f '${repo_dir}/apps/dev/subnetcalc-router-gateway-canary-patch.yaml'; grep -Fvq 'subnetcalc-router-gateway-canary-patch.yaml' '${repo_dir}/apps/dev/kustomization.yaml' || true; cat '${repo_dir}/apps/dev/kustomization.yaml'"
+  run bash -lc "source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; test ! -f '${repo_dir}/apps/dev/subnetcalc-router-gateway-canary-patch.yaml'; ! grep -Fq 'subnetcalc-router-gateway-canary-patch.yaml' '${repo_dir}/apps/dev/kustomization.yaml'; cat '${repo_dir}/apps/dev/kustomization.yaml'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" != *"subnetcalc-router-gateway-canary-patch.yaml"* ]]
