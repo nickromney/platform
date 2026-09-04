@@ -534,3 +534,102 @@ PY
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated SSO ReferenceGrant target limits for Langfuse demos"* ]]
 }
+
+@test "Langfuse demo workloads share one pod spec apart from their declared per-demo values" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import copy
+import json
+import os
+from pathlib import Path
+
+import yaml
+
+# The four demos are four copies of one Deployment and one Service. Nothing
+# generates them, so a change to the shared pod spec -- image, probes,
+# resources, securityContext, shared env -- has to be made four times by hand.
+# This asserts the copies still agree everywhere except the values a demo is
+# allowed to set for itself, so a bump applied to three of four fails here
+# rather than in a cluster.
+PER_DEMO_ENV = {"DEMO_ROLE", "DEMO_NAME", "PUBLIC_BASE_URL"}
+# Only the MCP agent talks to the MCP server; the others carry none of these.
+MCP_ONLY_ENV = {"MCP_BASE_URL", "MCP_TOOL_NAME", "MCP_TIMEOUT_SECONDS"}
+DEMOS = {
+    "langfuse-trace-chat": "trace-chat",
+    "langfuse-tool-agent": "tool-agent",
+    "langfuse-eval-runner": "eval-runner",
+    "langfuse-mcp-agent": "mcp-agent",
+}
+
+repo_root = Path(os.environ["REPO_ROOT"])
+manifest = repo_root / "terraform/kubernetes/apps/langfuse-demos/all.yaml"
+docs = [doc for doc in yaml.safe_load_all(manifest.read_text(encoding="utf-8")) if doc]
+by_kind = {
+    kind: {doc["metadata"]["name"]: doc for doc in docs if doc.get("kind") == kind}
+    for kind in ("Deployment", "Service")
+}
+
+for kind, wanted in (("Deployment", DEMOS), ("Service", DEMOS)):
+    missing = set(wanted) - set(by_kind[kind])
+    assert not missing, f"{kind} missing for {sorted(missing)}"
+
+
+def strip_identity(doc, name, component):
+    """Replace everything a demo names after itself with a placeholder."""
+    text = json.dumps(doc, sort_keys=True)
+    text = text.replace(name, "__DEMO__").replace(f'"{component}"', '"__COMPONENT__"')
+    return json.loads(text)
+
+
+def normalise(doc, name, component):
+    doc = strip_identity(copy.deepcopy(doc), name, component)
+    if doc["kind"] == "Deployment":
+        for container in doc["spec"]["template"]["spec"]["containers"]:
+            container["env"] = [
+                entry
+                for entry in container.get("env", [])
+                if entry["name"] not in PER_DEMO_ENV | MCP_ONLY_ENV
+            ]
+    return doc
+
+
+for kind in ("Deployment", "Service"):
+    reference_name, reference_component = next(iter(DEMOS.items()))
+    reference = normalise(by_kind[kind][reference_name], reference_name, reference_component)
+    for name, component in DEMOS.items():
+        candidate = normalise(by_kind[kind][name], name, component)
+        if candidate == reference:
+            continue
+        ref_lines = yaml.safe_dump(reference, sort_keys=True).splitlines()
+        cand_lines = yaml.safe_dump(candidate, sort_keys=True).splitlines()
+        drift = [
+            line
+            for line in __import__("difflib").unified_diff(
+                ref_lines, cand_lines, reference_name, name, lineterm=""
+            )
+        ]
+        raise AssertionError(
+            f"{kind} {name} has drifted from {reference_name} outside the "
+            "per-demo values:\n" + "\n".join(drift)
+        )
+
+# Every demo sets its own identity env, and only the MCP agent talks to MCP.
+for name in DEMOS:
+    env = {
+        entry["name"]
+        for entry in by_kind["Deployment"][name]["spec"]["template"]["spec"]["containers"][0]["env"]
+    }
+    assert PER_DEMO_ENV <= env, f"{name} is missing {sorted(PER_DEMO_ENV - env)}"
+    overlap = env & MCP_ONLY_ENV
+    if name == "langfuse-mcp-agent":
+        assert overlap == MCP_ONLY_ENV, f"{name} is missing {sorted(MCP_ONLY_ENV - env)}"
+    else:
+        assert not overlap, f"{name} unexpectedly sets {sorted(overlap)}"
+
+print("validated shared pod spec across four Langfuse demo workloads")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared pod spec across four Langfuse demo workloads"* ]]
+}
