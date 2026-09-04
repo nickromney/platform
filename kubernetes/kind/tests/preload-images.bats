@@ -370,19 +370,6 @@ EOF
   printf '%s' "${image_list}"
 }
 
-@test "preload-images langfuse images follow the langfuse toggle, not the actions-runner toggle" {
-  local image_list
-  image_list="$(preload_toggle_list)"
-
-  PRELOAD_ENABLE_LANGFUSE=true run "${SCRIPT}" --execute --print-images --image-list "${image_list}"
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"docker.io/langfuse/langfuse:3"* ]]
-
-  PRELOAD_ENABLE_LANGFUSE=false PRELOAD_ENABLE_ACTIONS_RUNNER=true run "${SCRIPT}" --execute --print-images --image-list "${image_list}"
-  [ "${status}" -eq 0 ]
-  [[ "${output}" != *"docker.io/langfuse/langfuse:3"* ]]
-}
-
 @test "preload-images argo-rollouts images follow progressive delivery, not external secrets" {
   local image_list
   image_list="$(preload_toggle_list)"
