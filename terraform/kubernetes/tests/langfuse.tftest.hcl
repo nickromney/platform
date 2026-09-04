@@ -63,14 +63,14 @@ run "langfuse_enabled_creates_gitops_app" {
   }
 
   assert {
-    condition     = strcontains(file("${path.module}/sso.tf"), "clientId                  = \"langfuse\"")
+    condition     = length(regexall("clientId\\s*=\\s*\"langfuse\"", file("${path.module}/sso.tf"))) > 0
     error_message = "Expected Keycloak realm to include a native Langfuse OIDC client"
   }
 
   assert {
     condition = (
       local.langfuse_keycloak_redirect_uri == "${local.langfuse_public_url}/api/auth/callback/keycloak" &&
-      strcontains(file("${path.module}/sso.tf"), "redirectUris              = [local.langfuse_keycloak_redirect_uri]")
+      length(regexall("redirectUris\\s*=\\s*\\[local\\.langfuse_keycloak_redirect_uri\\]", file("${path.module}/sso.tf"))) > 0
     )
     error_message = "Expected native Langfuse OIDC client to allow the Keycloak callback URL"
   }
