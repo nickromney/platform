@@ -8,8 +8,9 @@ enable_host_local_registry = true
 
 hardened_image_registry         = "dhi.io"
 prefer_external_platform_images = true
+prefer_hardened_component_images = true
 argocd_image_repository         = "quay.io/argoproj/argocd"
-argocd_image_tag                = "v3.4.3"
+argocd_image_tag                = "v3.4.5"
 keycloak_image                  = "host.docker.internal:5002/platform/keycloak:26.6.4"
 
 external_platform_image_refs = {

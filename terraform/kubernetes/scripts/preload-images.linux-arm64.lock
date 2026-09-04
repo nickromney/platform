@@ -3,6 +3,7 @@ quay.io/cilium/operator-generic:v1.20.1	quay.io/cilium/operator-generic@sha256:6
 quay.io/cilium/hubble-relay:v1.20.1	quay.io/cilium/hubble-relay@sha256:59be0ae7d475ab9011a5e954618c0f27b5778b17140381425b308b55ba4917f4
 quay.io/cilium/hubble-ui-backend:v0.13.5	quay.io/cilium/hubble-ui-backend@sha256:326d275d38ac5d64c626943e6e1c68bd019f9b0a13d9994e320460e0391b099a
 quay.io/cilium/hubble-ui:v0.13.5	quay.io/cilium/hubble-ui@sha256:573ad7e0dc2180b844fdda80afbe6011e3b9d0cd2c33180ccb9b60bcd08fdb4b
+dhi.io/argocd:3.4.5-debian13	dhi.io/argocd@sha256:9cdc1df39ba7dd9fb29720b6afd0f4ae4760d0cb14827665578bb9d8662908c6
 quay.io/argoproj/argocd:v3.4.5	quay.io/argoproj/argocd@sha256:639b204272c87a1e2837aaaf235b0e35d7cff3f5d686692effbe0b277775861d
 ecr-public.aws.com/docker/library/redis:8.2.7-alpine	-
 docker.gitea.com/gitea:1.27.0-rootless	docker.gitea.com/gitea@sha256:c370be7001817d2ce7e5d63a68e6613f95bd0105c34e45a144d577b8a1dd7a66
