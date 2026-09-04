@@ -200,7 +200,6 @@ resource "null_resource" "preload_images" {
     enable_progressive_delivery = tostring(var.enable_progressive_delivery)
     enable_sso                  = tostring(var.enable_sso)
     enable_actions_runner       = tostring(var.enable_actions_runner)
-    enable_langfuse             = tostring(var.enable_langfuse)
     preload_parallelism         = tostring(var.image_preload_parallelism)
   }
 
@@ -217,7 +216,6 @@ resource "null_resource" "preload_images" {
       PRELOAD_ENABLE_PROGRESSIVE_DELIVERY = tostring(var.enable_progressive_delivery)
       PRELOAD_ENABLE_SSO                  = tostring(var.enable_sso)
       PRELOAD_ENABLE_ACTIONS_RUNNER       = tostring(var.enable_actions_runner)
-      PRELOAD_ENABLE_LANGFUSE             = tostring(var.enable_langfuse)
     }
   }
 

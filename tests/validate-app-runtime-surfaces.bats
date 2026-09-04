@@ -1421,7 +1421,7 @@ test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
 content = test_file.read_text(encoding="utf-8")
 test_body = content[
     content.index('\n@test "preload image artifacts track the current external runtime bump set"'):
-    content.index('\n@test "Langfuse image artifacts use approved non-Bitnami runtime sources"')
+    content.index('\n@test "app runtime tests share preload image artifact helpers"')
 ]
 contract_lines = [
     line
@@ -1442,61 +1442,4 @@ PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated shared preload image artifact helper usage"* ]]
-}
-
-@test "Langfuse image artifacts use approved non-Bitnami runtime sources" {
-  run uv run --isolated --with pyyaml python - <<'PY'
-from __future__ import annotations
-
-import os
-from pathlib import Path
-
-from tests.app_contracts import langfuse_image_artifact_contract_violations, langfuse_runtime_image_refs
-
-repo_root = Path(os.environ["REPO_ROOT"])
-violations = langfuse_image_artifact_contract_violations(repo_root)
-assert not violations, violations
-
-print(f"validated {len(langfuse_runtime_image_refs())} Langfuse preload and registry policy source(s)")
-PY
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 7 Langfuse preload and registry policy source(s)"* ]]
-}
-
-@test "app runtime tests share Langfuse image artifact helpers" {
-  run uv run --isolated --with pyyaml python - <<'PY'
-from __future__ import annotations
-
-import os
-from pathlib import Path
-
-from tests.app_contracts import langfuse_image_artifact_contract_violations
-
-repo_root = Path(os.environ["REPO_ROOT"])
-test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
-content = test_file.read_text(encoding="utf-8")
-test_body = content[
-    content.index('\n@test "Langfuse image artifacts use approved non-Bitnami runtime sources"'):
-]
-contract_lines = [
-    line
-    for line in test_body.splitlines()
-    if "Langfuse image artifact policy should move" not in line
-]
-
-assert callable(langfuse_image_artifact_contract_violations)
-assert "langfuse_image_artifact_contract_violations" in content
-assert not any("required_images =" in line for line in contract_lines), "Langfuse image artifact policy should move to tests/app_contracts.py"
-assert not any("docker.io/langfuse/langfuse:3" in line for line in contract_lines), "Langfuse image artifact policy should move to tests/app_contracts.py"
-assert not any('"docker.io/langfuse/*"' in line for line in contract_lines), "Langfuse image artifact policy should move to tests/app_contracts.py"
-assert not any("dhi.io/langfuse:" in line for line in contract_lines), "Langfuse image artifact policy should move to tests/app_contracts.py"
-assert not any("langfuse-redis" in line for line in contract_lines), "Langfuse image artifact policy should move to tests/app_contracts.py"
-assert not any("kube-dns" in line for line in contract_lines), "Langfuse image artifact policy should move to tests/app_contracts.py"
-
-print("validated shared Langfuse image artifact helper usage")
-PY
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated shared Langfuse image artifact helper usage"* ]]
 }

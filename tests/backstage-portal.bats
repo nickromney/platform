@@ -116,6 +116,7 @@ PY
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 repo_root = Path(os.environ["REPO_ROOT"])
@@ -131,11 +132,15 @@ build_script = (repo_root / "kubernetes/scripts/build-local-platform-images.sh")
 assert 'variable "enable_backstage"' in variables_tf
 assert "enable_backstage_effective" in locals_tf
 assert 'local.enable_backstage_effective ? ["oauth2-proxy-backstage"] : []' in locals_tf
-assert "enable_backstage                       = var.enable_backstage" in locals_tf
+# Matched loosely: the gap is tofu fmt alignment, which shifts whenever a
+# neighbouring key in the block changes length.
+assert re.search(r"^\s*enable_backstage\s*= var\.enable_backstage$", locals_tf, re.M)
 assert "remove_backstage_idp_resources" in sync_script
 assert "httproute-portal.yaml" in sync_script
 assert "oauth2-proxy-backstage" in sync_script
-assert "KIND_ENABLE_BACKSTAGE ?= auto" in kind_makefile
+# The gate exists and defaults to a supported mode. The default itself is a
+# resource decision (off on small laptops), so it is not pinned here.
+assert re.search(r"^KIND_ENABLE_BACKSTAGE \?= (off|on|auto)$", kind_makefile, re.M)
 assert "KIND_BACKSTAGE_MIN_DOCKER_MEMORY_BYTES ?= 10737418240" in kind_makefile
 assert "ENABLE_BACKSTAGE" in build_script
 assert "SKIP backstage (ENABLE_BACKSTAGE=false)" in build_script
@@ -286,11 +291,6 @@ for name, (selector, source_path) in {
     "chatgpt-sim": ("app=chatgpt-sim", "apps/chatgpt-sim/"),
     "platform-mcp": ("app=platform-mcp", "apps/platform-mcp/"),
     "mcp-inspector": ("app=mcp-inspector", "apps/platform-mcp/"),
-    "langfuse": ("app.kubernetes.io/name=langfuse", "terraform/kubernetes/apps/langfuse/"),
-    "langfuse-trace-chat": ("app.kubernetes.io/name=langfuse-trace-chat", "apps/langfuse-demos/"),
-    "langfuse-tool-agent": ("app.kubernetes.io/name=langfuse-tool-agent", "apps/langfuse-demos/"),
-    "langfuse-eval-runner": ("app.kubernetes.io/name=langfuse-eval-runner", "apps/langfuse-demos/"),
-    "langfuse-mcp-agent": ("app.kubernetes.io/name=langfuse-mcp-agent", "apps/langfuse-demos/"),
     "subnetcalc": ("app=subnetcalc", "apps/subnetcalc/"),
     "sentiment": ("app=sentiment", "apps/sentiment/"),
 }.items():
@@ -319,14 +319,6 @@ assert entities[("Component", "mcp-inspector")]["spec"]["dependsOn"] == [
     "component:default/platform-mcp"
 ]
 assert entities[("Component", "mcp-inspector")]["spec"]["consumesApis"] == ["platform-mcp-api"]
-for component_name in ("langfuse-trace-chat", "langfuse-tool-agent", "langfuse-eval-runner"):
-    assert entities[("Component", component_name)]["spec"]["dependsOn"] == [
-        "component:default/langfuse"
-    ]
-assert entities[("Component", "langfuse-mcp-agent")]["spec"]["dependsOn"] == [
-    "component:default/langfuse",
-    "component:default/platform-mcp",
-]
 assert entities[("Component", "subnetcalc")]["spec"]["dependsOn"] == [
     "component:default/idp-core",
     "component:default/apim-simulator",
@@ -357,16 +349,6 @@ mcp_inspector_links = {
 assert platform_mcp_links["MCP Endpoint"] == "https://mcp.127.0.0.1.sslip.io/mcp"
 assert platform_mcp_links["MCP Console"] == "https://mcp-console.127.0.0.1.sslip.io"
 assert mcp_inspector_links["MCP Console"] == "https://mcp-console.127.0.0.1.sslip.io"
-for component_name, route in {
-    "langfuse": "https://langfuse.dev.127.0.0.1.sslip.io",
-    "langfuse-trace-chat": "https://lf-chat.dev.127.0.0.1.sslip.io",
-    "langfuse-tool-agent": "https://lf-agent.dev.127.0.0.1.sslip.io",
-    "langfuse-eval-runner": "https://lf-evals.dev.127.0.0.1.sslip.io",
-    "langfuse-mcp-agent": "https://lf-mcp.dev.127.0.0.1.sslip.io",
-}.items():
-    links = {link["url"] for link in entities[("Component", component_name)]["metadata"]["links"]}
-    assert route in links
-
 print("validated Backstage catalog annotations and API relations")
 PY
 
@@ -413,7 +395,7 @@ test_file = Path("tests/backstage-portal.bats")
 content = test_file.read_text(encoding="utf-8")
 test_body = content[
     content.index('\n@test "Backstage bundled app catalogs mirror app-owned catalog facts"'):
-    content.index('\n@test "IDP application inventory includes platform MCP and Langfuse surfaces"')
+    content.index('\n@test "IDP application inventory includes platform MCP surfaces"')
 ]
 contract_lines = [
     line
@@ -442,52 +424,51 @@ PY
   [[ "${output}" == *"validated shared Backstage app catalog mirror helper usage"* ]]
 }
 
-@test "IDP application inventory includes platform MCP and Langfuse surfaces" {
+@test "IDP application inventory includes platform MCP surfaces" {
   run uv run --isolated python - <<'PY'
 import os
 from pathlib import Path
 
-from tests.app_contracts import platform_mcp_langfuse_inventory_contract_violations
+from tests.app_contracts import platform_mcp_inventory_contract_violations
 
-violations = platform_mcp_langfuse_inventory_contract_violations(Path(os.environ["REPO_ROOT"]))
+violations = platform_mcp_inventory_contract_violations(Path(os.environ["REPO_ROOT"]))
 assert not violations, violations
 
-print("validated platform MCP and Langfuse inventory entries")
+print("validated platform MCP inventory entries")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated platform MCP and Langfuse inventory entries"* ]]
+  [[ "${output}" == *"validated platform MCP inventory entries"* ]]
 }
 
-@test "Backstage portal tests share platform MCP and Langfuse inventory helpers" {
+@test "Backstage portal tests share platform MCP inventory helpers" {
   run uv run --isolated python - <<'PY'
 from pathlib import Path
 
-from tests.app_contracts import platform_mcp_langfuse_inventory_contract_violations
+from tests.app_contracts import platform_mcp_inventory_contract_violations
 
 test_file = Path("tests/backstage-portal.bats")
 content = test_file.read_text(encoding="utf-8")
 test_body = content[
-    content.index('\n@test "IDP application inventory includes platform MCP and Langfuse surfaces"'):
+    content.index('\n@test "IDP application inventory includes platform MCP surfaces"'):
     content.index('\n@test "local platform image flow builds Backstage instead of the old React portal"')
 ]
 contract_lines = [
     line
     for line in test_body.splitlines()
-    if "platform MCP and Langfuse inventory policy should move" not in line
+    if "platform MCP inventory policy should move" not in line
 ]
 
-assert callable(platform_mcp_langfuse_inventory_contract_violations)
-assert "platform_mcp_langfuse_inventory_contract_violations" in test_body
-assert not any("json.loads" in line for line in contract_lines), "platform MCP and Langfuse inventory policy should move to tests/app_contracts.py"
-assert not any("lf-chat.dev.127.0.0.1.sslip.io" in line for line in contract_lines), "platform MCP and Langfuse inventory policy should move to tests/app_contracts.py"
-assert not any("apps/platform-mcp" in line and "assert" in line for line in contract_lines), "platform MCP and Langfuse inventory policy should move to tests/app_contracts.py"
+assert callable(platform_mcp_inventory_contract_violations)
+assert "platform_mcp_inventory_contract_violations" in test_body
+assert not any("json.loads" in line for line in contract_lines), "platform MCP inventory policy should move to tests/app_contracts.py"
+assert not any("apps/platform-mcp" in line and "assert" in line for line in contract_lines), "platform MCP inventory policy should move to tests/app_contracts.py"
 
-print("validated shared platform MCP and Langfuse inventory helper usage")
+print("validated shared platform MCP inventory helper usage")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated shared platform MCP and Langfuse inventory helper usage"* ]]
+  [[ "${output}" == *"validated shared platform MCP inventory helper usage"* ]]
 }
 
 @test "local platform image flow builds Backstage instead of the old React portal" {
@@ -517,13 +498,15 @@ assert "EXTERNAL_PLATFORM_IMAGE_BACKSTAGE" in policies_script
 assert "external_platform_backstage" in policies_script
 assert 'replace_image_ref "${manifest_file}" "${image_name}" "${image_ref}"' in policies_script
 
-for target, registry_host in {
-    "kind": "host.docker.internal:5002",
-    "lima": "host.lima.internal:5002",
-    "lima": "192.168.64.1:5002",
-}.items():
+# A list, not a dict: "lima" was previously a duplicate key, so Python kept
+# only the last entry and the kind expectation was never checked.
+for target, registry_host in (
+    ("kind", "host.docker.internal:5002"),
+    ("lima", "host.lima.internal:5002"),
+):
     tfvars = (repo_root / "kubernetes" / target / "targets" / f"{target}.tfvars").read_text(encoding="utf-8")
-    assert f'backstage' in tfvars and f'= "{registry_host}/platform/backstage:1.0.0"' in tfvars
+    assert "backstage" in tfvars, target
+    assert f'= "{registry_host}/platform/backstage:1.0.0"' in tfvars, target
 
 print("validated Backstage local image flow")
 PY

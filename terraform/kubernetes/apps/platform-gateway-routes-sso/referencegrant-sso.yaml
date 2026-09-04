@@ -54,6 +54,3 @@ spec:
     - group: ""
       kind: Service
       name: oauth2-proxy-chatgpt-sim
-    - group: ""
-      kind: Service
-      name: oauth2-proxy-langfuse

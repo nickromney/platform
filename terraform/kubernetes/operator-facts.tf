@@ -28,8 +28,6 @@ locals {
     enable_app_repo_subnetcalc      = var.enable_app_repo_subnetcalc
     enable_app_repo_sentiment       = var.enable_app_repo_sentiment
     enable_uat_apps                 = var.enable_uat_apps
-    enable_langfuse                 = var.enable_langfuse
-    enable_langfuse_demos           = var.enable_langfuse_demos
     prefer_external_workload_images = var.prefer_external_workload_images
     enable_gitops_repo              = local.enable_gitops_repo
     cluster_name                    = var.cluster_name

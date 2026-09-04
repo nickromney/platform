@@ -85,7 +85,7 @@ data "kubernetes_nodes" "platform_gateway_alias" {
 }
 
 locals {
-  # In-cluster clients (Headlamp, Argo CD, Langfuse) resolve the public Keycloak
+  # In-cluster clients (Headlamp, Argo CD) resolve the public Keycloak
   # hostname via hostAliases. Cilium Envoy is on the node's host network, so the
   # node InternalIP is the address that answers on 443.
   platform_gateway_sso_alias_ip = (

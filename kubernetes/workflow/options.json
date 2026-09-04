@@ -121,8 +121,7 @@
         "600",
         "700",
         "800",
-        "900",
-        "920"
+        "900"
       ],
       "provides": [
         "cni",
@@ -374,22 +373,6 @@
       ],
       "shortcut": "9",
       "app_toggles": true
-    },
-    {
-      "id": "920",
-      "label": "langfuse",
-      "guided_description": "Langfuse LLM observability surface",
-      "guided_hint": "l selects 920 langfuse: add Langfuse on top of the authenticated platform.",
-      "stage_delta_hint": "Stage 920 keeps the stage 900 SSO surface and adds the Langfuse workload.",
-      "context": "platform-stack",
-      "contracts": [
-        "cluster-access",
-        "ingress",
-        "observability",
-        "identity"
-      ],
-      "shortcut": "l",
-      "app_toggles": true
     }
   ],
   "actions": [
@@ -603,8 +586,6 @@
         "enable_subnetcalc_apim_gateway": false,
         "enable_apim_simulator": false,
         "enable_agentgateway_ai_gateway": false,
-        "enable_langfuse": false,
-        "enable_langfuse_demos": false,
         "enable_host_local_registry": true,
         "host_local_registry_host": "${local_registry_runtime_host}",
         "host_local_registry_scheme": "http",
@@ -653,8 +634,6 @@
         "enable_subnetcalc_apim_gateway": false,
         "enable_apim_simulator": false,
         "enable_agentgateway_ai_gateway": false,
-        "enable_langfuse": false,
-        "enable_langfuse_demos": false,
         "enable_host_local_registry": true,
         "host_local_registry_host": "${local_registry_runtime_host}",
         "host_local_registry_scheme": "http",
@@ -958,19 +937,6 @@
       "portability": "adapter-contract",
       "rebuild_risk": "service-reconfigure",
       "dependency_source": "not_applicable"
-    },
-    {
-      "id": "enable_langfuse",
-      "stage": "920",
-      "context": "platform-stack",
-      "contract": "observability",
-      "variants": [
-        "kind",
-        "lima"
-      ],
-      "portability": "portable",
-      "rebuild_risk": "workload-rollout",
-      "dependency_source": "not_applicable"
     }
   ],
   "compatibility_aliases": [],
@@ -1121,8 +1087,7 @@
     "app_toggle_stages": [
       "700",
       "800",
-      "900",
-      "920"
+      "900"
     ],
     "app_toggle_hidden_hint": "Stages 100-600 hide app toggles because apps are not contained until stage 700.",
     "app_toggle_available_hint": "App overrides are offered only from stage 700 onward, after app repositories exist.",
@@ -1149,9 +1114,6 @@
       ],
       "800": [
         "900"
-      ],
-      "900": [
-        "920"
       ]
     },
     "platform_surfaces": [
@@ -1174,11 +1136,6 @@
         "name": "IDP core",
         "kind": "Identity portal/API",
         "stage": "stage 900"
-      },
-      {
-        "name": "Langfuse",
-        "kind": "LLM observability surface",
-        "stage": "stage 920"
       }
     ]
   }

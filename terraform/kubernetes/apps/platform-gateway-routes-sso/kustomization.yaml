@@ -17,11 +17,6 @@ resources:
   - httproute-agentgateway-ai-gateway.yaml
   - httproute-auth-chat.yaml
   - httproute-chatgpt-sim.yaml
-  - httproute-langfuse.yaml
-  - httproute-langfuse-trace-chat.yaml
-  - httproute-langfuse-tool-agent.yaml
-  - httproute-langfuse-eval-runner.yaml
-  - httproute-langfuse-mcp-agent.yaml
   - httproute-mcp.yaml
   - httproute-mcp-console.yaml
   - httproute-portal.yaml
@@ -32,5 +27,4 @@ resources:
   - referencegrant-dev-subnetcalc-frontend.yaml
   - referencegrant-apim.yaml
   - referencegrant-sso.yaml
-  - referencegrant-sso-langfuse-demos.yaml
   - referencegrant-policy-reporter.yaml

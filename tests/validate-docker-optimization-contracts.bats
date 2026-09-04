@@ -1041,7 +1041,7 @@ print(f"validated {validated} image catalog version-check policies")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 14 image catalog version-check policies"* ]]
+  [[ "${output}" == *"validated 13 image catalog version-check policies"* ]]
 }
 
 @test "docker optimization tests share image catalog version-check helpers" {

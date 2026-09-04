@@ -1274,7 +1274,7 @@ __GRAFANA_PLUGINS_VALUES__
                         "type": "prometheus",
                         "uid": "prometheus"
                       },
-                      "description": "https://langfuse.dev.127.0.0.1.sslip.io",
+                      "description": "https://sentiment.dev.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -1318,371 +1318,6 @@ __GRAFANA_PLUGINS_VALUES__
                         "y": 18
                       },
                       "id": 17,
-                      "links": [
-                        {
-                          "targetBlank": true,
-                          "title": "Open Langfuse",
-                          "url": "https://langfuse.dev.127.0.0.1.sslip.io"
-                        }
-                      ],
-                      "options": {
-                        "colorMode": "background",
-                        "graphMode": "none"
-                      },
-                      "targets": [
-                        {
-                          "datasource": {
-                            "type": "prometheus",
-                            "uid": "prometheus"
-                          },
-                          "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-langfuse\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"langfuse\",deployment=\"langfuse-web\"}) > bool 0)) or vector(0))",
-                          "refId": "A"
-                        }
-                      ],
-                      "title": "Langfuse",
-                      "type": "stat"
-                    },
-                    {
-                      "datasource": {
-                        "type": "prometheus",
-                        "uid": "prometheus"
-                      },
-                      "description": "https://lf-evals.dev.127.0.0.1.sslip.io",
-                      "fieldConfig": {
-                        "defaults": {
-                          "color": {
-                            "mode": "thresholds"
-                          },
-                          "mappings": [
-                            {
-                              "options": {
-                                "0": {
-                                  "text": "Down"
-                                },
-                                "1": {
-                                  "text": "Healthy"
-                                }
-                              },
-                              "type": "value"
-                            }
-                          ],
-                          "max": 1,
-                          "min": 0,
-                          "thresholds": {
-                            "mode": "absolute",
-                            "steps": [
-                              {
-                                "color": "red",
-                                "value": 0
-                              },
-                              {
-                                "color": "green",
-                                "value": 1
-                              }
-                            ]
-                          },
-                          "unit": "short"
-                        }
-                      },
-                      "gridPos": {
-                        "h": 5,
-                        "w": 6,
-                        "x": 0,
-                        "y": 23
-                      },
-                      "id": 18,
-                      "links": [
-                        {
-                          "targetBlank": true,
-                          "title": "Open Langfuse Eval Runner DEV",
-                          "url": "https://lf-evals.dev.127.0.0.1.sslip.io"
-                        }
-                      ],
-                      "options": {
-                        "colorMode": "background",
-                        "graphMode": "none"
-                      },
-                      "targets": [
-                        {
-                          "datasource": {
-                            "type": "prometheus",
-                            "uid": "prometheus"
-                          },
-                          "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-langfuse-eval-runner\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"langfuse-eval-runner\"}) > bool 0)) or vector(0))",
-                          "refId": "A"
-                        }
-                      ],
-                      "title": "Langfuse Eval Runner DEV",
-                      "type": "stat"
-                    },
-                    {
-                      "datasource": {
-                        "type": "prometheus",
-                        "uid": "prometheus"
-                      },
-                      "description": "https://lf-mcp.dev.127.0.0.1.sslip.io",
-                      "fieldConfig": {
-                        "defaults": {
-                          "color": {
-                            "mode": "thresholds"
-                          },
-                          "mappings": [
-                            {
-                              "options": {
-                                "0": {
-                                  "text": "Down"
-                                },
-                                "1": {
-                                  "text": "Healthy"
-                                }
-                              },
-                              "type": "value"
-                            }
-                          ],
-                          "max": 1,
-                          "min": 0,
-                          "thresholds": {
-                            "mode": "absolute",
-                            "steps": [
-                              {
-                                "color": "red",
-                                "value": 0
-                              },
-                              {
-                                "color": "green",
-                                "value": 1
-                              }
-                            ]
-                          },
-                          "unit": "short"
-                        }
-                      },
-                      "gridPos": {
-                        "h": 5,
-                        "w": 6,
-                        "x": 6,
-                        "y": 23
-                      },
-                      "id": 19,
-                      "links": [
-                        {
-                          "targetBlank": true,
-                          "title": "Open Langfuse MCP Agent DEV",
-                          "url": "https://lf-mcp.dev.127.0.0.1.sslip.io"
-                        }
-                      ],
-                      "options": {
-                        "colorMode": "background",
-                        "graphMode": "none"
-                      },
-                      "targets": [
-                        {
-                          "datasource": {
-                            "type": "prometheus",
-                            "uid": "prometheus"
-                          },
-                          "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-langfuse-mcp-agent\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"langfuse-mcp-agent\"}) > bool 0)) or vector(0))",
-                          "refId": "A"
-                        }
-                      ],
-                      "title": "Langfuse MCP Agent DEV",
-                      "type": "stat"
-                    },
-                    {
-                      "datasource": {
-                        "type": "prometheus",
-                        "uid": "prometheus"
-                      },
-                      "description": "https://lf-agent.dev.127.0.0.1.sslip.io",
-                      "fieldConfig": {
-                        "defaults": {
-                          "color": {
-                            "mode": "thresholds"
-                          },
-                          "mappings": [
-                            {
-                              "options": {
-                                "0": {
-                                  "text": "Down"
-                                },
-                                "1": {
-                                  "text": "Healthy"
-                                }
-                              },
-                              "type": "value"
-                            }
-                          ],
-                          "max": 1,
-                          "min": 0,
-                          "thresholds": {
-                            "mode": "absolute",
-                            "steps": [
-                              {
-                                "color": "red",
-                                "value": 0
-                              },
-                              {
-                                "color": "green",
-                                "value": 1
-                              }
-                            ]
-                          },
-                          "unit": "short"
-                        }
-                      },
-                      "gridPos": {
-                        "h": 5,
-                        "w": 6,
-                        "x": 12,
-                        "y": 23
-                      },
-                      "id": 20,
-                      "links": [
-                        {
-                          "targetBlank": true,
-                          "title": "Open Langfuse Tool Agent DEV",
-                          "url": "https://lf-agent.dev.127.0.0.1.sslip.io"
-                        }
-                      ],
-                      "options": {
-                        "colorMode": "background",
-                        "graphMode": "none"
-                      },
-                      "targets": [
-                        {
-                          "datasource": {
-                            "type": "prometheus",
-                            "uid": "prometheus"
-                          },
-                          "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-langfuse-tool-agent\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"langfuse-tool-agent\"}) > bool 0)) or vector(0))",
-                          "refId": "A"
-                        }
-                      ],
-                      "title": "Langfuse Tool Agent DEV",
-                      "type": "stat"
-                    },
-                    {
-                      "datasource": {
-                        "type": "prometheus",
-                        "uid": "prometheus"
-                      },
-                      "description": "https://lf-chat.dev.127.0.0.1.sslip.io",
-                      "fieldConfig": {
-                        "defaults": {
-                          "color": {
-                            "mode": "thresholds"
-                          },
-                          "mappings": [
-                            {
-                              "options": {
-                                "0": {
-                                  "text": "Down"
-                                },
-                                "1": {
-                                  "text": "Healthy"
-                                }
-                              },
-                              "type": "value"
-                            }
-                          ],
-                          "max": 1,
-                          "min": 0,
-                          "thresholds": {
-                            "mode": "absolute",
-                            "steps": [
-                              {
-                                "color": "red",
-                                "value": 0
-                              },
-                              {
-                                "color": "green",
-                                "value": 1
-                              }
-                            ]
-                          },
-                          "unit": "short"
-                        }
-                      },
-                      "gridPos": {
-                        "h": 5,
-                        "w": 6,
-                        "x": 18,
-                        "y": 23
-                      },
-                      "id": 21,
-                      "links": [
-                        {
-                          "targetBlank": true,
-                          "title": "Open Langfuse Trace Chat DEV",
-                          "url": "https://lf-chat.dev.127.0.0.1.sslip.io"
-                        }
-                      ],
-                      "options": {
-                        "colorMode": "background",
-                        "graphMode": "none"
-                      },
-                      "targets": [
-                        {
-                          "datasource": {
-                            "type": "prometheus",
-                            "uid": "prometheus"
-                          },
-                          "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-langfuse-trace-chat\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"langfuse-trace-chat\"}) > bool 0)) or vector(0))",
-                          "refId": "A"
-                        }
-                      ],
-                      "title": "Langfuse Trace Chat DEV",
-                      "type": "stat"
-                    },
-                    {
-                      "datasource": {
-                        "type": "prometheus",
-                        "uid": "prometheus"
-                      },
-                      "description": "https://sentiment.dev.127.0.0.1.sslip.io",
-                      "fieldConfig": {
-                        "defaults": {
-                          "color": {
-                            "mode": "thresholds"
-                          },
-                          "mappings": [
-                            {
-                              "options": {
-                                "0": {
-                                  "text": "Down"
-                                },
-                                "1": {
-                                  "text": "Healthy"
-                                }
-                              },
-                              "type": "value"
-                            }
-                          ],
-                          "max": 1,
-                          "min": 0,
-                          "thresholds": {
-                            "mode": "absolute",
-                            "steps": [
-                              {
-                                "color": "red",
-                                "value": 0
-                              },
-                              {
-                                "color": "green",
-                                "value": 1
-                              }
-                            ]
-                          },
-                          "unit": "short"
-                        }
-                      },
-                      "gridPos": {
-                        "h": 5,
-                        "w": 6,
-                        "x": 0,
-                        "y": 28
-                      },
-                      "id": 22,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1752,10 +1387,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 6,
-                        "y": 28
+                        "x": 0,
+                        "y": 23
                       },
-                      "id": 23,
+                      "id": 18,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1825,10 +1460,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 12,
-                        "y": 28
+                        "x": 6,
+                        "y": 23
                       },
-                      "id": 24,
+                      "id": 19,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1898,10 +1533,10 @@ __GRAFANA_PLUGINS_VALUES__
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 18,
-                        "y": 28
+                        "x": 12,
+                        "y": 23
                       },
-                      "id": 25,
+                      "id": 20,
                       "links": [
                         {
                           "targetBlank": true,
@@ -2049,87 +1684,6 @@ __GRAFANA_PLUGINS_VALUES__
                   "time": {"from": "now-6h", "to": "now"},
                   "title": "Platform App Golden Signals",
                   "uid": "platform-app-overview",
-                  "version": 1
-                }
-            langfuse-agent-flow:
-              json: |
-                {
-                  "annotations": {"list": []},
-                  "editable": true,
-                  "graphTooltip": 0,
-                  "panels": [
-                    {
-                      "gridPos": {"h": 3, "w": 24, "x": 0, "y": 0},
-                      "id": 1,
-                      "options": {
-                        "content": "## Langfuse Agent Flow\nlangfuse-trace-chat: https://lf-chat.dev.127.0.0.1.sslip.io\nlangfuse-tool-agent: https://lf-agent.dev.127.0.0.1.sslip.io\nlangfuse-eval-runner: https://lf-evals.dev.127.0.0.1.sslip.io\nlangfuse-mcp-agent: https://lf-mcp.dev.127.0.0.1.sslip.io\nLangfuse UI: https://langfuse.dev.127.0.0.1.sslip.io",
-                        "mode": "markdown"
-                      },
-                      "title": "Demo Entry Points",
-                      "type": "text"
-                    },
-                    {
-                      "datasource": "Prometheus",
-                      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
-                      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 3},
-                      "id": 2,
-                      "targets": [{"expr": "(sum(langfuse_demo_runs_total{job=\"langfuse-demos\"}) or vector(0))", "refId": "A"}],
-                      "title": "Demo Runs",
-                      "type": "stat"
-                    },
-                    {
-                      "datasource": "Prometheus",
-                      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
-                      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 3},
-                      "id": 3,
-                      "targets": [{"expr": "(sum(langfuse_demo_llm_calls_total{job=\"langfuse-demos\"}) or vector(0))", "refId": "A"}],
-                      "title": "LLM Calls",
-                      "type": "stat"
-                    },
-                    {
-                      "datasource": "Prometheus",
-                      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
-                      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 3},
-                      "id": 4,
-                      "targets": [{"expr": "(sum(langfuse_demo_langfuse_batches_total{job=\"langfuse-demos\"}) or vector(0))", "refId": "A"}],
-                      "title": "Langfuse Batches",
-                      "type": "stat"
-                    },
-                    {
-                      "datasource": "Prometheus",
-                      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
-                      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 3},
-                      "id": 5,
-                      "targets": [{"expr": "(sum(langfuse_demo_langfuse_errors_total{job=\"langfuse-demos\"}) or vector(0))", "refId": "A"}],
-                      "title": "Langfuse Errors",
-                      "type": "stat"
-                    },
-                    {
-                      "datasource": "Prometheus",
-                      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
-                      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
-                      "id": 6,
-                      "targets": [{"expr": "sum(rate(langfuse_demo_llm_calls_total{job=\"langfuse-demos\"}[5m])) by (role)", "legendFormat": "{{role}}", "refId": "A"}],
-                      "title": "LLM Call Rate",
-                      "type": "timeseries"
-                    },
-                    {
-                      "datasource": "Prometheus",
-                      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []},
-                      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
-                      "id": 7,
-                      "targets": [{"expr": "sum(rate(langfuse_demo_run_latency_milliseconds_sum{job=\"langfuse-demos\"}[5m])) by (role) / clamp_min(sum(rate(langfuse_demo_runs_total{job=\"langfuse-demos\"}[5m])) by (role), 0.001)", "legendFormat": "{{role}}", "refId": "A"}],
-                      "title": "Run Latency",
-                      "type": "timeseries"
-                    }
-                  ],
-                  "refresh": "30s",
-                  "schemaVersion": 39,
-                  "tags": ["platform", "langfuse", "agent", "evals"],
-                  "templating": {"list": []},
-                  "time": {"from": "now-6h", "to": "now"},
-                  "title": "Langfuse Agent Flow",
-                  "uid": "langfuse-agent-flow",
                   "version": 1
                 }
             platform-namespace-health:

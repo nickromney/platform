@@ -25,7 +25,6 @@ external_platform_image_refs = {
   "chatgpt-sim"                     = "host.lima.internal:5002/platform/chatgpt-sim:0.1.0"
   grafana                           = "host.lima.internal:5002/platform/grafana-victorialogs:12.3.1-v0.31.0"
   "idp-core"                        = "host.lima.internal:5002/platform/idp-core:0.1.0"
-  "langfuse-demos"                  = "host.lima.internal:5002/platform/langfuse-demos:0.1.0"
   "platform-mcp"                    = "host.lima.internal:5002/platform/platform-mcp:0.1.0"
 }
 

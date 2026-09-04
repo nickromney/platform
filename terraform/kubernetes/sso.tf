@@ -44,12 +44,6 @@ resource "random_password" "oauth2_proxy_cookie_secret" {
   special = false
 }
 
-resource "random_password" "langfuse_keycloak_client_secret" {
-  count = var.enable_sso && local.sso_provider_is_keycloak && var.enable_langfuse ? 1 : 0
-
-  length  = 32
-  special = false
-}
 
 resource "random_password" "keycloak_postgres_password" {
   count = var.enable_sso && local.sso_provider_is_keycloak ? 1 : 0
@@ -76,24 +70,6 @@ resource "kubernetes_secret_v1" "oauth2_proxy_oidc" {
   }
 }
 
-resource "kubernetes_secret_v1" "langfuse_keycloak_oidc" {
-  count = var.enable_sso && local.sso_provider_is_keycloak && var.enable_langfuse ? 1 : 0
-
-  metadata {
-    name      = "langfuse-keycloak-oidc"
-    namespace = kubernetes_namespace_v1.langfuse[0].metadata[0].name
-  }
-
-  type = "Opaque"
-
-  data = {
-    "client-secret" = random_password.langfuse_keycloak_client_secret[0].result
-  }
-
-  depends_on = [
-    kubernetes_namespace_v1.langfuse,
-  ]
-}
 
 resource "kubectl_manifest" "oauth2_proxy_session_store_deployment" {
   count = var.enable_sso ? 1 : 0
@@ -729,38 +705,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
             }
           ]
         },
-        ], var.enable_langfuse ? [
-        {
-          clientId                  = "langfuse"
-          name                      = "Langfuse"
-          enabled                   = true
-          publicClient              = false
-          protocol                  = "openid-connect"
-          secret                    = random_password.langfuse_keycloak_client_secret[0].result
-          fullScopeAllowed          = false
-          standardFlowEnabled       = true
-          directAccessGrantsEnabled = true
-          redirectUris              = [local.langfuse_keycloak_redirect_uri]
-          webOrigins                = ["+"]
-          defaultClientScopes       = ["web-origins", "acr", "profile", "basic", "email"]
-          optionalClientScopes      = [local.sso_groups_claim]
-          protocolMappers = [
-            {
-              name            = "groups"
-              protocol        = "openid-connect"
-              protocolMapper  = "oidc-group-membership-mapper"
-              consentRequired = false
-              config = {
-                "claim.name"           = local.sso_groups_claim
-                "full.path"            = "false"
-                "id.token.claim"       = "true"
-                "access.token.claim"   = "true"
-                "userinfo.token.claim" = "true"
-              }
-            }
-          ]
-        },
-      ] : [])
+      ])
       users = [
         {
           username      = "demo@admin.test"
@@ -1611,8 +1556,6 @@ resource "kubectl_manifest" "argocd_app_oauth2_proxy_idp" {
     local.enable_subnetcalc_workloads_effective ? local.sso_mcp_console_proxy_apps : {},
     local.enable_mcp_effective ? local.sso_auth_chat_proxy_apps : {},
     local.enable_mcp_effective ? local.sso_chatgpt_sim_proxy_apps : {},
-    local.sso_langfuse_proxy_apps,
-    local.sso_langfuse_demo_proxy_apps,
   ) : {}
 
   yaml_body = <<__YAML__

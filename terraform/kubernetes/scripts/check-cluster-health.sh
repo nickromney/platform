@@ -86,8 +86,6 @@ expected_argocd_apps() {
     apps+=(agentgateway-crds agentgateway agentgateway-ai-gateway)
   fi
 
-  if [[ "${EXPECT_LANGFUSE}" == "true" ]]; then apps+=(langfuse); fi
-  if [[ "${EXPECT_LANGFUSE_DEMOS}" == "true" ]]; then apps+=(langfuse-demos); fi
 
   if [[ "${EXPECT_APP_REPO_SENTIMENT}" == "true" || "${EXPECT_APP_REPO_SUBNET_CALC}" == "true" ]]; then
     apps+=(dev)
@@ -108,8 +106,6 @@ expected_argocd_apps() {
     if [[ "${EXPECT_APP_REPO_SUBNET_CALC}" == "true" ]]; then apps+=(oauth2-proxy-subnetcalc-dev oauth2-proxy-subnetcalc-uat); fi
     if [[ "${EXPECT_APIM_EFFECTIVE}" == "true" ]]; then apps+=(oauth2-proxy-apim); fi
     if [[ "${EXPECT_BACKSTAGE_EFFECTIVE}" == "true" ]]; then apps+=(oauth2-proxy-backstage); fi
-    if [[ "${EXPECT_LANGFUSE}" == "true" ]]; then apps+=(oauth2-proxy-langfuse); fi
-    if [[ "${EXPECT_LANGFUSE_DEMOS}" == "true" ]]; then apps+=(oauth2-proxy-langfuse-trace-chat oauth2-proxy-langfuse-tool-agent oauth2-proxy-langfuse-eval-runner oauth2-proxy-langfuse-mcp-agent); fi
   fi
 
   if [[ "${EXPECT_MCP_EFFECTIVE}" == "true" ]]; then
@@ -992,8 +988,6 @@ EXPECT_APP_REPO_SENTIMENT=$(expected_from_tfvars enable_app_repo_sentiment)
 EXPECT_UAT_APPS=$(expected_from_tfvars enable_uat_apps)
 # Cilium serves the Gateway from a generated Service.
 PLATFORM_GATEWAY_SERVICE="cilium-gateway-platform-gateway"
-EXPECT_LANGFUSE=$(expected_from_tfvars enable_langfuse)
-EXPECT_LANGFUSE_DEMOS=$(expected_from_tfvars enable_langfuse_demos)
 EXPECT_PREFER_EXTERNAL_WORKLOAD_IMAGES=$(expected_from_tfvars prefer_external_workload_images)
 if [[ -z "${EXPECT_CILIUM_POLICIES}" || "${EXPECT_CILIUM_POLICIES}" == "not reported" ]]; then
   EXPECT_CILIUM_POLICIES="${EXPECT_POLICIES}"
@@ -1128,9 +1122,6 @@ print_gateway_urls() {
   fi
   if [[ "${EXPECT_POLICIES}" == "true" || "${show_all}" == "true" ]]; then
     echo "  • Kyverno:  https://$(admin_host kyverno)${port_suffix}/"
-  fi
-  if [[ "${EXPECT_LANGFUSE}" == "true" || "${show_all}" == "true" ]]; then
-    echo "  • Langfuse: https://langfuse.dev.${PLATFORM_BASE_DOMAIN}${port_suffix}/"
   fi
 
   if [[ "${EXPECT_SSO}" == "true" ]]; then
@@ -1325,16 +1316,12 @@ launchpad_toggles_json() {
     --argjson headlamp "$(expect_bool_json "${EXPECT_HEADLAMP}")" \
     --argjson sentiment "$(expect_bool_json "${EXPECT_APP_REPO_SENTIMENT}")" \
     --argjson subnetcalc "$(expect_bool_json "${EXPECT_APP_REPO_SUBNET_CALC}")" \
-    --argjson langfuse "$(expect_bool_json "${EXPECT_LANGFUSE}")" \
-    --argjson langfuse_demos "$(expect_bool_json "${EXPECT_LANGFUSE_DEMOS}")" \
     '{
       ENABLE_SSO: $sso,
       ENABLE_BACKSTAGE: $backstage,
       ENABLE_HEADLAMP: $headlamp,
       ENABLE_APP_REPO_SENTIMENT: $sentiment,
-      ENABLE_APP_REPO_SUBNETCALC: $subnetcalc,
-      ENABLE_LANGFUSE: $langfuse,
-      ENABLE_LANGFUSE_DEMOS: $langfuse_demos
+      ENABLE_APP_REPO_SUBNETCALC: $subnetcalc
     }'
 }
 
@@ -1766,12 +1753,6 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
     if [[ "${EXPECT_APIM_EFFECTIVE}" == "true" ]]; then
       sso_apps+=(oauth2-proxy-apim)
     fi
-    if [[ "${EXPECT_LANGFUSE}" == "true" ]]; then
-      sso_apps+=(oauth2-proxy-langfuse)
-    fi
-    if [[ "${EXPECT_LANGFUSE_DEMOS}" == "true" ]]; then
-      sso_apps+=(oauth2-proxy-langfuse-trace-chat oauth2-proxy-langfuse-tool-agent oauth2-proxy-langfuse-eval-runner oauth2-proxy-langfuse-mcp-agent)
-    fi
 
     for app in "${sso_apps[@]}"; do
       if argocd_app_exists "${ARGOCD_NS}" "${app}"; then
@@ -1818,14 +1799,6 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
         fail_soft "Argo CD app ${app} missing (MCP/chatgpt demo expected${tfvars_hint})"
       fi
     done
-  fi
-
-  if [[ "${EXPECT_LANGFUSE}" == "true" ]]; then
-    if argocd_app_exists "${ARGOCD_NS}" langfuse; then
-      ok "Argo CD app langfuse exists"
-    else
-      fail_soft "Argo CD app langfuse missing (enable_langfuse=true${tfvars_hint})"
-    fi
   fi
 else
   if [[ "${EXPECT_ARGOCD}" == "true" ]]; then

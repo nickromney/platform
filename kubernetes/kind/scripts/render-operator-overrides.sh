@@ -105,9 +105,6 @@ auth_chat_image_tag="$(
 chatgpt_sim_image_tag="$(
   image_catalog_source_tag platform chatgpt-sim
 )"
-langfuse_demos_image_tag="$(
-  image_catalog_source_tag platform langfuse-demos
-)"
 idp_core_image_tag="$(
   image_catalog_source_tag platform idp-core
 )"
@@ -134,9 +131,6 @@ write_external_platform_images() {
   fi
   if [ -n "${chatgpt_sim_image_tag}" ]; then
     tag_overrides+=("chatgpt-sim=${chatgpt_sim_image_tag}")
-  fi
-  if [ -n "${langfuse_demos_image_tag}" ]; then
-    tag_overrides+=("langfuse-demos=${langfuse_demos_image_tag}")
   fi
 
   cat <<EOF

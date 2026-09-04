@@ -264,9 +264,6 @@ auth_chat_source_tag="$(
 chatgpt_sim_source_tag="$(
   image_catalog_source_tag platform chatgpt-sim
 )"
-langfuse_demos_source_tag="$(
-  image_catalog_source_tag platform langfuse-demos
-)"
 backstage_source_tag="$(
   if [ "${ENABLE_BACKSTAGE}" = "true" ]; then
     image_catalog_source_tag platform backstage
@@ -283,8 +280,6 @@ image_build_catalog_build_and_push platform platform-mcp platform-mcp "${platfor
 image_build_catalog_build_and_push platform auth-chat auth-chat "${auth_chat_source_tag}"
 
 image_build_catalog_build_and_push platform chatgpt-sim chatgpt-sim "${chatgpt_sim_source_tag}"
-
-image_build_catalog_build_and_push platform langfuse-demos langfuse-demos "${langfuse_demos_source_tag}"
 
 if [ "${ENABLE_BACKSTAGE}" = "true" ]; then
   image_build_catalog_build_and_push platform backstage backstage "${backstage_source_tag}"
