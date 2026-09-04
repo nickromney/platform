@@ -214,12 +214,21 @@ run_command_with_progress() {
   "$@" > "${stdout_file}" 2> "${stderr_file}" &
   cmd_pid=$!
 
+  # Sleep in one-second slices rather than one `sleep ${progress_every}`.
+  # A bash subshell does not act on the SIGTERM below until its foreground
+  # child exits, so a single long sleep made every helper invocation wait out
+  # the rest of the interval after its command had already finished: about ten
+  # seconds each, on real runs as well as in tests.
   (
     while true; do
-      sleep "${progress_every}"
-      if ! kill -0 "${cmd_pid}" 2>/dev/null; then
-        exit 0
-      fi
+      waited=0
+      while [[ "${waited}" -lt "${progress_every}" ]]; do
+        sleep 1
+        if ! kill -0 "${cmd_pid}" 2>/dev/null; then
+          exit 0
+        fi
+        waited=$((waited + 1))
+      done
       elapsed=$((SECONDS - started_at))
       info "${label}: still running after ${elapsed}s"
     done
