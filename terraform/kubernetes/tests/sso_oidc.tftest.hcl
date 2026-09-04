@@ -66,7 +66,7 @@ run "sso_enabled_argocd_oidc_disabled" {
       )) == 0,
       contains(local.sso_oauth2_proxy_redirect_uris, "${local.chatgpt_sim_public_url}/oauth2/callback"),
       contains(local.sso_oauth2_proxy_redirect_uris, "${local.mcp_console_public_url}/oauth2/callback"),
-      strcontains(file("${path.module}/sso.tf"), "redirectUris              = local.sso_oauth2_proxy_redirect_uris"),
+      length(regexall("redirectUris\\s*=\\s*local\\.sso_oauth2_proxy_redirect_uris", file("${path.module}/sso.tf"))) > 0,
     ])
     error_message = "Expected every oauth2-proxy callback URL, including future map-backed endpoints, to be present in the Keycloak oauth2-proxy client redirectUris"
   }
@@ -102,10 +102,10 @@ run "sso_enabled_argocd_oidc_disabled" {
 
   assert {
     condition = alltrue([
-      strcontains(file("${path.module}/sso.tf"), "email         = \"demo@admin.test\""),
-      strcontains(file("${path.module}/sso.tf"), "email         = \"demo@dev.test\""),
-      strcontains(file("${path.module}/sso.tf"), "email         = \"demo@uat.test\""),
-      strcontains(file("${path.module}/sso.tf"), "emailVerified = true"),
+      length(regexall("email\\s*=\\s*\"demo@admin\\.test\"", file("${path.module}/sso.tf"))) > 0,
+      length(regexall("email\\s*=\\s*\"demo@dev\\.test\"", file("${path.module}/sso.tf"))) > 0,
+      length(regexall("email\\s*=\\s*\"demo@uat\\.test\"", file("${path.module}/sso.tf"))) > 0,
+      length(regexall("emailVerified\\s*=\\s*true", file("${path.module}/sso.tf"))) > 0,
       strcontains(file("${path.module}/sso.tf"), "name: demo@admin.test"),
     ])
     error_message = "Expected all rendered platform realm demo users to have verified email addresses and the Headlamp admin ClusterRoleBinding to include the admin user"
@@ -133,9 +133,9 @@ run "sso_enabled_argocd_oidc_disabled" {
 
   assert {
     condition = alltrue([
-      strcontains(file("${path.module}/locals.tf"), "sso_apim_audience                    = \"apim-simulator\""),
-      strcontains(file("${path.module}/sso.tf"), "clientId                  = local.sso_apim_audience"),
-      strcontains(file("${path.module}/sso.tf"), "\"included.client.audience\" = local.sso_apim_audience"),
+      length(regexall("sso_apim_audience\\s*=\\s*\"apim-simulator\"", file("${path.module}/locals.tf"))) > 0,
+      length(regexall("clientId\\s*=\\s*local\\.sso_apim_audience", file("${path.module}/sso.tf"))) > 0,
+      length(regexall("\"included\\.client\\.audience\"\\s*=\\s*local\\.sso_apim_audience", file("${path.module}/sso.tf"))) > 0,
       strcontains(file("${path.module}/apps/apim/all.yaml"), "\"audience\": \"apim-simulator\""),
       strcontains(file("${path.module}/scripts/check-sso.sh"), "EXPECTED_APIM_AUDIENCE"),
     ])
