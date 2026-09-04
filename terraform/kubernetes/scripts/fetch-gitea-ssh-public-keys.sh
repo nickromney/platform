@@ -73,7 +73,13 @@ for attempt in $(seq 1 60); do
       [ "$found" -eq 1 ]
     ' 2>/dev/null || true
   )"
-  keys="$(printf '%s\n' "${raw}" | grep -E '^ssh-' || true)"
+  # Gitea generates ed25519, rsa AND ecdsa host keys. A '^ssh-' filter keeps the
+  # first two and silently drops ecdsa-sha2-*, so when the SSH handshake
+  # negotiates ECDSA the client finds known_hosts entries for the host but none
+  # of the offered type and fails with "knownhosts: key mismatch" -- which reads
+  # like a stale key rather than a missing algorithm. Accept every host key type
+  # OpenSSH can present.
+  keys="$(printf '%s\n' "${raw}" | grep -E '^(ssh-|ecdsa-sha2-|sk-ssh-|sk-ecdsa-)' || true)"
   if [[ -n "${keys}" ]]; then
     cluster_ip="$(
       kubectl "${kubectl_args[@]}" -n "${gitea_namespace}" get svc gitea-ssh \
