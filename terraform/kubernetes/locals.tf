@@ -157,6 +157,65 @@ locals {
   idp_portal_public_url                = "https://${local.idp_portal_public_host}${local.gateway_https_host_port_suffix}"
   idp_api_public_host                  = "portal-api.${local.platform_base_domain_effective}"
   idp_api_public_url                   = "https://${local.idp_api_public_host}${local.gateway_https_host_port_suffix}"
+  # The four admin-domain proxies differ only in which upstream they front and
+  # which group may reach it. Two flags are set on some and not others: hubble
+  # and grafana have never carried pass-access-token, and grafana has never
+  # carried set-authorization-header. That is preserved per entry rather than
+  # normalised, because changing it changes what the proxy sends upstream and
+  # is a decision to make on its own, not a side effect of collapsing copies.
+  # Each flag carries its own leading newline and is appended to the preceding
+  # template line, so an entry that omits it renders no blank line.
+  sso_admin_proxy_apps = merge(
+    {
+      argocd = {
+        name                         = "oauth2-proxy-argocd"
+        public_url                   = local.argocd_public_url
+        upstream                     = "http://argocd-server.argocd.svc.cluster.local:8080"
+        group                        = local.sso_viewer_group
+        cookie_name                  = local.admin_sso_cookie_name
+        cookie_domain                = local.admin_cookie_domain
+        whitelist_domain             = local.admin_whitelist_domains
+        pass_access_token_arg        = "\n          pass-access-token: \"true\""
+        set_authorization_header_arg = "\n          set-authorization-header: \"true\""
+      }
+    },
+    {
+      gitea = {
+        name                         = "oauth2-proxy-gitea"
+        public_url                   = local.gitea_public_url
+        upstream                     = "http://gitea-http.gitea.svc.cluster.local:3000"
+        group                        = local.sso_admin_group
+        cookie_name                  = local.admin_sso_cookie_name
+        cookie_domain                = local.admin_cookie_domain
+        whitelist_domain             = local.admin_whitelist_domains
+        pass_access_token_arg        = "\n          pass-access-token: \"true\""
+        set_authorization_header_arg = "\n          set-authorization-header: \"true\""
+      }
+    },
+    var.enable_hubble ? {
+      hubble = {
+        name                         = "oauth2-proxy-hubble"
+        public_url                   = local.hubble_public_url
+        upstream                     = "http://hubble-ui.kube-system.svc.cluster.local:80"
+        group                        = local.sso_admin_group
+        cookie_name                  = local.admin_sso_cookie_name
+        cookie_domain                = local.admin_cookie_domain
+        whitelist_domain             = local.admin_whitelist_domains
+        set_authorization_header_arg = "\n          set-authorization-header: \"true\""
+      }
+    } : {},
+    var.enable_grafana ? {
+      grafana = {
+        name             = "oauth2-proxy-grafana"
+        public_url       = local.grafana_public_url
+        upstream         = "http://grafana.observability.svc.cluster.local:3000"
+        group            = local.sso_admin_group
+        cookie_name      = local.admin_sso_cookie_name
+        cookie_domain    = local.admin_cookie_domain
+        whitelist_domain = local.admin_whitelist_domains
+      }
+    } : {},
+  )
   sso_idp_proxy_apps = merge(
     local.enable_backstage_effective ? {
       portal = {

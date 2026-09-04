@@ -127,8 +127,8 @@ run "sso_enabled" {
   }
 
   assert {
-    condition     = length(kubectl_manifest.argocd_app_oauth2_proxy_argocd) == 1
-    error_message = "Expected kubectl_manifest.argocd_app_oauth2_proxy_argocd to exist when enable_sso=true"
+    condition     = contains(keys(kubectl_manifest.argocd_app_oauth2_proxy_admin), "argocd")
+    error_message = "Expected the argocd admin oauth2-proxy Application to exist when enable_sso=true"
   }
 
   assert {
@@ -138,8 +138,8 @@ run "sso_enabled" {
 
   assert {
     condition = alltrue([
-      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_hubble[0].yaml_body, "allowed-group: platform-admins"),
-      !strcontains(kubectl_manifest.argocd_app_oauth2_proxy_hubble[0].yaml_body, "email-domain: \"admin.test\""),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_admin["hubble"].yaml_body, "allowed-group: platform-admins"),
+      !strcontains(kubectl_manifest.argocd_app_oauth2_proxy_admin["hubble"].yaml_body, "email-domain: \"admin.test\""),
     ])
     error_message = "Expected optional admin SSO proxies to use Keycloak org groups rather than admin email-domain shortcuts"
   }
