@@ -1,0 +1,2 @@
+# NGF-only resource, retired by the Cilium cutover.
+# Present here so the rendered tree proves the renderer strips it.
