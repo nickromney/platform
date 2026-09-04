@@ -1409,7 +1409,7 @@ EOF
 }
 
 @test "policy repo render vendors subnetcalc frontend canary route and dev ReferenceGrant" {
-  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=true ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true ENABLE_PROGRESSIVE_DELIVERY=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-canary-route' >/dev/null; test -f '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/httproute-subnetcalc-frontend-dev.yaml'; test -f '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/referencegrant-dev-subnetcalc-frontend.yaml'; grep -Fq 'subnetcalc-frontend-canary' '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/httproute-subnetcalc-frontend-dev.yaml'; grep -Fq 'referencegrant-dev-subnetcalc-frontend.yaml' '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/kustomization.yaml'; grep -Fq 'subnetcalc-router-gateway-canary-patch.yaml' '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/dev/kustomization.yaml'"
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=true ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true ENABLE_PROGRESSIVE_DELIVERY=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-canary-route' >/dev/null; test -f '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/httproute-subnetcalc-frontend-dev.yaml'; test -f '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/referencegrant-dev-subnetcalc-frontend.yaml'; grep -Fq 'subnetcalc-frontend-canary' '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/httproute-subnetcalc-frontend-dev.yaml'; grep -Fq 'referencegrant-dev-subnetcalc-frontend.yaml' '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/kustomization.yaml'; ! grep -Fq 'subnetcalc-router-gateway-canary-patch.yaml' '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/dev/kustomization.yaml'"
 
   [ "${status}" -eq 0 ]
 }
@@ -1586,11 +1586,14 @@ EOF
   [[ "${output}" == *"path: apps/platform-gateway-routes-sso"* ]]
 }
 
-@test "render_repo golden renders gateway route host, forwarded headers, and admin allowlist" {
+# The admin allowlist moved from an NGF SnippetsFilter to a Cilium
+# CiliumClusterwideNetworkPolicy, which has its own test below. The security
+# headers come from the shared route rewriter rather than from each manifest.
+@test "render_repo golden renders gateway route host, forwarded and security headers" {
   stack_dir="${BATS_TEST_TMPDIR}/stack-render"
   create_minimal_policy_stack "${stack_dir}"
 
-  run bash -lc "export STACK_DIR='${stack_dir}' PLATFORM_BASE_DOMAIN='apps.example.test' PLATFORM_ADMIN_BASE_DOMAIN='admin.example.test' GATEWAY_HTTPS_HOST_PORT='8443' ADMIN_ROUTE_ALLOWLIST_CIDRS='10.0.0.0/8, 192.168.0.0/16' ENABLE_HUBBLE=true ENABLE_POLICIES=true ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=true ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_BACKSTAGE=true ENABLE_PROMETHEUS=true; source '${SCRIPT}'; render_repo '${BATS_TEST_TMPDIR}/render-out' >/dev/null; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes/httproute-gitea.yaml'; printf '%s\n' '---ALLOWLIST---'; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes/snippetsfilter-admin-allowlist.yaml'"
+  run bash -lc "export STACK_DIR='${stack_dir}' PLATFORM_BASE_DOMAIN='apps.example.test' PLATFORM_ADMIN_BASE_DOMAIN='admin.example.test' GATEWAY_HTTPS_HOST_PORT='8443' ADMIN_ROUTE_ALLOWLIST_CIDRS='10.0.0.0/8, 192.168.0.0/16' ENABLE_HUBBLE=true ENABLE_POLICIES=true ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=true ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_BACKSTAGE=true ENABLE_PROMETHEUS=true; source '${SCRIPT}'; render_repo '${BATS_TEST_TMPDIR}/render-out' >/dev/null; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes/httproute-gitea.yaml'; printf '%s\n' '---NO-NGF-FILTER---'; ls '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes/' | grep -c snippetsfilter || true"
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "$(cat <<'EOF'
@@ -1616,6 +1619,17 @@ spec:
                 value: "8443"
               - name: X-Forwarded-Proto
                 value: https
+        - type: ResponseHeaderModifier
+          responseHeaderModifier:
+            set:
+              - name: Strict-Transport-Security
+                value: "max-age=63072000; includeSubDomains"
+              - name: X-Content-Type-Options
+                value: "nosniff"
+              - name: X-Frame-Options
+                value: "DENY"
+              - name: Referrer-Policy
+                value: "strict-origin-when-cross-origin"
       backendRefs:
         - group: ""
           kind: Service
@@ -1623,19 +1637,8 @@ spec:
           namespace: sso
           port: 4180
           weight: 1
----ALLOWLIST---
-apiVersion: gateway.nginx.org/v1alpha1
-kind: SnippetsFilter
-metadata:
-  name: admin-allowlist
-  namespace: gateway-routes
-spec:
-  snippets:
-    - context: http.server.location
-      value: |
-        allow 10.0.0.0/8;
-        allow 192.168.0.0/16;
-        deny all;
+---NO-NGF-FILTER---
+0
 EOF
 )" ]
 }
