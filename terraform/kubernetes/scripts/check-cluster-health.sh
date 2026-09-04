@@ -58,9 +58,6 @@ expected_argocd_apps() {
 
   if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
     apps+=(cert-manager cert-manager-config platform-gateway platform-gateway-routes)
-    if [[ "${EXPECT_CILIUM_GATEWAY_API}" != "true" ]]; then
-      apps+=(nginx-gateway-fabric)
-    fi
   fi
 
   if [[ "${EXPECT_ACTIONS_RUNNER}" == "true" ]]; then
@@ -1113,11 +1110,7 @@ print_gateway_urls() {
   if [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]]; then
     port_suffix=":${GATEWAY_HTTPS_HOST_PORT}"
   fi
-  if [[ "${EXPECT_CILIUM_GATEWAY_API}" == "true" ]]; then
-    echo "HTTPS URLs (via Cilium Gateway):"
-  else
-    echo "HTTPS URLs (via NGINX Gateway Fabric, migration reference):"
-  fi
+  echo "HTTPS URLs (via Cilium Gateway):"
   echo "  • Public app zone: *.${PLATFORM_BASE_DOMAIN}"
   if [[ "${SEPARATE_ADMIN_DOMAIN}" == "1" ]]; then
     echo "  • Admin zone: *.${PLATFORM_ADMIN_BASE_DOMAIN}"
@@ -2193,14 +2186,7 @@ if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
       fail_soft "TLS secret missing: platform-gateway/platform-gateway-tls (cert-manager/mkcert may still be reconciling)"
     fi
 
-    if [[ "${EXPECT_CILIUM_GATEWAY_API}" == "true" ]]; then
-      # Cilium's Envoy has no agent, so there is no agent mTLS secret to find.
-      :
-    elif kubectl -n platform-gateway get secret platform-gateway-nginx-agent-tls >/dev/null 2>&1; then
-      ok "Agent TLS secret present: platform-gateway/platform-gateway-nginx-agent-tls"
-    else
-      fail_soft "Agent TLS secret missing: platform-gateway/platform-gateway-nginx-agent-tls (bootstrap runs during terraform apply)"
-    fi
+    # Cilium's Envoy has no agent, so there is no agent mTLS secret to find.
   else
     fail_soft "platform-gateway namespace missing (enable_gateway_tls=true${tfvars_hint})"
   fi

@@ -24,7 +24,10 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
-@test "check-security waits for gateway hardening surfaces before evaluating headers and live config" {
+# The live-config half of this went with NGINX Gateway Fabric. Cilium terminates
+# in its own Envoy and exposes no rendered config to read back, so the response
+# headers are the whole observable contract.
+@test "check-security waits for gateway hardening before evaluating headers" {
   run grep -n 'wait_for_platform_gateway_hardening()' "${SECURITY_SCRIPT}"
 
   [ "${status}" -eq 0 ]
@@ -33,9 +36,9 @@ setup() {
 
   [ "${status}" -eq 0 ]
 
-  run grep -n 'PLATFORM_GATEWAY_NGINX_CONF=' "${SECURITY_SCRIPT}"
+  run grep -cn 'PLATFORM_GATEWAY_NGINX_CONF' "${SECURITY_SCRIPT}"
 
-  [ "${status}" -eq 0 ]
+  [ "${status}" -ne 0 ]
 }
 
 @test "check-security waits for a real TLS handshake on the kind gateway port-forward" {

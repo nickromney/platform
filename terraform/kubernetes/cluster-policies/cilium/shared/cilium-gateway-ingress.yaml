@@ -1,5 +1,5 @@
-# Backend ingress for the Cilium Gateway API data path. Rendered only when
-# cilium_gateway_api is enabled; the NGINX Gateway Fabric path does not use it.
+# Backend ingress for the Cilium Gateway API data path. Cilium is the only
+# Gateway API implementation, so these are always rendered.
 #
 # Cilium terminates Gateway API traffic in its own Envoy rather than in a pod,
 # and that Envoy presents the reserved:ingress identity -- not host, and not a

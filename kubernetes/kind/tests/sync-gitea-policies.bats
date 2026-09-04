@@ -1400,7 +1400,7 @@ EOF
     '  - ../workloads/base' \
     >"${repo_dir}/apps/dev/kustomization.yaml"
 
-  run bash -lc "export ENABLE_PROGRESSIVE_DELIVERY=true ENABLE_APP_REPO_SUBNETCALC=true ENABLE_CILIUM_GATEWAY_API=true; source '${SCRIPT}'; configure_progressive_delivery '${repo_dir}'"
+  run bash -lc "export ENABLE_PROGRESSIVE_DELIVERY=true ENABLE_APP_REPO_SUBNETCALC=true; source '${SCRIPT}'; configure_progressive_delivery '${repo_dir}'"
 
   [ "${status}" -eq 0 ]
   grep -Fq '  - subnetcalc-frontend-canary-service.yaml' "${repo_dir}/apps/dev/kustomization.yaml"
@@ -1826,7 +1826,7 @@ EOF
         proxy_pass https://platform-gateway-nginx-internal.platform-gateway.svc.cluster.local:443;
 EOF
 
-  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true; source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; test ! -f '${repo_dir}/apps/dev/subnetcalc-router-gateway-canary-patch.yaml'; grep -Fvq 'subnetcalc-router-gateway-canary-patch.yaml' '${repo_dir}/apps/dev/kustomization.yaml' || true; cat '${repo_dir}/apps/dev/kustomization.yaml'"
+  run bash -lc "source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; test ! -f '${repo_dir}/apps/dev/subnetcalc-router-gateway-canary-patch.yaml'; grep -Fvq 'subnetcalc-router-gateway-canary-patch.yaml' '${repo_dir}/apps/dev/kustomization.yaml' || true; cat '${repo_dir}/apps/dev/kustomization.yaml'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" != *"subnetcalc-router-gateway-canary-patch.yaml"* ]]
@@ -1847,25 +1847,11 @@ EOF
               protocol: TCP
 EOF
 
-  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true; source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; cat '${repo_dir}/cluster-policies/cilium/projects/subnetcalc/subnetcalc-http-routes.yaml'"
+  run bash -lc "source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; cat '${repo_dir}/cluster-policies/cilium/projects/subnetcalc/subnetcalc-http-routes.yaml'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" != *"platform-gateway-nginx"* ]]
   [[ "${output}" != *"toEntities:"* ]]
-}
-
-@test "NGINX gateway render leaves the subnetcalc canary hairpin on platform-gateway-nginx-internal" {
-  seed_platform_gateway_app
-  mkdir -p "${repo_dir}/apps/dev"
-  cat >"${repo_dir}/apps/dev/subnetcalc-router-gateway-canary-patch.yaml" <<'EOF'
-        proxy_pass https://platform-gateway-nginx-internal.platform-gateway.svc.cluster.local:443;
-EOF
-
-  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=false; source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; cat '${repo_dir}/apps/dev/subnetcalc-router-gateway-canary-patch.yaml'"
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"platform-gateway-nginx-internal.platform-gateway.svc.cluster.local"* ]]
-  [[ "${output}" != *"cilium-gateway-platform-gateway.platform-gateway.svc.cluster.local"* ]]
 }
 
 @test "platform gateway render is Cilium-only" {
@@ -1881,7 +1867,7 @@ EOF
 @test "platform gateway render swaps to the cilium gateway and drops NGF-only resources" {
   seed_platform_gateway_app
 
-  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true; source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; cat '${gateway_dir}/gateway.yaml'; find '${gateway_dir}' -maxdepth 1 -type f -print"
+  run bash -lc "source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; cat '${gateway_dir}/gateway.yaml'; find '${gateway_dir}' -maxdepth 1 -type f -print"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"gatewayClassName: cilium"* ]]
@@ -1899,7 +1885,7 @@ EOF
 @test "platform gateway render prunes NGF-only entries from the kustomization" {
   seed_platform_gateway_app
 
-  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true; source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; cat '${gateway_dir}/kustomization.yaml'"
+  run bash -lc "source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; cat '${gateway_dir}/kustomization.yaml'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"- gateway.yaml"* ]]
@@ -1914,7 +1900,7 @@ EOF
 @test "platform gateway render ships the reserved ingress policy only in cilium mode" {
   seed_platform_gateway_app
 
-  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true; source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; find '${shared_policies}' -maxdepth 1 -type f -print; cat '${shared_policies}/kustomization.yaml'"
+  run bash -lc "source '${SCRIPT}'; render_platform_gateway_for_cilium '${repo_dir}'; find '${shared_policies}' -maxdepth 1 -type f -print; cat '${shared_policies}/kustomization.yaml'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"cilium-gateway-ingress.yaml"* ]]
@@ -1994,7 +1980,7 @@ EOF
 @test "cilium route render replaces the NGINX ExtensionRef with a core Gateway API filter" {
   seed_gateway_routes
 
-  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true ADMIN_ROUTE_ALLOWLIST_CIDRS=; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; cat '${routes_dir}/httproute-argocd.yaml'"
+  run bash -lc "export ADMIN_ROUTE_ALLOWLIST_CIDRS=; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; cat '${routes_dir}/httproute-argocd.yaml'"
 
   [ "${status}" -eq 0 ]
   # The CRD does not exist in this mode, so any surviving ExtensionRef would put
@@ -2013,7 +1999,7 @@ EOF
 @test "cilium route render keeps same-origin framing for keycloak admin" {
   seed_gateway_routes
 
-  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true ADMIN_ROUTE_ALLOWLIST_CIDRS=; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; cat '${routes_dir}/httproute-keycloak.yaml'"
+  run bash -lc "export ADMIN_ROUTE_ALLOWLIST_CIDRS=; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; cat '${routes_dir}/httproute-keycloak.yaml'"
 
   [ "${status}" -eq 0 ]
   # Keycloak admin uses same-origin iframes for its browser storage check, so
@@ -2025,7 +2011,7 @@ EOF
 @test "cilium route render drops the SnippetsFilter manifests and kustomization entries" {
   seed_gateway_routes
 
-  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true ADMIN_ROUTE_ALLOWLIST_CIDRS=; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; find '${routes_dir}' -maxdepth 1 -type f -print; cat '${routes_dir}/kustomization.yaml'"
+  run bash -lc "export ADMIN_ROUTE_ALLOWLIST_CIDRS=; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; find '${routes_dir}' -maxdepth 1 -type f -print; cat '${routes_dir}/kustomization.yaml'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" != *"snippetsfilter-admin-allowlist.yaml"* ]]
@@ -2063,7 +2049,7 @@ spec:
   rules: []
 EOF
 
-  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true ADMIN_ROUTE_ALLOWLIST_CIDRS='10.0.0.0/8'; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; cat '${repo_dir}/cluster-policies/cilium/shared/cilium-gateway-admin-allowlist.yaml'; cat '${repo_dir}/cluster-policies/cilium/shared/kustomization.yaml'"
+  run bash -lc "export ADMIN_ROUTE_ALLOWLIST_CIDRS='10.0.0.0/8'; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; cat '${repo_dir}/cluster-policies/cilium/shared/cilium-gateway-admin-allowlist.yaml'; cat '${repo_dir}/cluster-policies/cilium/shared/kustomization.yaml'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"name: cilium-gateway-admin-allowlist"* ]]
@@ -2098,7 +2084,7 @@ spec:
           port: 8080
 EOF
 
-  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true ADMIN_ROUTE_ALLOWLIST_CIDRS=; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; cat '${routes_dir}/httproute-portal.yaml'"
+  run bash -lc "export ADMIN_ROUTE_ALLOWLIST_CIDRS=; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; cat '${routes_dir}/httproute-portal.yaml'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"ResponseHeaderModifier"* ]]
@@ -2135,7 +2121,7 @@ spec:
           port: 8080
 EOF
 
-  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true ADMIN_ROUTE_ALLOWLIST_CIDRS=; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; grep -c ResponseHeaderModifier '${routes_dir}/httproute-mcp.yaml'"
+  run bash -lc "export ADMIN_ROUTE_ALLOWLIST_CIDRS=; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; grep -c ResponseHeaderModifier '${routes_dir}/httproute-mcp.yaml'"
 
   [ "${status}" -eq 0 ]
   # One per rule; a single insertion would leave the second path unprotected.
@@ -2179,7 +2165,7 @@ spec:
           port: 8080
 EOF
 
-  run bash -lc "export ENABLE_CILIUM_GATEWAY_API=true ADMIN_ROUTE_ALLOWLIST_CIDRS=; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; grep -c ResponseHeaderModifier '${routes_dir}/httproute-mixed.yaml'"
+  run bash -lc "export ADMIN_ROUTE_ALLOWLIST_CIDRS=; source '${SCRIPT}'; render_gateway_routes_for_cilium '${repo_dir}'; grep -c ResponseHeaderModifier '${routes_dir}/httproute-mixed.yaml'"
 
   [ "${status}" -eq 0 ]
   # One per rule: the swapped /admin rule and the previously bare /public rule.

@@ -82,38 +82,19 @@ if [[ -z "${policies}" ]]; then
   exit 0
 fi
 
-# The reserved:ingress allowances describe Cilium's own Envoy, so the renderer
-# ships them only when cilium_gateway_api is set and prunes them otherwise. The
-# source tree always declares them, so without this the NGINX path reports ten
-# policies missing from a cluster that is behaving exactly as intended.
-OPERATOR_FACTS_FILE="${OPERATOR_FACTS_FILE:-${REPO_ROOT}/terraform/kubernetes/.run/kind/operator-facts.json}"
-cilium_gateway_api_enabled() {
-  [[ -f "${OPERATOR_FACTS_FILE}" ]] || return 1
-  [[ "$(jq -r '.cilium_gateway_api // false' "${OPERATOR_FACTS_FILE}" 2>/dev/null)" == "true" ]]
-}
-
-skip_policy() {
-  local name="$1"
-
-  case "${name}" in
-    cilium-gateway-ingress-*) ! cilium_gateway_api_enabled ;;
-    *) return 1 ;;
-  esac
-}
-
+# The cilium-gateway-ingress-* policies describe Cilium's own Envoy. They used to
+# be skipped here when the operator facts said the NGINX gateway was in use,
+# because the renderer pruned them on that path and the source tree always
+# declares them. Cilium is the only gateway now, they are always rendered, and
+# the operator facts no longer carry cilium_gateway_api -- which made the skip
+# unconditional and quietly took eight policies out of drift detection.
 checked=0
 drifted=0
-skipped=0
 
 while IFS= read -r doc; do
   [[ -n "${doc}" ]] || continue
   name="$(printf '%s' "${doc}" | jq -r '.metadata.name')"
   [[ -n "${name}" && "${name}" != "null" ]] || continue
-
-  if skip_policy "${name}"; then
-    skipped=$((skipped + 1))
-    continue
-  fi
 
   checked=$((checked + 1))
 
@@ -147,8 +128,4 @@ if [[ "${drifted}" -gt 0 ]]; then
   exit 1
 fi
 
-if [[ "${skipped}" -gt 0 ]]; then
-  echo "OK   all ${checked} Cilium policies match the rendered source (${skipped} skipped: not rendered in this gateway mode)"
-else
-  echo "OK   all ${checked} Cilium policies match the rendered source"
-fi
+echo "OK   all ${checked} Cilium policies match the rendered source"
