@@ -152,6 +152,67 @@ run "victoria_logs_requires_argocd" {
 run "sso_requires_gateway_tls_argocd_gitea" {
   command = plan
 
+  # enable_sso activates data.kubernetes_nodes.platform_gateway_alias, which
+  # reads whatever cluster the ambient kubeconfig happens to point at. Without
+  # this override the run fails on a live API call to an unrelated cluster and
+  # takes the five runs after it down with it. Validation is what is under
+  # test here, so the node lookup is stubbed rather than performed.
+  override_data {
+    target = data.kubernetes_nodes.platform_gateway_alias
+    values = {
+      nodes = [
+        {
+          metadata = [
+            {
+              annotations      = {}
+              generation       = 0
+              labels           = {}
+              name             = "kind-local-control-plane"
+              resource_version = "1"
+              uid              = "00000000-0000-0000-0000-000000000000"
+            },
+          ]
+          spec = [
+            {
+              pod_cidr      = "10.244.0.0/24"
+              pod_cidrs     = ["10.244.0.0/24"]
+              provider_id   = "kind://docker/kind-local/kind-local-control-plane"
+              taints        = []
+              unschedulable = false
+            },
+          ]
+          status = [
+            {
+              addresses = [
+                {
+                  type    = "InternalIP"
+                  address = "172.18.0.2"
+                },
+              ]
+              allocatable = {}
+              capacity    = {}
+              conditions  = []
+              node_info = [
+                {
+                  architecture              = "arm64"
+                  boot_id                   = ""
+                  container_runtime_version = ""
+                  kernel_version            = ""
+                  kube_proxy_version        = ""
+                  kubelet_version           = ""
+                  machine_id                = ""
+                  operating_system          = "linux"
+                  os_image                  = ""
+                  system_uuid               = ""
+                },
+              ]
+            },
+          ]
+        },
+      ]
+    }
+  }
+
   variables {
     cni_provider          = "none"
     enable_hubble         = false
