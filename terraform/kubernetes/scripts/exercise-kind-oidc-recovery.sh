@@ -12,7 +12,7 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 source "${SCRIPT_DIR}/kind-apiserver-oidc-lib.sh"
 
 OIDC_RECOVERY_FORMAT="${OIDC_RECOVERY_FORMAT:-text}"
-OIDC_RECOVERY_FORCE_MODE="${OIDC_RECOVERY_FORCE_MODE:-nginx-rollout}"
+OIDC_RECOVERY_FORCE_MODE="${OIDC_RECOVERY_FORCE_MODE:-kyverno-rollout}"
 OIDC_RECOVERY_FORCE_WAIT_SECONDS="${OIDC_RECOVERY_FORCE_WAIT_SECONDS:-60}"
 KIND_OIDC_RECOVERY_SCRIPT="${KIND_OIDC_RECOVERY_SCRIPT:-${SCRIPT_DIR}/recover-kind-cluster-after-apiserver-restart.sh}"
 
@@ -31,7 +31,7 @@ cluster returns to a healthy state.
 Environment:
   OIDC_RECOVERY_FORMAT=text|json
     Output format. Json mode emits one machine-readable object on stdout.
-  OIDC_RECOVERY_FORCE_MODE=nginx-rollout
+  OIDC_RECOVERY_FORCE_MODE=kyverno-rollout
     Controlled perturbation mode used to force the recovery branch.
   OIDC_RECOVERY_FORCE_WAIT_SECONDS=60
     Seconds to wait for the forced degradation to become observable.
@@ -83,7 +83,7 @@ case "${OIDC_RECOVERY_FORMAT}" in
 esac
 
 case "${OIDC_RECOVERY_FORCE_MODE}" in
-  nginx-rollout)
+  kyverno-rollout)
     ;;
   *)
     printf 'exercise-kind-oidc-recovery.sh: unsupported OIDC_RECOVERY_FORCE_MODE: %s\n' "${OIDC_RECOVERY_FORCE_MODE}" >&2
@@ -176,8 +176,8 @@ emit_result() {
       --arg postflight_state "${POST_STATE}" \
       --arg recovery_script "${KIND_OIDC_RECOVERY_SCRIPT}" \
       --arg forced_kind "deployment" \
-      --arg forced_namespace "${NGINX_GATEWAY_NAMESPACE}" \
-      --arg forced_name "${NGINX_GATEWAY_DEPLOY_NAME}" \
+      --arg forced_namespace "${KYVERNO_NAMESPACE}" \
+      --arg forced_name "${KYVERNO_ADMISSION_DEPLOY_NAME}" \
       --argjson ok "${RESULT_OK}" \
       --argjson dry_run false \
       --argjson forced "${FORCED}" \
@@ -313,6 +313,12 @@ scale_deployment_replicas() {
   kubectl -n "${namespace}" scale "deploy/${deploy_name}" --replicas="${replicas}" >/dev/null
 }
 
+# The perturbation has to be something the delegated recovery script actually
+# repairs and something kind_oidc_post_restart_dependencies_healthy can observe.
+# Under Cilium the gateway data plane is Envoy inside cilium-agent: there is no
+# gateway Deployment to restart, and a cilium-operator bounce does not clear the
+# Gateway's Programmed condition. The Kyverno admission controller is both --
+# the recovery script waits on it first, and the health predicate keys on it.
 force_recovery_branch() {
   local initial_wait_seconds=15
   local secondary_wait_seconds=15
@@ -320,20 +326,20 @@ force_recovery_branch() {
   local original_replicas=1
 
   case "${OIDC_RECOVERY_FORCE_MODE}" in
-    nginx-rollout)
+    kyverno-rollout)
       STATUS_CODE="force_step_failed"
-      record_step "force" "running" "restarting ${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME} to force the explicit recovery branch"
-      restart_deployment "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}" \
-        "nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})"
+      record_step "force" "running" "restarting ${KYVERNO_NAMESPACE}/${KYVERNO_ADMISSION_DEPLOY_NAME} to force the explicit recovery branch"
+      restart_deployment "${KYVERNO_NAMESPACE}" "${KYVERNO_ADMISSION_DEPLOY_NAME}" \
+        "kyverno admission controller (${KYVERNO_NAMESPACE}/${KYVERNO_ADMISSION_DEPLOY_NAME})"
 
       if (( OIDC_RECOVERY_FORCE_WAIT_SECONDS < initial_wait_seconds )); then
         initial_wait_seconds="${OIDC_RECOVERY_FORCE_WAIT_SECONDS}"
       fi
 
       if ! wait_until_dependencies_degraded "${initial_wait_seconds}"; then
-        warn "nginx rollout restart stayed healthy; recycling nginx gateway pods to force an observable degraded window"
-        record_step "force" "escalated" "rollout restart stayed healthy; recycling nginx gateway pods to force the explicit recovery branch"
-        force_recycle_deployment_pods "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}"
+        warn "kyverno rollout restart stayed healthy; recycling kyverno admission pods to force an observable degraded window"
+        record_step "force" "escalated" "rollout restart stayed healthy; recycling kyverno admission pods to force the explicit recovery branch"
+        force_recycle_deployment_pods "${KYVERNO_NAMESPACE}" "${KYVERNO_ADMISSION_DEPLOY_NAME}"
         if (( OIDC_RECOVERY_FORCE_WAIT_SECONDS < (initial_wait_seconds + secondary_wait_seconds) )); then
           secondary_wait_seconds=$((OIDC_RECOVERY_FORCE_WAIT_SECONDS - initial_wait_seconds))
         fi
@@ -341,26 +347,26 @@ force_recovery_branch() {
           secondary_wait_seconds=1
         fi
         if ! wait_until_dependencies_degraded "${secondary_wait_seconds}"; then
-          warn "nginx pod recycle stayed healthy; scaling the controller to zero to force an observable degraded window"
-          record_step "force" "escalated" "pod recycle stayed healthy; scaling the nginx gateway controller to zero to force the explicit recovery branch"
-          original_replicas="$(deployment_replicas "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}")"
-          scale_deployment_replicas "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}" 0
+          warn "kyverno pod recycle stayed healthy; scaling the controller to zero to force an observable degraded window"
+          record_step "force" "escalated" "pod recycle stayed healthy; scaling the kyverno admission controller to zero to force the explicit recovery branch"
+          original_replicas="$(deployment_replicas "${KYVERNO_NAMESPACE}" "${KYVERNO_ADMISSION_DEPLOY_NAME}")"
+          scale_deployment_replicas "${KYVERNO_NAMESPACE}" "${KYVERNO_ADMISSION_DEPLOY_NAME}" 0
           tertiary_wait_seconds=$((OIDC_RECOVERY_FORCE_WAIT_SECONDS - initial_wait_seconds - secondary_wait_seconds))
           if (( tertiary_wait_seconds < 1 )); then
             tertiary_wait_seconds=1
           fi
           if ! wait_until_dependencies_degraded "${tertiary_wait_seconds}"; then
-            scale_deployment_replicas "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}" "${original_replicas}" || true
-            SUMMARY="forced nginx gateway restart, pod recycle, and temporary scale-to-zero did not make the post-restart dependencies unhealthy within ${OIDC_RECOVERY_FORCE_WAIT_SECONDS}s"
+            scale_deployment_replicas "${KYVERNO_NAMESPACE}" "${KYVERNO_ADMISSION_DEPLOY_NAME}" "${original_replicas}" || true
+            SUMMARY="forced kyverno admission restart, pod recycle, and temporary scale-to-zero did not make the post-restart dependencies unhealthy within ${OIDC_RECOVERY_FORCE_WAIT_SECONDS}s"
             POST_STATE="$(current_health_state)"
             emit_result
             exit 1
           fi
-          scale_deployment_replicas "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}" "${original_replicas}"
+          scale_deployment_replicas "${KYVERNO_NAMESPACE}" "${KYVERNO_ADMISSION_DEPLOY_NAME}" "${original_replicas}"
         fi
       fi
       FORCED=true
-      record_step "force" "performed" "forced degradation became observable after the nginx gateway disruption sequence"
+      record_step "force" "performed" "forced degradation became observable after the kyverno admission disruption sequence"
       ;;
   esac
 }

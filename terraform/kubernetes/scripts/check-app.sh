@@ -379,20 +379,6 @@ print_endpointslices_for_service() {
   kubectl -n "${ns}" get endpointslices -l "kubernetes.io/service-name=${svc}" -o wide 2>/dev/null || true
 }
 
-print_gateway_nginx_logs() {
-  local pattern="$1"
-  if kubectl -n platform-gateway get deploy platform-gateway-nginx >/dev/null 2>&1; then
-    kubectl -n platform-gateway logs deploy/platform-gateway-nginx -c nginx --since="${SINCE}" --tail="${TAIL}" 2>/dev/null \
-      | grep -E "${pattern}" || true
-    return 0
-  fi
-  # Fallback: pods (if deployment name changes).
-  for p in $(kubectl -n platform-gateway get pods -o name 2>/dev/null | sed 's|pod/||'); do
-    kubectl -n platform-gateway logs "${p}" -c nginx --since="${SINCE}" --tail="${TAIL}" 2>/dev/null \
-      | grep -E "${pattern}" || true
-  done
-}
-
 section "Inputs"
 print_kv "app" "${APP}"
 print_kv "host" "${HOST}"
@@ -466,10 +452,10 @@ else
   maybe kubectl -n "${HTTPROUTE_NS}" get httproute -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{range .spec.hostnames[*]}{.}{" "}{end}{"\n"}{end}' | grep -F "${HOST}" || true
 fi
 
-section "Gateway Logs (nginx) grep"
-# Include both the host and common failure patterns.
-PATTERN="$(printf '%s' "${HOST}" | sed -E 's/[.[\()*+?{|^$\\]/\\&/g')"
-print_gateway_nginx_logs "${PATTERN}|connect\\(\\) failed|upstream prematurely closed| 502 | 503 | 504 |oauth2-proxy" || true
+# No gateway log grep here. Cilium terminates Gateway API traffic in the Envoy
+# inside cilium-agent, so there is no gateway Deployment and no pod in
+# platform-gateway whose logs could be tailed. Use `hubble observe` (see
+# hubble-capture-flows.sh) for the request path instead.
 
 tail_deploy_logs() {
   local ns="$1"

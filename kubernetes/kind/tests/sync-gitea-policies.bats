@@ -1817,14 +1817,16 @@ resources:
 EOF
   printf 'gatewayClassName: cilium\n' >"${gateway_dir}/gateway.yaml"
 
-  # Seed the NGF-only resources the cutover retires. Without them the render
-  # tests assert the absence of files that were never created, which passes
-  # whatever the renderer does. gateway-cilium.yaml is entry-only on purpose:
-  # the renderer drops it from the kustomization but leaves any file in place.
-  local ngf_only
-  for ngf_only in nginxproxy.yaml proxysettingspolicy-oauth-response-buffers.yaml \
-    tls-hardening.yaml gateway-service.yaml agent-tls-bootstrap.yaml; do
-    printf '# NGF-only resource, retired by the Cilium cutover\n' >"${gateway_dir}/${ngf_only}"
+  # Seed the resources the cutover retires. Without them the render tests assert
+  # the absence of files that were never created, which passes whatever the
+  # renderer does. gateway-cilium.yaml is seeded too: it declares the same
+  # Gateway that gateway.yaml now declares, so the renderer must delete the file
+  # as well as its kustomization entry.
+  local retired
+  for retired in nginxproxy.yaml proxysettingspolicy-oauth-response-buffers.yaml \
+    tls-hardening.yaml gateway-service.yaml agent-tls-bootstrap.yaml \
+    gateway-cilium.yaml; do
+    printf '# Retired by the Cilium cutover\n' >"${gateway_dir}/${retired}"
   done
 
   cat >"${gateway_dir}/kustomization.yaml" <<'EOF'
@@ -1924,6 +1926,18 @@ EOF
   [[ "${output}" != *"- agent-tls-bootstrap.yaml"* ]]
   [[ "${output}" != *"- proxysettingspolicy-oauth-response-buffers.yaml"* ]]
   [[ "${output}" != *"- gateway-cilium.yaml"* ]]
+}
+
+@test "platform gateway render deletes the orphan gateway-cilium.yaml, not just its entry" {
+  seed_platform_gateway_app
+
+  # gateway-cilium.yaml declares the same Gateway that gateway.yaml now declares.
+  # Dropping only the kustomization entry would leave a second file for one
+  # resource in the repo.
+  run bash -lc "source '${SCRIPT}'; test -f '${gateway_dir}/gateway-cilium.yaml'; render_platform_gateway_for_cilium '${repo_dir}'; test ! -f '${gateway_dir}/gateway-cilium.yaml'; cat '${gateway_dir}/kustomization.yaml'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"gateway-cilium.yaml"* ]]
 }
 
 @test "platform gateway render ships the reserved ingress policy only in cilium mode" {

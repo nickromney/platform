@@ -20,7 +20,8 @@ Usage: @SCRIPT_NAME@ [--dry-run] [--execute]
 
 Performs the explicit post-restart recovery step after the kind kube-apiserver
 OIDC static-manifest patch. This validates and, when needed, repairs Kyverno,
-the nginx-gateway controller, and the programmed Gateway state.
+the Cilium operator that reconciles Gateway API, and the programmed Gateway
+state.
 
 Safe to rerun: if the runtime dependencies are already healthy, the script exits
 without restarting controllers.

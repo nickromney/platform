@@ -141,7 +141,7 @@ ensure_kind_gateway_probe() {
 
   for local_port in "${port_candidates[@]}"; do
     KIND_GATEWAY_PROBE_LOG="$(mktemp)"
-    kubectl -n platform-gateway port-forward svc/platform-gateway-nginx "${local_port}:443" >"${KIND_GATEWAY_PROBE_LOG}" 2>&1 &
+    kubectl -n platform-gateway port-forward svc/cilium-gateway-platform-gateway "${local_port}:443" >"${KIND_GATEWAY_PROBE_LOG}" 2>&1 &
     KIND_GATEWAY_PROBE_PID=$!
     KIND_GATEWAY_PROBE_PORT="${local_port}"
 
@@ -363,7 +363,8 @@ if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
   fi
 
   # Give the controller a short settle window so the first post-apply security
-  # check does not race the Gateway/SnippetsPolicy becoming observable.
+  # check does not race the Gateway's response-header filters becoming
+  # observable.
   wait_for_platform_gateway_hardening || true
 
   # Check security headers

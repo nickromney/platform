@@ -20,7 +20,6 @@ namespaces currently under review for policy work:
   argocd
   dev
   kyverno
-  nginx-gateway
   observability
 
 If you do not pass `--server`, the script defaults to Hubble CLI port-forward
@@ -123,8 +122,7 @@ Options:
       Default: kube-system
 
   --no-default-namespaces
-      Disable the default argocd/dev/kyverno/nginx-gateway/observability
-      namespace set.
+      Disable the default argocd/dev/kyverno/observability namespace set.
 
   --tls
       Enable TLS without rewriting the server address.
@@ -1008,7 +1006,7 @@ if [[ "${use_default_namespaces}" -eq 1 \
    && "${#pods[@]}" -eq 0 \
    && "${#from_pods[@]}" -eq 0 \
    && "${#to_pods[@]}" -eq 0 ]]; then
-  namespaces=(argocd dev kyverno nginx-gateway observability)
+  namespaces=(argocd dev kyverno observability)
 fi
 
 if [[ "${port_forward}" -eq 1 ]]; then

@@ -39,7 +39,7 @@ setup() {
   [[ "${output}" == *"make check-memory"* ]]
   [[ "${output}" == *"make check-version [CHECK_VERSION_FORMAT=text|json]"* ]]
   [[ "${output}" == *"make check-provider-version [CHECK_VERSION_FORMAT=text|json]"* ]]
-  [[ "${output}" == *"make exercise-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=nginx-rollout]"* ]]
+  [[ "${output}" == *"make exercise-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=kyverno-rollout]"* ]]
   [[ "${output}" == *"CHECK_VERSION_FORMAT=text|json"* ]]
   [[ "${output}" == *"OIDC_RECOVERY_FORMAT=text|json"* ]]
   [[ "${output}" == *"~/.kube/kind-kind-local.yaml"* ]]
@@ -534,13 +534,13 @@ EOF
 @test "kind exercise-oidc-recovery runs the explicit harness with format and force knobs" {
   run make -n -C "${REPO_ROOT}/kubernetes/kind" exercise-oidc-recovery \
     OIDC_RECOVERY_FORMAT=json \
-    OIDC_RECOVERY_FORCE_MODE=nginx-rollout
+    OIDC_RECOVERY_FORCE_MODE=kyverno-rollout
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *'ensure-kind-kubeconfig >/dev/null'* ]]
   [[ "${output}" == *'assert-kind-active >/dev/null'* ]]
   [[ "${output}" == *'OIDC_RECOVERY_FORMAT="json"'* ]]
-  [[ "${output}" == *'OIDC_RECOVERY_FORCE_MODE="nginx-rollout"'* ]]
+  [[ "${output}" == *'OIDC_RECOVERY_FORCE_MODE="kyverno-rollout"'* ]]
   [[ "${output}" == *'exercise-kind-oidc-recovery.sh" --execute'* ]]
 }
 

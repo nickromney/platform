@@ -21,7 +21,7 @@ usage() {
 Usage: @SCRIPT_NAME@ [--var-file PATH] [--host-port PORT] [--wait-seconds N] [--retry-interval-seconds N] [--extended]
 
 Checks the Gateway API + TLS path for public and admin gateway URLs.
-Kind uses Cilium Gateway; NGINX Gateway Fabric remains a migration reference.
+Cilium is the only Gateway API implementation on kind.
 Use --extended (or EXTENDED=1) for deeper pod/endpoint diagnostics.
 EOF
   printf '\n%s\n' "$(shell_cli_standard_options)"
@@ -711,7 +711,9 @@ probe_tls_posture() {
     fi
   done
 
-  # The three suites the NGINX ssl_conf_command pinned.
+  # The three TLS 1.3 suites the gateway must keep offering. The retired NGF
+  # SnippetsPolicy pinned exactly these via ssl_conf_command Ciphersuites; the
+  # list is now the assertion rather than a copy of live configuration.
   for cipher in TLS_AES_128_GCM_SHA256 TLS_AES_256_GCM_SHA384 TLS_CHACHA20_POLY1305_SHA256; do
     if echo | openssl s_client -connect "${connect_host}:${HOST_PORT}" -servername "${probe_sni}" -tls1_3 -ciphersuites "${cipher}" 2>/dev/null \
       | grep -qE "^ *Protocol *: *TLSv1\.3$"; then

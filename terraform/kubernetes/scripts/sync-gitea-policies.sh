@@ -299,6 +299,10 @@ LANGFUSE_TOOL_AGENT_PUBLIC_HOST="${LANGFUSE_TOOL_AGENT_PUBLIC_HOST:-lf-agent.dev
 LANGFUSE_EVAL_RUNNER_PUBLIC_HOST="${LANGFUSE_EVAL_RUNNER_PUBLIC_HOST:-lf-evals.dev.${PLATFORM_BASE_DOMAIN}}"
 LANGFUSE_MCP_AGENT_PUBLIC_HOST="${LANGFUSE_MCP_AGENT_PUBLIC_HOST:-lf-mcp.dev.${PLATFORM_BASE_DOMAIN}}"
 ADMIN_ROUTE_ALLOWLIST_CIDRS="${ADMIN_ROUTE_ALLOWLIST_CIDRS:-}"
+# Still received from the render contract, but nothing consumes it since the
+# Cilium cutover: its only reader was the NGF NginxProxy rewriteClientIP block,
+# and Cilium's Gateway API surface has no equivalent knob. Kept plumbed so the
+# gap is visible rather than silently dropped from the operator contract.
 GATEWAY_TRUSTED_PROXY_CIDRS="${GATEWAY_TRUSTED_PROXY_CIDRS:-}"
 ENABLE_CERT_MANAGER="${ENABLE_CERT_MANAGER:-true}"
 ENABLE_ACTIONS_RUNNER="${ENABLE_ACTIONS_RUNNER:-true}"
@@ -547,53 +551,6 @@ rewrite_public_hostnames() {
       "${file}" > "${tmp_file}"
     mv "${tmp_file}" "${file}"
   done < <(find "${root_dir}" -type f \( -name '*.yaml' -o -name '*.yml' -o -name '*.json' \) -print0)
-}
-
-render_platform_gateway_proxy_config() {
-  local root_dir="$1"
-  local nginxproxy_file="${root_dir}/apps/platform-gateway/nginxproxy.yaml"
-  local trusted_proxy_block=""
-  local cidr
-
-  [[ -d "${root_dir}/apps/platform-gateway" ]] || return 0
-
-  if [[ -n "${GATEWAY_TRUSTED_PROXY_CIDRS}" ]]; then
-    trusted_proxy_block="  rewriteClientIP:"$'\n'
-    trusted_proxy_block="${trusted_proxy_block}    mode: XForwardedFor"$'\n'
-    trusted_proxy_block="${trusted_proxy_block}    setIPRecursively: true"$'\n'
-    trusted_proxy_block="${trusted_proxy_block}    trustedAddresses:"$'\n'
-    IFS=',' read -r -a cidrs <<< "${GATEWAY_TRUSTED_PROXY_CIDRS}"
-    for cidr in "${cidrs[@]}"; do
-      cidr="$(printf '%s' "${cidr}" | xargs)"
-      [[ -n "${cidr}" ]] || continue
-      trusted_proxy_block="${trusted_proxy_block}      - type: CIDR"$'\n'
-      trusted_proxy_block="${trusted_proxy_block}        value: ${cidr}"$'\n'
-    done
-  fi
-
-  cat > "${nginxproxy_file}" <<EOF
-apiVersion: gateway.nginx.org/v1alpha2
-kind: NginxProxy
-metadata:
-  name: platform-gateway-proxy-config
-  annotations:
-    argocd.argoproj.io/sync-wave: "1"
-  labels:
-    app.kubernetes.io/name: platform-gateway-proxy-config
-spec:
-  kubernetes:
-    service:
-      type: NodePort
-      # Map the Gateway listener port 443 to a fixed NodePort so Kind can expose it on a host port via extraPortMappings.
-      nodePorts:
-        - listenerPort: 443
-          port: 30070
-      # IMPORTANT for Kind: traffic enters on the control-plane node (extraPortMappings),
-      # but the gateway Pod may schedule onto a worker node.
-      # With externalTrafficPolicy=Local, the control-plane NodePort will blackhole connections.
-      externalTrafficPolicy: Cluster
-${trusted_proxy_block}
-EOF
 }
 
 replace_literal() {
@@ -1875,14 +1832,16 @@ render_platform_gateway_routes_application_manifest() {
   rm -f "${destination}.bak"
 }
 
-# Swaps the platform-gateway app from NGINX Gateway Fabric to Cilium's Gateway
-# API implementation. Six of the seven resources in that app are NGF-coupled --
-# the NginxProxy parametersRef, the SnippetsPolicy TLS hardening, the
-# ProxySettingsPolicy, the platform-gateway-nginx NodePort Service, the RBAC that
-# bootstraps the NGINX agent's mTLS secret, and the Gateway's own nginx.org
-# listener options -- so this is a cutover rather than a class rename. Cilium's
-# host-network listener binds the Gateway port directly on the node, which is why
-# the NodePort Service goes too.
+# Brings a policy repo rendered before the Cilium cutover up to date. Most of the
+# platform-gateway app was NGF-coupled -- the NginxProxy parametersRef, the
+# SnippetsPolicy TLS hardening, the ProxySettingsPolicy, the platform-gateway-nginx
+# NodePort Service, the RBAC that bootstrapped the NGINX agent's mTLS secret, and
+# the Gateway's own nginx.org listener options -- so this was a cutover rather than
+# a class rename. Cilium's host-network listener binds the Gateway port directly on
+# the node, which is why the NodePort Service went too.
+#
+# None of this fires against the shipped stack any more: terraform/kubernetes/apps
+# no longer contains these files. It stays for repos that predate the cutover.
 render_platform_gateway_for_cilium() {
   local repo_dir="$1"
   local app_dir="${repo_dir}/apps/platform-gateway"
@@ -1894,13 +1853,18 @@ render_platform_gateway_for_cilium() {
   [[ -f "${app_dir}/gateway.yaml" ]] || return 0
   grep -q "gatewayClassName: cilium" "${app_dir}/gateway.yaml" 2>/dev/null || fail "platform-gateway/gateway.yaml must use the Cilium GatewayClass"
 
-  local nginx_only
-  for nginx_only in nginxproxy.yaml proxysettingspolicy-oauth-response-buffers.yaml \
-    tls-hardening.yaml gateway-service.yaml agent-tls-bootstrap.yaml; do
-    remove_if_present "${app_dir}/${nginx_only}"
-    remove_kustomization_entry "${kustomization}" "${nginx_only}"
+  # gateway-cilium.yaml is retired for the opposite reason to the rest: it was
+  # the pre-cutover Cilium alternative to an NGINX gateway.yaml, and it declares
+  # the same Gateway (platform-gateway, gatewayClassName cilium) that gateway.yaml
+  # now declares. A repo carrying both would have two files for one resource, so
+  # the file goes with its kustomization entry rather than being left orphaned.
+  local retired
+  for retired in nginxproxy.yaml proxysettingspolicy-oauth-response-buffers.yaml \
+    tls-hardening.yaml gateway-service.yaml agent-tls-bootstrap.yaml \
+    gateway-cilium.yaml; do
+    remove_if_present "${app_dir}/${retired}"
+    remove_kustomization_entry "${kustomization}" "${retired}"
   done
-  remove_kustomization_entry "${kustomization}" "gateway-cilium.yaml"
 
   # Argo Rollouts already shifts HTTPRoute subnetcalc-frontend-dev weights.
   # Re-entering the Gateway from subnetcalc-router is an NGF-era hairpin that
@@ -2098,10 +2062,10 @@ prune_argocd_app_manifests() {
   fi
 
   # Cilium owns Gateway API; NGF is intentionally absent from every render.
+  # Unconditional, so the ENABLE_GATEWAY_TLS branch below does not repeat it.
   remove_if_present "${apps_dir}/002-nginx-gateway-fabric.application.yaml"
 
   if ! is_true "${ENABLE_GATEWAY_TLS}"; then
-    remove_if_present "${apps_dir}/002-nginx-gateway-fabric.application.yaml"
     remove_if_present "${apps_dir}/003-platform-gateway.application.yaml"
     remove_if_present "${apps_dir}/10-cert-manager-config.application.yaml"
     remove_if_present "${apps_dir}/50-platform-gateway-routes.application.yaml"
