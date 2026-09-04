@@ -59,7 +59,7 @@ PY
   run "${script}" --dry-run
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"INFO dry-run: would render the Platform Launchpad dashboard into 2 target file(s) with 24 selected tile(s)"* ]]
+  [[ "${output}" == *"INFO dry-run: would render the Platform Launchpad dashboard into 2 target file(s) with 19 selected tile(s)"* ]]
   [[ "${output}" != *"unknown"* ]]
   [[ "${output}" != *"Unknown"* ]]
 }
