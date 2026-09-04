@@ -20,11 +20,9 @@ spec:
     - fromEntities:
         - host
         - remote-node
-    # Shared platform gateway data plane -> headlamp :4466
-    - fromEndpoints:
-        - matchLabels:
-            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
-            "k8s:app.kubernetes.io/name": platform-gateway-nginx
+    # Cilium Gateway ingress -> headlamp :4466
+    - fromEntities:
+        - ingress
       toPorts:
         - ports:
             - port: "4466"
@@ -65,15 +63,6 @@ spec:
             - port: "8080"
               protocol: TCP
     # Headlamp resolves keycloak.127.0.0.1.sslip.io to the internal gateway VIP via hostAliases.
-    # Allow HTTPS egress to the platform gateway data plane for OIDC discovery/auth redirects.
-    - toEndpoints:
-        - matchLabels:
-            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
-            "k8s:app.kubernetes.io/name": platform-gateway-nginx
-      toPorts:
-        - ports:
-            - port: "443"
-              protocol: TCP
     # Plugin sidecar: npmjs registry + ArtifactHub (FQDN-pinned)
     - toFQDNs:
         - matchName: registry.npmjs.org

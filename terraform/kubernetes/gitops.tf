@@ -544,7 +544,6 @@ resource "null_resource" "argocd_refresh_gitops_repo_apps" {
     kubectl_manifest.argocd_app_kyverno_policies,
     kubectl_manifest.argocd_app_cilium_policies,
     kubectl_manifest.argocd_app_cert_manager_config,
-    kubectl_manifest.argocd_app_nginx_gateway_fabric,
     kubectl_manifest.argocd_app_platform_gateway,
     kubectl_manifest.argocd_app_platform_gateway_routes,
     kubectl_manifest.argocd_app_apim,

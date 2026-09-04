@@ -646,10 +646,7 @@ locals {
     var.enable_policies && var.enable_cilium_policies && var.enable_argocd ? ["cilium-policies"] : [],
     var.enable_policies && var.enable_argocd ? ["policy-reporter"] : [],
     var.enable_cert_manager && var.enable_argocd ? ["cert-manager"] : [],
-    var.enable_gateway_tls && var.enable_argocd ? concat(
-      ["cert-manager-config", "platform-gateway", "platform-gateway-routes"],
-      var.cilium_gateway_api ? [] : ["nginx-gateway-fabric"],
-    ) : [],
+    var.enable_gateway_tls && var.enable_argocd ? ["cert-manager-config", "platform-gateway", "platform-gateway-routes"] : [],
     var.enable_actions_runner && var.enable_gitea && var.enable_argocd ? ["gitea-actions-runner"] : [],
     local.enable_prometheus_effective && var.enable_argocd ? ["prometheus"] : [],
     local.enable_grafana_effective && var.enable_argocd ? ["grafana"] : [],
@@ -726,7 +723,6 @@ locals {
     enable_app_repo_sentiment            = var.enable_app_repo_sentiment
     enable_app_repo_subnetcalc           = var.enable_app_repo_subnetcalc
     enable_uat_apps                      = var.enable_uat_apps
-    cilium_gateway_api                   = var.cilium_gateway_api
     enable_apim_simulator                = local.enable_apim_simulator_effective
     enable_agentgateway_ai_gateway       = var.enable_agentgateway_ai_gateway
     agentgateway_chart_version           = var.agentgateway_chart_version
@@ -819,13 +815,10 @@ locals {
     contains(local.kubeconfig_context_names_for_providers, trimspace(var.kubeconfig_context))
   ) ? trimspace(var.kubeconfig_context) : null
 
-  # NGINX Gateway Fabric is reached through a NodePort, but Cilium's Gateway
-  # listener binds 443 directly on the node's host network and has no NodePort at
-  # all. So the host 443 mapping has to point at a different container port in
-  # each mode -- aiming it at the NodePort under Cilium would publish a port
-  # nothing listens on. kind bakes port mappings at cluster creation and cannot
-  # gain one later, which is why this is decided here.
-  gateway_https_container_port = var.cilium_gateway_api ? 443 : var.gateway_https_node_port
+  # Cilium's Gateway listener binds 443 directly on the selected node's host
+  # network. kind bakes port mappings at cluster creation, so publish that port
+  # from the control-plane container from the start.
+  gateway_https_container_port = 443
 
   extra_port_mappings = concat(
     [
@@ -891,7 +884,7 @@ locals {
       # Empty matchLabels means every node; on kind that would bind Envoy on
       # workers that do not hold extraPortMappings. Pin to the control-plane
       # hostname unless the operator supplied an explicit selector.
-      gatewayAPI = var.cilium_gateway_api ? {
+      gatewayAPI = {
         enabled      = true
         gatewayClass = { create = "auto" }
         hostNetwork = {
@@ -902,7 +895,7 @@ locals {
             )
           }
         }
-      } : null
+      }
       kubeProxyReplacement = var.cilium_kube_proxy_replacement
       # With kube-proxy gone Cilium cannot reach the apiserver through a Service,
       # so it needs the endpoint directly. The control-plane container name
@@ -1126,20 +1119,6 @@ locals {
             hs = {}
             hs.status = "Healthy"
             hs.message = "ReferenceGrant applied"
-            return hs
-          EOT
-          )
-          "resource.customizations.health.gateway.nginx.org_ObservabilityPolicy" = trimspace(<<-EOT
-            hs = {}
-            hs.status = "Healthy"
-            hs.message = "ObservabilityPolicy applied"
-            return hs
-          EOT
-          )
-          "resource.customizations.health.gateway.nginx.org_SnippetsFilter" = trimspace(<<-EOT
-            hs = {}
-            hs.status = "Healthy"
-            hs.message = "SnippetsFilter applied"
             return hs
           EOT
           )

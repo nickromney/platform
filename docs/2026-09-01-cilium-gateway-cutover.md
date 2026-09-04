@@ -176,14 +176,15 @@ path too.
 `ssl_session_tickets off` and `ssl_ecdh_curve` have no equivalent and are not
 asserted.
 
-Genuinely lost:
+Gateway API capability constraints (with Cilium-specific mitigation where available):
 
-- **Admin IP allowlist.** No core Gateway API equivalent. Rather than render
-  admin routes without the restriction they are configured to have, a non-empty
-  `ADMIN_ROUTE_ALLOWLIST_CIDRS` is a hard failure in this mode. The local
-  default is unset, which matches the permissive behaviour NGF produced. For a
-  teaching cluster on loopback that is acceptable, but it should be called out
-  rather than discovered. Tracked in
+- **Admin IP allowlist.** Core Gateway API still has no source-IP filter, but
+  Cilium now enforces configured CIDRs at its `reserved:ingress` endpoint with
+  HTTP Host rules for the rendered admin routes. This retains the original
+  source address before Envoy turns the backend connection into
+  `reserved:ingress`; patching Cilium's generated `CiliumEnvoyConfig` remains
+  deliberately unsupported. The gateway URL check asserts that the live policy
+  selects that endpoint and contains every configured CIDR. See
   [#224](https://github.com/nickromney/platform/issues/224).
 
 ## Single-node also works, and is the better shape

@@ -95,14 +95,7 @@ fi
 
 operator_facts_load
 
-CILIUM_GATEWAY_API="$(operator_facts_bool cilium_gateway_api false 2>/dev/null || echo false)"
-# Cilium publishes cilium-gateway-<gateway-name>; NGF names its NodePort Service
-# after the Gateway with an -nginx suffix.
-if [[ "${CILIUM_GATEWAY_API}" == "true" ]]; then
-  PLATFORM_GATEWAY_SERVICE="cilium-gateway-platform-gateway"
-else
-  PLATFORM_GATEWAY_SERVICE="platform-gateway-nginx"
-fi
+PLATFORM_GATEWAY_SERVICE="cilium-gateway-platform-gateway"
 
 array_contains() {
   local needle="$1"
@@ -487,6 +480,32 @@ if [[ "${CILIUM_GATEWAY_API}" == "true" ]]; then
     ok "cilium GatewayClass Accepted=True"
   else
     fail_soft "cilium GatewayClass Accepted=$(reported_or_not "${gwc_accepted}")"
+  fi
+
+  if [[ "${ADMIN_ROUTE_ALLOWLIST_ENABLED}" == "1" ]]; then
+    # The policy attaches to Cilium's reserved:ingress endpoint, where the
+    # original client CIDR still exists. Backends only see reserved:ingress, so
+    # checking a backend policy here would prove nothing about the allowlist.
+    allowlist_selector=$(kubectl get ccnp cilium-gateway-admin-allowlist -o jsonpath='{.spec.endpointSelector.matchExpressions[?(@.key=="reserved:ingress")].operator}' 2>/dev/null || true)
+    if [[ "${allowlist_selector}" == "Exists" ]]; then
+      ok "Cilium admin allowlist selects reserved:ingress"
+    else
+      fail_soft "Cilium admin allowlist policy is missing or does not select reserved:ingress"
+    fi
+
+    allowlist_cidrs=$(kubectl get ccnp cilium-gateway-admin-allowlist -o jsonpath='{.spec.ingress[0].fromCIDRSet[*].cidr}' 2>/dev/null || true)
+    missing_cidrs=()
+    while IFS= read -r configured_cidr; do
+      [[ -z "${configured_cidr}" ]] && continue
+      if [[ " ${allowlist_cidrs} " != *" ${configured_cidr} "* ]]; then
+        missing_cidrs+=("${configured_cidr}")
+      fi
+    done < <(tfvar_list_entries "" admin_route_allowlist_cidrs)
+    if [[ "${#missing_cidrs[@]}" -eq 0 ]]; then
+      ok "Cilium admin allowlist contains every configured CIDR"
+    else
+      fail_soft "Cilium admin allowlist is missing configured CIDR(s): ${missing_cidrs[*]}"
+    fi
   fi
 else
   echo "Gateway controller (nginx-gateway):"

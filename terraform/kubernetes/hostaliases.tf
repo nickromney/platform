@@ -23,7 +23,6 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_service_v1.platform_gateway_nginx_internal,
     data.kubernetes_nodes.platform_gateway_alias,
   ]
 }
@@ -54,7 +53,6 @@ __YAML__
   depends_on = [
     null_resource.wait_headlamp_deployment,
     kubectl_manifest.argocd_app_headlamp,
-    kubernetes_service_v1.platform_gateway_nginx_internal,
     data.kubernetes_nodes.platform_gateway_alias,
   ]
 }
@@ -137,7 +135,6 @@ __YAML__
 
   depends_on = [
     null_resource.wait_langfuse_web_deployment,
-    kubernetes_service_v1.platform_gateway_nginx_internal,
     data.kubernetes_nodes.platform_gateway_alias,
   ]
 }

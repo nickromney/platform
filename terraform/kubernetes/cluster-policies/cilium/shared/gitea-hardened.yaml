@@ -61,10 +61,8 @@ spec:
         - ports:
             - port: "3000"
               protocol: TCP
-    - fromEndpoints:
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": platform-gateway
-            "k8s:app.kubernetes.io/name": platform-gateway-nginx
+    - fromEntities:
+        - ingress
       toPorts:
         - ports:
             - port: "3000"

@@ -46,38 +46,19 @@ SSO_SERVICE_NAME="${SSO_SERVICE_NAME:-${SSO_DEPLOYMENT_NAME}}"
 SSO_DESCRIPTION="${SSO_DESCRIPTION:-${SSO_DEPLOYMENT_NAME}}"
 MKCERT_CA_DEST="${MKCERT_CA_DEST:-/etc/kubernetes/pki/mkcert-rootCA.pem}"
 PLATFORM_GATEWAY_NAMESPACE="${PLATFORM_GATEWAY_NAMESPACE:-platform-gateway}"
-PLATFORM_GATEWAY_INTERNAL_SVC="${PLATFORM_GATEWAY_INTERNAL_SVC:-platform-gateway-nginx-internal}"
-GATEWAY_DEPLOY_NAME="${GATEWAY_DEPLOY_NAME:-platform-gateway-nginx}"
-
-# Cilium serves Gateway API from the Envoy inside cilium-agent, on the node's
-# host network. There is no data-plane Deployment to wait for and no Service
-# with endpoints to take a clusterIP from, so both of those steps need a
-# different answer in that mode. Absent facts (lima, slicer, a pre-facts apply)
-# mean the NGINX path, which is the existing behaviour.
-OPERATOR_FACTS_FILE="${OPERATOR_FACTS_FILE:-${REPO_ROOT}/terraform/kubernetes/.run/kind/operator-facts.json}"
-
-cilium_gateway_api_enabled() {
-  [[ -f "${OPERATOR_FACTS_FILE}" ]] || return 1
-  command -v jq >/dev/null 2>&1 || return 1
-  [[ "$(jq -r '.cilium_gateway_api // false' "${OPERATOR_FACTS_FILE}" 2>/dev/null)" == "true" ]]
-}
-
-# The address the apiserver should resolve the OIDC issuer host to. Under NGINX
-# that is the internal Service's clusterIP. Under Cilium the listener is bound on
-# the node's host network, so the node's own address is what answers on 443.
+# The Cilium Gateway Envoy listens on the selected node's host network. The
+# apiserver therefore resolves the OIDC issuer host to that node InternalIP.
 resolve_gateway_ingress_ip() {
   local node="$1"
-
-  if cilium_gateway_api_enabled; then
-    kubectl get node "${node}" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || true
-    return 0
-  fi
-
-  kubectl -n "${PLATFORM_GATEWAY_NAMESPACE}" get svc "${PLATFORM_GATEWAY_INTERNAL_SVC}" \
-    -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true
+  kubectl get node "${node}" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || true
 }
 PLATFORM_GATEWAY_NAME="${PLATFORM_GATEWAY_NAME:-platform-gateway}"
 PLATFORM_GATEWAY_TLS_SECRET="${PLATFORM_GATEWAY_TLS_SECRET:-platform-gateway-tls}"
+
+# NGF is retired. This predicate remains temporarily because recovery helpers
+# share their Cilium implementation through this narrow seam.
+cilium_gateway_api_enabled() { return 0; }
+
 NGINX_GATEWAY_NAMESPACE="${NGINX_GATEWAY_NAMESPACE:-nginx-gateway}"
 NGINX_GATEWAY_DEPLOY_NAME="${NGINX_GATEWAY_DEPLOY_NAME:-nginx-gateway}"
 CILIUM_NAMESPACE="${CILIUM_NAMESPACE:-kube-system}"

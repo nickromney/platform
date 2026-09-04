@@ -3,9 +3,4 @@ kind: Kustomization
 namespace: platform-gateway
 resources:
   - namespace.yaml
-  - agent-tls-bootstrap.yaml
   - gateway.yaml
-  - gateway-service.yaml
-  - nginxproxy.yaml
-  - proxysettingspolicy-oauth-response-buffers.yaml
-  - tls-hardening.yaml

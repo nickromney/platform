@@ -145,7 +145,6 @@ bool|ENABLE_ACTIONS_RUNNER|enable_actions_runner|true
 bool|ENABLE_APP_REPO_SENTIMENT|enable_app_repo_sentiment|false
 bool|ENABLE_APP_REPO_SUBNETCALC|enable_app_repo_subnetcalc|false
 bool|ENABLE_UAT_APPS|enable_uat_apps|true
-bool|ENABLE_CILIUM_GATEWAY_API|cilium_gateway_api|false
 bool|ENABLE_SUBNETCALC_APIM_GATEWAY|enable_subnetcalc_apim_gateway|true
 bool|ENABLE_APIM_SIMULATOR|enable_apim_simulator|false
 bool|ENABLE_AGENTGATEWAY_AI_GATEWAY|enable_agentgateway_ai_gateway|false
@@ -306,7 +305,6 @@ ENABLE_ACTIONS_RUNNER="${ENABLE_ACTIONS_RUNNER:-true}"
 ENABLE_APP_REPO_SENTIMENT="${ENABLE_APP_REPO_SENTIMENT:-false}"
 ENABLE_APP_REPO_SUBNETCALC="${ENABLE_APP_REPO_SUBNETCALC:-false}"
 ENABLE_UAT_APPS="${ENABLE_UAT_APPS:-true}"
-ENABLE_CILIUM_GATEWAY_API="${ENABLE_CILIUM_GATEWAY_API:-false}"
 ENABLE_SUBNETCALC_APIM_GATEWAY="${ENABLE_SUBNETCALC_APIM_GATEWAY:-true}"
 ENABLE_APIM_SIMULATOR="${ENABLE_APIM_SIMULATOR:-false}"
 ENABLE_AGENTGATEWAY_AI_GATEWAY="${ENABLE_AGENTGATEWAY_AI_GATEWAY:-false}"
@@ -1892,28 +1890,9 @@ render_platform_gateway_for_cilium() {
 
   [[ -d "${app_dir}" ]] || return 0
 
-  local shared_policies="${repo_dir}/cluster-policies/cilium/shared"
-  local policy_kustomization="${shared_policies}/kustomization.yaml"
-
-  if ! is_true "${ENABLE_CILIUM_GATEWAY_API}"; then
-    remove_if_present "${app_dir}/gateway-cilium.yaml"
-    remove_kustomization_entry "${kustomization}" "gateway-cilium.yaml"
-    # The reserved:ingress allowances only describe Cilium's own Envoy, so they
-    # are dead weight on the NGINX path and are pruned rather than shipped inert.
-    remove_if_present "${shared_policies}/cilium-gateway-ingress.yaml"
-    remove_kustomization_entry "${policy_kustomization}" "cilium-gateway-ingress.yaml"
-    return 0
-  fi
-
-  # Guarded because the script runs under `set -e`: render_repo always starts
-  # from a fresh copy so the source is present today, but a second call on the
-  # same directory would fail this mv and abort the whole policy sync with only
-  # a bare "No such file or directory" to explain it.
-  if [[ -f "${app_dir}/gateway-cilium.yaml" ]]; then
-    mv -f "${app_dir}/gateway-cilium.yaml" "${app_dir}/gateway.yaml"
-  elif ! grep -q "gatewayClassName: cilium" "${app_dir}/gateway.yaml" 2>/dev/null; then
-    fail "platform-gateway/gateway-cilium.yaml is missing and gateway.yaml is not the Cilium variant; refusing to prune the NGINX resources and leave no gateway"
-  fi
+  # Focused render fixtures may omit the platform Gateway entirely.
+  [[ -f "${app_dir}/gateway.yaml" ]] || return 0
+  grep -q "gatewayClassName: cilium" "${app_dir}/gateway.yaml" 2>/dev/null || fail "platform-gateway/gateway.yaml must use the Cilium GatewayClass"
 
   local nginx_only
   for nginx_only in nginxproxy.yaml proxysettingspolicy-oauth-response-buffers.yaml \
@@ -1952,17 +1931,118 @@ render_platform_gateway_for_cilium() {
 # reproducible in core Gateway API as a ResponseHeaderModifier, so they are
 # translated rather than dropped -- losing HSTS and the framing controls while
 # the routes kept working would be a silent security regression. The IP
-# allowlist has no core equivalent at all, so a configured allowlist is a hard
-# failure rather than a quiet downgrade.
+# allowlist is enforced at the Cilium Gateway's reserved:ingress endpoint.
+# Gateway API does not model source CIDRs, but Cilium does: a Cilium policy can
+# combine source CIDRs with HTTP Host matches before Envoy forwards to a
+# backend. This deliberately does not patch Cilium's generated
+# CiliumEnvoyConfig, which Cilium owns and regenerates.
+# shellcheck disable=SC2016 # '$' is intentionally a regex anchor, not shell syntax.
+cilium_http_host_regex() {
+  printf '%s' "$1" | sed 's/[.[\\*^$()+?{|]/\\\\&/g'
+}
+
+render_cilium_admin_allowlist_policy() {
+  local repo_dir="$1"
+  local policy_dir="${repo_dir}/cluster-policies/cilium/shared"
+  local policy_file="${policy_dir}/cilium-gateway-admin-allowlist.yaml"
+  local kustomization="${policy_dir}/kustomization.yaml"
+  local admin_hosts_file=""
+  local all_hosts_file=""
+  local public_hosts_file=""
+  local route_file routes_dir cidr host
+
+  [[ -d "${policy_dir}" ]] || return 0
+
+  if [[ -z "${ADMIN_ROUTE_ALLOWLIST_CIDRS}" ]]; then
+    remove_if_present "${policy_file}"
+    remove_kustomization_entry "${kustomization}" "cilium-gateway-admin-allowlist.yaml"
+    return 0
+  fi
+
+  admin_hosts_file="$(mktemp)"
+  all_hosts_file="$(mktemp)"
+  public_hosts_file="$(mktemp)"
+
+  for routes_dir in "${repo_dir}/apps/platform-gateway-routes" "${repo_dir}/apps/platform-gateway-routes-sso"; do
+    [[ -d "${routes_dir}" ]] || continue
+    for route_file in "${routes_dir}"/httproute-*.yaml; do
+      [[ -e "${route_file}" ]] || continue
+      awk '/^  hostnames:/{hosts=1; next} hosts && /^    - / {print $2; next} hosts {hosts=0}' "${route_file}" >>"${all_hosts_file}"
+      if grep -Fq 'name: admin-allowlist' "${route_file}"; then
+        awk '/^  hostnames:/{hosts=1; next} hosts && /^    - / {print $2; next} hosts {hosts=0}' "${route_file}" >>"${admin_hosts_file}"
+      fi
+    done
+  done
+  LC_ALL=C sort -u "${all_hosts_file}" -o "${all_hosts_file}"
+  LC_ALL=C sort -u "${admin_hosts_file}" -o "${admin_hosts_file}"
+  grep -Fvx -f "${admin_hosts_file}" "${all_hosts_file}" >"${public_hosts_file}" || true
+
+  if [[ ! -s "${admin_hosts_file}" ]]; then
+    rm -f "${admin_hosts_file}" "${all_hosts_file}" "${public_hosts_file}"
+    fail "ADMIN_ROUTE_ALLOWLIST_CIDRS is set, but no admin HTTPRoute hostnames were found for the Cilium Gateway policy"
+  fi
+
+  {
+    cat <<'EOF'
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: cilium-gateway-admin-allowlist
+spec:
+  description: >-
+    Restrict admin Gateway hosts at Cilium's reserved:ingress endpoint while
+    keeping the explicitly rendered non-admin Gateway hosts publicly reachable.
+    Cilium enforces this before its Gateway Envoy sends traffic to backends.
+  endpointSelector:
+    matchExpressions:
+      - key: reserved:ingress
+        operator: Exists
+  ingress:
+    - fromCIDRSet:
+EOF
+    IFS=',' read -r -a cidrs <<<"${ADMIN_ROUTE_ALLOWLIST_CIDRS}"
+    for cidr in "${cidrs[@]}"; do
+      printf '        - cidr: %s\n' "$(printf '%s' "${cidr}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    done
+    cat <<'EOF'
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+          rules:
+            http:
+EOF
+    while IFS= read -r host; do
+      [[ -n "${host}" ]] || continue
+      printf '              - host: "^%s$"\n' "$(cilium_http_host_regex "${host}")"
+    done <"${admin_hosts_file}"
+    if [[ -s "${public_hosts_file}" ]]; then
+      cat <<'EOF'
+    - fromCIDRSet:
+        - cidr: 0.0.0.0/0
+        - cidr: ::/0
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+          rules:
+            http:
+EOF
+      while IFS= read -r host; do
+        [[ -n "${host}" ]] || continue
+        printf '              - host: "^%s$"\n' "$(cilium_http_host_regex "${host}")"
+      done <"${public_hosts_file}"
+    fi
+  } >"${policy_file}"
+  add_kustomization_entry "${kustomization}" "cilium-gateway-admin-allowlist.yaml"
+  rm -f "${admin_hosts_file}" "${all_hosts_file}" "${public_hosts_file}"
+}
+
 render_gateway_routes_for_cilium() {
   local repo_dir="$1"
   local routes_dir frame_options route_file base
 
-  is_true "${ENABLE_CILIUM_GATEWAY_API}" || return 0
-
-  if [[ -n "${ADMIN_ROUTE_ALLOWLIST_CIDRS}" ]]; then
-    fail "ADMIN_ROUTE_ALLOWLIST_CIDRS is set, but the Cilium Gateway path has no equivalent of the NGINX SnippetsFilter allowlist. Refusing to render admin routes without the IP restriction they are configured to have."
-  fi
+  render_cilium_admin_allowlist_policy "${repo_dir}"
 
   for routes_dir in "${repo_dir}/apps/platform-gateway-routes" "${repo_dir}/apps/platform-gateway-routes-sso"; do
     [[ -d "${routes_dir}" ]] || continue
@@ -2017,10 +2097,8 @@ prune_argocd_app_manifests() {
     remove_if_present "${apps_dir}/001-cert-manager.application.yaml"
   fi
 
-  if is_true "${ENABLE_CILIUM_GATEWAY_API}"; then
-    # Cilium owns Gateway API now; NGF would fight it over the same Gateway.
-    remove_if_present "${apps_dir}/002-nginx-gateway-fabric.application.yaml"
-  fi
+  # Cilium owns Gateway API; NGF is intentionally absent from every render.
+  remove_if_present "${apps_dir}/002-nginx-gateway-fabric.application.yaml"
 
   if ! is_true "${ENABLE_GATEWAY_TLS}"; then
     remove_if_present "${apps_dir}/002-nginx-gateway-fabric.application.yaml"
@@ -2230,43 +2308,6 @@ route_primary_hostname() {
   ' "${route_file}"
 }
 
-render_gateway_route_admin_allowlist() {
-  local routes_dir="$1"
-  local filter_file="${routes_dir}/snippetsfilter-admin-allowlist.yaml"
-  local allowlist_snippet=""
-  local cidr
-
-  [[ -d "${routes_dir}" ]] || return 0
-  # render_gateway_routes_for_cilium removes this filter and rewrites the routes
-  # that referenced it; regenerating it here would put it straight back.
-  is_true "${ENABLE_CILIUM_GATEWAY_API}" && return 0
-
-  if [[ -n "${ADMIN_ROUTE_ALLOWLIST_CIDRS}" ]]; then
-    IFS=',' read -r -a cidrs <<< "${ADMIN_ROUTE_ALLOWLIST_CIDRS}"
-    for cidr in "${cidrs[@]}"; do
-      cidr="$(printf '%s' "${cidr}" | xargs)"
-      [[ -n "${cidr}" ]] || continue
-      allowlist_snippet="${allowlist_snippet}        allow ${cidr};"$'\n'
-    done
-    allowlist_snippet="${allowlist_snippet}        deny all;"
-  else
-    allowlist_snippet="        allow all;"
-  fi
-
-  cat > "${filter_file}" <<EOF
-apiVersion: gateway.nginx.org/v1alpha1
-kind: SnippetsFilter
-metadata:
-  name: admin-allowlist
-  namespace: gateway-routes
-spec:
-  snippets:
-    - context: http.server.location
-      value: |
-${allowlist_snippet}
-EOF
-}
-
 render_gateway_route_forwarded_headers() {
   local routes_dir="$1"
   local route_file host tmp_file
@@ -2349,20 +2390,6 @@ configure_progressive_delivery() {
 
   # Cilium canary traffic is HTTPRoute subnetcalc-frontend-dev weights. The
   # router keeps the UAT path: frontend Service, not a Gateway re-entry.
-  if ! is_true "${ENABLE_CILIUM_GATEWAY_API}"; then
-    if ! grep -Fq "subnetcalc-router-gateway-canary-patch.yaml" "${kustomization_file}"; then
-      if grep -Eq '^patches:' "${kustomization_file}"; then
-        cat >>"${kustomization_file}" <<'EOF'
-  - path: subnetcalc-router-gateway-canary-patch.yaml
-EOF
-      else
-        cat >>"${kustomization_file}" <<'EOF'
-patches:
-  - path: subnetcalc-router-gateway-canary-patch.yaml
-EOF
-      fi
-    fi
-  fi
 
   if grep -Fq "subnetcalc-frontend-rollout-patch.yaml" "${kustomization_file}"; then
     return 0
@@ -2627,7 +2654,6 @@ render_policy_repo_tree() {
   cp -R "${STACK_DIR}/cluster-policies" "${repo_dir}/cluster-policies"
   render_image_signing_policy "${repo_dir}/cluster-policies/kyverno/shared"
   rewrite_public_hostnames "${repo_dir}"
-  render_platform_gateway_proxy_config "${repo_dir}"
   apply_external_workload_images "${repo_dir}/apps/apim/all.yaml"
   apply_external_workload_images "${repo_dir}/apps/mcp/all.yaml"
   apply_external_workload_images "${repo_dir}/apps/workloads/base/all.yaml"
@@ -2658,12 +2684,10 @@ render_policy_repo_tree() {
   vendor_direct_tf_only_charts "${vendor_root}"
   if [[ -d "${repo_dir}/apps/platform-gateway-routes" ]]; then
     prune_gateway_routes_manifests "${repo_dir}/apps/platform-gateway-routes"
-    render_gateway_route_admin_allowlist "${repo_dir}/apps/platform-gateway-routes"
     render_gateway_route_forwarded_headers "${repo_dir}/apps/platform-gateway-routes"
   fi
   if [[ -d "${repo_dir}/apps/platform-gateway-routes-sso" ]]; then
     prune_gateway_routes_manifests "${repo_dir}/apps/platform-gateway-routes-sso"
-    render_gateway_route_admin_allowlist "${repo_dir}/apps/platform-gateway-routes-sso"
     render_gateway_route_forwarded_headers "${repo_dir}/apps/platform-gateway-routes-sso"
   fi
   rewrite_hardened_registry "${repo_dir}"

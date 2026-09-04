@@ -1138,7 +1138,6 @@ resource "null_resource" "wait_for_platform_gateway_tls" {
     null_resource.argocd_refresh_gitops_repo_apps,
     kubectl_manifest.argocd_app_cert_manager,
     kubectl_manifest.argocd_app_cert_manager_config,
-    kubectl_manifest.argocd_app_nginx_gateway_fabric,
     kubectl_manifest.argocd_app_platform_gateway,
     kubectl_manifest.argocd_app_platform_gateway_routes,
   ]
@@ -1152,7 +1151,7 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
     helper_lib_sha       = filesha256(abspath("${local.stack_dir}/scripts/kind-apiserver-oidc-lib.sh"))
     render_helper_sha    = filesha256(abspath("${local.stack_dir}/scripts/render-kind-apiserver-oidc-manifest.sh"))
     render_go_sha        = filesha256("${local.repo_root}/tools/platform-helpers/cmd/render-kind-apiserver-oidc-manifest/main.go")
-    gateway_service_uid  = var.cilium_gateway_api ? local.platform_gateway_sso_alias_ip : kubernetes_service_v1.platform_gateway_nginx_internal[0].metadata[0].uid
+    gateway_service_uid  = local.platform_gateway_sso_alias_ip
     cluster_name         = var.cluster_name
     oidc_host            = local.sso_public_host
     oidc_client_id       = "headlamp"
@@ -1182,7 +1181,6 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
 
   depends_on = [
     null_resource.ensure_kind_kubeconfig,
-    kubernetes_service_v1.platform_gateway_nginx_internal,
     data.kubernetes_nodes.platform_gateway_alias,
     null_resource.argocd_refresh_gitops_repo_apps,
     null_resource.wait_for_platform_gateway_tls,
@@ -1299,7 +1297,7 @@ rules:
   - apiGroups: ["argoproj.io"]
     resources: ["applications", "applicationsets", "appprojects"]
     verbs: ["get", "list", "watch"]
-  - apiGroups: ["gateway.networking.k8s.io", "gateway.nginx.org", "kyverno.io", "cilium.io"]
+  - apiGroups: ["gateway.networking.k8s.io", "kyverno.io", "cilium.io"]
     resources: ["*"]
     verbs: ["get", "list", "watch"]
 __YAML__

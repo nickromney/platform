@@ -60,17 +60,10 @@ ok "kind control-plane node: ${CONTROL_PLANE_NODE}"
 
 GATEWAY_IP="$(resolve_gateway_ingress_ip "${CONTROL_PLANE_NODE}")"
 if [[ -z "${GATEWAY_IP}" ]]; then
-  if cilium_gateway_api_enabled; then
-    fail "Could not determine an InternalIP for node ${CONTROL_PLANE_NODE}"
-  fi
-  fail "Could not determine clusterIP for svc ${PLATFORM_GATEWAY_NAMESPACE}/${PLATFORM_GATEWAY_INTERNAL_SVC}"
+  fail "Could not determine an InternalIP for node ${CONTROL_PLANE_NODE}"
 fi
 
-if cilium_gateway_api_enabled; then
-  ok "gateway host-network address: ${GATEWAY_IP} (Cilium Envoy on ${CONTROL_PLANE_NODE})"
-else
-  ok "gateway internal clusterIP: ${GATEWAY_IP}"
-fi
+ok "gateway host-network address: ${GATEWAY_IP} (Cilium Envoy on ${CONTROL_PLANE_NODE})"
 
 ok "ensuring ${OIDC_HOST} resolves inside kind node"
 docker exec "${CONTROL_PLANE_NODE}" sh -lc "grep -qE '^[0-9.]+[[:space:]]+${OIDC_HOST}(\\s|$)' /etc/hosts || echo '${GATEWAY_IP} ${OIDC_HOST}' >> /etc/hosts"
@@ -78,26 +71,12 @@ docker exec "${CONTROL_PLANE_NODE}" sh -lc "grep -qE '^[0-9.]+[[:space:]]+${OIDC
 ok "copying mkcert root CA into kind node: ${MKCERT_CA_DEST}"
 docker cp "${CA_CERT}" "${CONTROL_PLANE_NODE}:${MKCERT_CA_DEST}"
 
-if cilium_gateway_api_enabled; then
-  # No data-plane Deployment exists in this mode: Cilium's Envoy runs inside the
-  # cilium-agent DaemonSet, so the Gateway's own Programmed condition is the
-  # readiness signal.
-  ok "waiting for Gateway Programmed (${PLATFORM_GATEWAY_NAMESPACE}/${PLATFORM_GATEWAY_NAME})"
-  if ! wait_for_gateway_programmed "${GATEWAY_DEPLOY_WAIT_SECONDS}"; then
-    kubectl -n "${PLATFORM_GATEWAY_NAMESPACE}" get gateway "${PLATFORM_GATEWAY_NAME}" -o wide 2>/dev/null || true
-    fail "Gateway never became Programmed after ${GATEWAY_DEPLOY_WAIT_SECONDS}s; aborting OIDC apiserver configuration"
-  fi
-else
-  ok "waiting for gateway data plane (${PLATFORM_GATEWAY_NAMESPACE}/${GATEWAY_DEPLOY_NAME})"
-  if ! wait_for_deployment_rollout \
-    "${PLATFORM_GATEWAY_NAMESPACE}" \
-    "${GATEWAY_DEPLOY_NAME}" \
-    "${GATEWAY_DEPLOY_WAIT_SECONDS}" \
-    "gateway data plane (${PLATFORM_GATEWAY_NAMESPACE}/${GATEWAY_DEPLOY_NAME})"; then
-    warn "gateway data plane not ready after ${GATEWAY_DEPLOY_WAIT_SECONDS}s"
-    kubectl -n "${PLATFORM_GATEWAY_NAMESPACE}" get pods -l "gateway.networking.k8s.io/gateway-name=platform-gateway" -o wide 2>/dev/null || true
-    fail "gateway data plane never became ready; aborting OIDC apiserver configuration"
-  fi
+# Cilium's Envoy runs inside cilium-agent, so the Gateway Programmed condition
+# is the data-plane readiness signal.
+ok "waiting for Gateway Programmed (${PLATFORM_GATEWAY_NAMESPACE}/${PLATFORM_GATEWAY_NAME})"
+if ! wait_for_gateway_programmed "${GATEWAY_DEPLOY_WAIT_SECONDS}"; then
+  kubectl -n "${PLATFORM_GATEWAY_NAMESPACE}" get gateway "${PLATFORM_GATEWAY_NAME}" -o wide 2>/dev/null || true
+  fail "Gateway never became Programmed after ${GATEWAY_DEPLOY_WAIT_SECONDS}s; aborting OIDC apiserver configuration"
 fi
 
 ok "waiting for TLS secret ${PLATFORM_GATEWAY_NAMESPACE}/${PLATFORM_GATEWAY_TLS_SECRET}"

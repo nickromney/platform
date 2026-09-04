@@ -30,10 +30,8 @@ spec:
               protocol: TCP
             - port: "8083"
               protocol: TCP
-    - fromEndpoints:
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": platform-gateway
-            "k8s:app.kubernetes.io/name": platform-gateway-nginx
+    - fromEntities:
+        - ingress
       toPorts:
         - ports:
             - port: "8080"

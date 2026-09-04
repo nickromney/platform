@@ -19,9 +19,6 @@ source "${SCRIPT_DIR}/operator-facts.sh"
 
 FAILURES=0
 operator_facts_load 2>/dev/null || true
-# NGINX Gateway Fabric is pruned when Cilium owns Gateway API, so expecting its
-# Argo app would fail a healthy cluster.
-CILIUM_GATEWAY_API="$(operator_facts_bool cilium_gateway_api false 2>/dev/null || echo false)"
 fail_soft() { echo "FAIL $*" >&2; FAILURES=$((FAILURES + 1)); }
 warn() { echo "WARN $*"; }
 ok() { echo "OK   $*"; }
@@ -208,11 +205,6 @@ case "${gitops_mode}" in
     ;;
 esac
 
-# NGINX Gateway Fabric only exists on the NGINX path; Cilium's implementation
-# is the operator, which has no Argo application of its own.
-if [[ "${CILIUM_GATEWAY_API}" != "true" ]]; then
-  apps+=(nginx-gateway-fabric)
-fi
 for a in "${apps[@]}"; do
   print_argocd_app "${a}"
 done
@@ -226,8 +218,6 @@ gateway_crds=(
   gatewayclasses.gateway.networking.k8s.io
   gateways.gateway.networking.k8s.io
   httproutes.gateway.networking.k8s.io
-  nginxgateways.gateway.nginx.org
-  nginxproxies.gateway.nginx.org
 )
 for crd in "${gateway_crds[@]}"; do
   run kubectl get crd "${crd}" -o 'custom-columns=NAME:.metadata.name,ESTABLISHED:.status.conditions[?(@.type=="Established")].status'
@@ -279,22 +269,17 @@ echo "HTTPRoutes:"
 run kubectl get httproute -A -o wide
 
 section "Gateway Namespaces"
-for ns in platform-gateway nginx-gateway gateway-system; do
+for ns in platform-gateway gateway-system; do
   if ! kubectl get ns "${ns}" >/dev/null 2>&1; then
     continue
   fi
   echo "-- namespace: ${ns} --"
   run kubectl -n "${ns}" get pods -o wide
   run kubectl -n "${ns}" get deploy,svc -o wide
-  if kubectl -n "${ns}" get svc platform-gateway-nginx-internal >/dev/null 2>&1; then
-    echo "endpointslices (${ns}/platform-gateway-nginx-internal):"
-    print_endpointslices_for_service "${ns}" platform-gateway-nginx-internal
-  fi
 done
 
 section "Gateway Controller Logs (best-effort)"
-tail_deploy_logs nginx-gateway nginx-gateway-fabric
-tail_deploy_logs platform-gateway platform-gateway-nginx nginx
+tail_deploy_logs kube-system cilium-operator
 
 section "Argo CD repo-server (if unhealthy)"
 run kubectl -n argocd get pods -l app.kubernetes.io/name=argocd-repo-server -o wide

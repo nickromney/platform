@@ -12,10 +12,6 @@ quay.io/cilium/hubble-relay:v1.20.1
 quay.io/cilium/hubble-ui-backend:v0.13.5
 quay.io/cilium/hubble-ui:v0.13.5
 
-# --- NGINX Gateway Fabric (chart main) ---
-ghcr.io/nginx/nginx-gateway-fabric:2.5.1
-ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.1
-
 # --- ArgoCD (chart 10.2.1) ---
 quay.io/argoproj/argocd:v3.3.8
 ecr-public.aws.com/docker/library/redis:8.2.7-alpine
