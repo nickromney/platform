@@ -29,8 +29,8 @@ run "sso_enabled_argocd_oidc_disabled" {
     condition = alltrue([
       length(kubectl_manifest.oauth2_proxy_session_store_deployment) == 1,
       length(kubectl_manifest.oauth2_proxy_session_store_service) == 1,
-      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_argocd[0].yaml_body, "session-store-type: redis"),
-      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_argocd[0].yaml_body, "redis-connection-url: ${local.oauth2_proxy_redis_url}"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_admin["argocd"].yaml_body, "session-store-type: redis"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_admin["argocd"].yaml_body, "redis-connection-url: ${local.oauth2_proxy_redis_url}"),
     ])
     error_message = "Expected oauth2-proxy to use an internal Redis session store for Keycloak token sessions"
   }
@@ -143,30 +143,30 @@ run "sso_enabled_argocd_oidc_disabled" {
   }
 
   assert {
-    condition     = length(kubectl_manifest.argocd_app_oauth2_proxy_argocd) == 1
-    error_message = "Expected kubectl_manifest.argocd_app_oauth2_proxy_argocd to exist when enable_sso=true"
+    condition     = contains(keys(kubectl_manifest.argocd_app_oauth2_proxy_admin), "argocd")
+    error_message = "Expected the argocd admin oauth2-proxy Application to exist when enable_sso=true"
   }
 
   assert {
-    condition     = length(kubectl_manifest.argocd_app_oauth2_proxy_gitea) == 1
-    error_message = "Expected kubectl_manifest.argocd_app_oauth2_proxy_gitea to exist when enable_sso=true"
+    condition     = contains(keys(kubectl_manifest.argocd_app_oauth2_proxy_admin), "gitea")
+    error_message = "Expected the gitea admin oauth2-proxy Application to exist when enable_sso=true"
   }
 
   assert {
     condition = alltrue([
-      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_argocd[0].yaml_body, "allowed-group: platform-viewers"),
-      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_gitea[0].yaml_body, "allowed-group: platform-admins"),
-      !strcontains(kubectl_manifest.argocd_app_oauth2_proxy_argocd[0].yaml_body, "email-domain: \"admin.test\""),
-      !strcontains(kubectl_manifest.argocd_app_oauth2_proxy_gitea[0].yaml_body, "email-domain: \"admin.test\""),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_admin["argocd"].yaml_body, "allowed-group: platform-viewers"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_admin["gitea"].yaml_body, "allowed-group: platform-admins"),
+      !strcontains(kubectl_manifest.argocd_app_oauth2_proxy_admin["argocd"].yaml_body, "email-domain: \"admin.test\""),
+      !strcontains(kubectl_manifest.argocd_app_oauth2_proxy_admin["gitea"].yaml_body, "email-domain: \"admin.test\""),
     ])
     error_message = "Expected admin SSO proxies to use Keycloak org groups rather than admin email-domain shortcuts"
   }
 
   assert {
     condition = alltrue([
-      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_argocd[0].yaml_body, "cookieName: kind-v2-sso-admin"),
-      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_gitea[0].yaml_body, "cookieName: kind-v2-sso-admin"),
-      !strcontains(kubectl_manifest.argocd_app_oauth2_proxy_gitea[0].yaml_body, "prompt: login"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_admin["argocd"].yaml_body, "cookieName: kind-v2-sso-admin"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_admin["gitea"].yaml_body, "cookieName: kind-v2-sso-admin"),
+      !strcontains(kubectl_manifest.argocd_app_oauth2_proxy_admin["gitea"].yaml_body, "prompt: login"),
     ])
     error_message = "Expected admin oauth2-proxy apps to share the admin SSO cookie without forcing a fresh login prompt"
   }

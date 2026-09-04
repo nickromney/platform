@@ -550,10 +550,7 @@ resource "null_resource" "argocd_refresh_gitops_repo_apps" {
     kubectl_manifest.argocd_app_dev,
     kubectl_manifest.argocd_app_uat,
     kubectl_manifest.argocd_app_headlamp,
-    kubectl_manifest.argocd_app_oauth2_proxy_argocd,
-    kubectl_manifest.argocd_app_oauth2_proxy_gitea,
-    kubectl_manifest.argocd_app_oauth2_proxy_hubble,
-    kubectl_manifest.argocd_app_oauth2_proxy_grafana,
+    kubectl_manifest.argocd_app_oauth2_proxy_admin,
     kubectl_manifest.argocd_app_oauth2_proxy_workload,
   ]
 }

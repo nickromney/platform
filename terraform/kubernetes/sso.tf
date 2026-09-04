@@ -1187,10 +1187,7 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
     null_resource.reconcile_keycloak_realm,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
-    kubectl_manifest.argocd_app_oauth2_proxy_argocd,
-    kubectl_manifest.argocd_app_oauth2_proxy_gitea,
-    kubectl_manifest.argocd_app_oauth2_proxy_hubble,
-    kubectl_manifest.argocd_app_oauth2_proxy_grafana,
+    kubectl_manifest.argocd_app_oauth2_proxy_admin,
     kubectl_manifest.argocd_app_oauth2_proxy_workload,
   ]
 }
@@ -1346,14 +1343,14 @@ __YAML__
   ]
 }
 
-resource "kubectl_manifest" "argocd_app_oauth2_proxy_argocd" {
-  count = var.enable_sso && var.enable_argocd ? 1 : 0
+resource "kubectl_manifest" "argocd_app_oauth2_proxy_admin" {
+  for_each = var.enable_sso && var.enable_argocd ? local.sso_admin_proxy_apps : {}
 
   yaml_body = <<__YAML__
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: oauth2-proxy-argocd
+  name: ${each.value.name}
   namespace: ${var.argocd_namespace}
   finalizers:
     - resources-finalizer.argocd.argoproj.io
@@ -1367,7 +1364,7 @@ spec:
     targetRevision: main
     path: ${local.vendored_chart_paths.oauth2_proxy}
     helm:
-      releaseName: oauth2-proxy-argocd
+      releaseName: ${each.value.name}
       values: |
         image:
           registry: ${local.hardened_image_registry_effective}
@@ -1375,7 +1372,7 @@ spec:
           tag: 7.15.3-debian13
         config:
           existingSecret: oauth2-proxy-oidc
-          cookieName: ${local.admin_sso_cookie_name}
+          cookieName: ${each.value.cookie_name}
           configFile: ""
 
         service:
@@ -1410,19 +1407,17 @@ spec:
           login-url: ${local.sso_login_url}
           redeem-url: ${local.sso_token_url}
           oidc-jwks-url: ${local.sso_jwks_url}
-          redirect-url: ${local.argocd_public_url}/oauth2/callback
-          upstream: http://argocd-server.argocd.svc.cluster.local:8080
-          allowed-group: ${local.sso_viewer_group}
-          cookie-domain: ${local.admin_cookie_domain}
-          whitelist-domain: ${local.admin_whitelist_domains}
+          redirect-url: ${each.value.public_url}/oauth2/callback
+          upstream: ${each.value.upstream}
+          allowed-group: ${each.value.group}
+          cookie-domain: ${each.value.cookie_domain}
+          whitelist-domain: ${each.value.whitelist_domain}
           cookie-secure: "true"
           session-store-type: redis
           redis-connection-url: ${local.oauth2_proxy_redis_url}
-          show-debug-on-error: "true"
-          pass-access-token: "true"
+          show-debug-on-error: "true"${try(each.value.pass_access_token_arg, "")}
           pass-user-headers: "true"
-          set-xauthrequest: "true"
-          set-authorization-header: "true"
+          set-xauthrequest: "true"${try(each.value.set_authorization_header_arg, "")}
           reverse-proxy: "true"
           skip-provider-button: "true"
   syncPolicy:
@@ -1453,322 +1448,24 @@ __YAML__
   ]
 }
 
-resource "kubectl_manifest" "argocd_app_oauth2_proxy_gitea" {
-  count = var.enable_sso && var.enable_argocd ? 1 : 0
-
-  yaml_body = <<__YAML__
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: oauth2-proxy-gitea
-  namespace: ${var.argocd_namespace}
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  destination:
-    namespace: sso
-    server: https://kubernetes.default.svc
-  source:
-    repoURL: ${local.policies_repo_url_cluster}
-    targetRevision: main
-    path: ${local.vendored_chart_paths.oauth2_proxy}
-    helm:
-      releaseName: oauth2-proxy-gitea
-      values: |
-        image:
-          registry: ${local.hardened_image_registry_effective}
-          repository: oauth2-proxy
-          tag: 7.15.3-debian13
-        config:
-          existingSecret: oauth2-proxy-oidc
-          cookieName: ${local.admin_sso_cookie_name}
-          configFile: ""
-
-        service:
-          portNumber: 4180
-
-        resources:
-          requests:
-            cpu: ${var.oauth2_proxy_cpu_request}
-            memory: ${var.oauth2_proxy_memory_request}
-
-        livenessProbe:
-          initialDelaySeconds: 10
-          timeoutSeconds: 15
-          failureThreshold: 10
-
-        readinessProbe:
-          initialDelaySeconds: 5
-          timeoutSeconds: 15
-          failureThreshold: 10
-
-        extraArgs:
-          provider: oidc
-          scope: "openid email profile groups"
-          oidc-issuer-url: ${local.sso_public_url}
-          profile-url: ${local.sso_userinfo_url}
-          oidc-email-claim: email
-          oidc-groups-claim: ${local.sso_groups_claim}
-          insecure-oidc-allow-unverified-email: "true"
-          user-id-claim: email
-          skip-oidc-discovery: "true"
-          ssl-insecure-skip-verify: "true"
-          login-url: ${local.sso_login_url}
-          redeem-url: ${local.sso_token_url}
-          oidc-jwks-url: ${local.sso_jwks_url}
-          redirect-url: ${local.gitea_public_url}/oauth2/callback
-          upstream: http://gitea-http.gitea.svc.cluster.local:3000
-          allowed-group: ${local.sso_admin_group}
-          cookie-domain: ${local.admin_cookie_domain}
-          whitelist-domain: ${local.admin_whitelist_domains}
-          cookie-secure: "true"
-          session-store-type: redis
-          redis-connection-url: ${local.oauth2_proxy_redis_url}
-          show-debug-on-error: "true"
-          pass-access-token: "true"
-          pass-user-headers: "true"
-          set-xauthrequest: "true"
-          set-authorization-header: "true"
-          reverse-proxy: "true"
-          skip-provider-button: "true"
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-      - ServerSideApply=true
-      - SkipDryRunOnMissingResource=true
-__YAML__
-
-  wait              = true
-  validate_schema   = false
-  force_conflicts   = false
-  server_side_apply = false
-
-  depends_on = [
-    helm_release.argocd,
-    kubernetes_secret_v1.argocd_repo_policies,
-    null_resource.sync_gitea_policies_repo,
-    null_resource.argocd_repo_server_restart,
-    kubernetes_namespace_v1.sso,
-    kubernetes_secret_v1.oauth2_proxy_oidc,
-    kubectl_manifest.oauth2_proxy_session_store_service,
-    kubectl_manifest.keycloak,
-    kubectl_manifest.keycloak_service,
-  ]
+moved {
+  from = kubectl_manifest.argocd_app_oauth2_proxy_argocd[0]
+  to   = kubectl_manifest.argocd_app_oauth2_proxy_admin["argocd"]
 }
 
-resource "kubectl_manifest" "argocd_app_oauth2_proxy_hubble" {
-  count = var.enable_sso && var.enable_hubble && var.enable_argocd ? 1 : 0
-
-  yaml_body = <<__YAML__
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: oauth2-proxy-hubble
-  namespace: ${var.argocd_namespace}
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  destination:
-    namespace: sso
-    server: https://kubernetes.default.svc
-  source:
-    repoURL: ${local.policies_repo_url_cluster}
-    targetRevision: main
-    path: ${local.vendored_chart_paths.oauth2_proxy}
-    helm:
-      releaseName: oauth2-proxy-hubble
-      values: |
-        image:
-          registry: ${local.hardened_image_registry_effective}
-          repository: oauth2-proxy
-          tag: 7.15.3-debian13
-        config:
-          existingSecret: oauth2-proxy-oidc
-          cookieName: ${local.admin_sso_cookie_name}
-          configFile: ""
-
-        service:
-          portNumber: 4180
-
-        resources:
-          requests:
-            cpu: ${var.oauth2_proxy_cpu_request}
-            memory: ${var.oauth2_proxy_memory_request}
-
-        livenessProbe:
-          initialDelaySeconds: 10
-          timeoutSeconds: 15
-          failureThreshold: 10
-
-        readinessProbe:
-          initialDelaySeconds: 5
-          timeoutSeconds: 15
-          failureThreshold: 10
-
-        extraArgs:
-          provider: oidc
-          scope: "openid email profile groups"
-          oidc-issuer-url: ${local.sso_public_url}
-          profile-url: ${local.sso_userinfo_url}
-          oidc-email-claim: email
-          oidc-groups-claim: ${local.sso_groups_claim}
-          insecure-oidc-allow-unverified-email: "true"
-          user-id-claim: email
-          skip-oidc-discovery: "true"
-          ssl-insecure-skip-verify: "true"
-          login-url: ${local.sso_login_url}
-          redeem-url: ${local.sso_token_url}
-          oidc-jwks-url: ${local.sso_jwks_url}
-          redirect-url: ${local.hubble_public_url}/oauth2/callback
-          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
-          allowed-group: ${local.sso_admin_group}
-          cookie-domain: ${local.admin_cookie_domain}
-          whitelist-domain: ${local.admin_whitelist_domains}
-          cookie-secure: "true"
-          session-store-type: redis
-          redis-connection-url: ${local.oauth2_proxy_redis_url}
-          show-debug-on-error: "true"
-          pass-user-headers: "true"
-          set-xauthrequest: "true"
-          set-authorization-header: "true"
-          reverse-proxy: "true"
-          skip-provider-button: "true"
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-      - ServerSideApply=true
-      - SkipDryRunOnMissingResource=true
-__YAML__
-
-  wait              = true
-  validate_schema   = false
-  force_conflicts   = false
-  server_side_apply = false
-
-  depends_on = [
-    helm_release.argocd,
-    kubernetes_secret_v1.argocd_repo_policies,
-    null_resource.sync_gitea_policies_repo,
-    null_resource.argocd_repo_server_restart,
-    kubernetes_namespace_v1.sso,
-    kubernetes_secret_v1.oauth2_proxy_oidc,
-    kubectl_manifest.oauth2_proxy_session_store_service,
-    kubectl_manifest.keycloak,
-    kubectl_manifest.keycloak_service,
-  ]
+moved {
+  from = kubectl_manifest.argocd_app_oauth2_proxy_gitea[0]
+  to   = kubectl_manifest.argocd_app_oauth2_proxy_admin["gitea"]
 }
 
-resource "kubectl_manifest" "argocd_app_oauth2_proxy_grafana" {
-  count = var.enable_sso && var.enable_argocd && var.enable_grafana ? 1 : 0
+moved {
+  from = kubectl_manifest.argocd_app_oauth2_proxy_hubble[0]
+  to   = kubectl_manifest.argocd_app_oauth2_proxy_admin["hubble"]
+}
 
-  yaml_body = <<__YAML__
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: oauth2-proxy-grafana
-  namespace: ${var.argocd_namespace}
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  destination:
-    namespace: sso
-    server: https://kubernetes.default.svc
-  source:
-    repoURL: ${local.policies_repo_url_cluster}
-    targetRevision: main
-    path: ${local.vendored_chart_paths.oauth2_proxy}
-    helm:
-      releaseName: oauth2-proxy-grafana
-      values: |
-        image:
-          registry: ${local.hardened_image_registry_effective}
-          repository: oauth2-proxy
-          tag: 7.15.3-debian13
-        config:
-          existingSecret: oauth2-proxy-oidc
-          cookieName: ${local.admin_sso_cookie_name}
-          configFile: ""
-
-        service:
-          portNumber: 4180
-
-        resources:
-          requests:
-            cpu: ${var.oauth2_proxy_cpu_request}
-            memory: ${var.oauth2_proxy_memory_request}
-
-        livenessProbe:
-          initialDelaySeconds: 10
-          timeoutSeconds: 15
-          failureThreshold: 10
-
-        readinessProbe:
-          initialDelaySeconds: 5
-          timeoutSeconds: 15
-          failureThreshold: 10
-
-        extraArgs:
-          provider: oidc
-          scope: "openid email profile groups"
-          oidc-issuer-url: ${local.sso_public_url}
-          profile-url: ${local.sso_userinfo_url}
-          oidc-email-claim: email
-          oidc-groups-claim: ${local.sso_groups_claim}
-          insecure-oidc-allow-unverified-email: "true"
-          user-id-claim: email
-          skip-oidc-discovery: "true"
-          ssl-insecure-skip-verify: "true"
-          login-url: ${local.sso_login_url}
-          redeem-url: ${local.sso_token_url}
-          oidc-jwks-url: ${local.sso_jwks_url}
-          redirect-url: ${local.grafana_public_url}/oauth2/callback
-          upstream: http://grafana.observability.svc.cluster.local:3000
-          allowed-group: ${local.sso_admin_group}
-          cookie-domain: ${local.admin_cookie_domain}
-          whitelist-domain: ${local.admin_whitelist_domains}
-          cookie-secure: "true"
-          session-store-type: redis
-          redis-connection-url: ${local.oauth2_proxy_redis_url}
-          show-debug-on-error: "true"
-          pass-user-headers: "true"
-          set-xauthrequest: "true"
-          reverse-proxy: "true"
-          skip-provider-button: "true"
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-      - ServerSideApply=true
-      - SkipDryRunOnMissingResource=true
-__YAML__
-
-  wait              = true
-  validate_schema   = false
-  force_conflicts   = false
-  server_side_apply = false
-
-  depends_on = [
-    helm_release.argocd,
-    kubernetes_secret_v1.argocd_repo_policies,
-    null_resource.sync_gitea_policies_repo,
-    null_resource.argocd_repo_server_restart,
-    kubernetes_namespace_v1.sso,
-    kubernetes_secret_v1.oauth2_proxy_oidc,
-    kubectl_manifest.oauth2_proxy_session_store_service,
-    kubectl_manifest.keycloak,
-    kubectl_manifest.keycloak_service,
-  ]
+moved {
+  from = kubectl_manifest.argocd_app_oauth2_proxy_grafana[0]
+  to   = kubectl_manifest.argocd_app_oauth2_proxy_admin["grafana"]
 }
 
 
