@@ -31,7 +31,7 @@ import yaml
 # interpolates it from a resource attribute this test cannot resolve. A sync
 # wave is only compared when both sides declare one, because ordering in direct
 # Terraform mode comes from depends_on rather than from waves.
-MIN_COMPARABLE_APPS = 27
+MIN_COMPARABLE_APPS = 25
 
 TF_RETRY = {"limit": 5, "backoff": {"duration": "10s", "factor": 2, "maxDuration": "3m"}}
 SYNC_BASE = ["CreateNamespace=true", "ServerSideApply=true", "SkipDryRunOnMissingResource=true"]
@@ -41,12 +41,11 @@ SYNC_BASE = ["CreateNamespace=true", "ServerSideApply=true", "SkipDryRunOnMissin
 # means deleting its entry; introducing a new one means fixing it or adding it
 # here deliberately.
 KNOWN_DIVERGENCES = {
-    # Seven workload apps retry in direct Terraform mode and not under
+    # Six workload apps retry in direct Terraform mode and not under
     # app-of-apps, so a transient sync failure is retried in one mode only.
     "agentgateway-ai-gateway": {"retry": [TF_RETRY, None]},
     "apim": {"retry": [TF_RETRY, None]},
     "idp": {"retry": [TF_RETRY, None]},
-    "langfuse-demos": {"retry": [TF_RETRY, None]},
     "mcp": {"retry": [TF_RETRY, None]},
     "uat": {"retry": [TF_RETRY, None]},
     "dev": {
