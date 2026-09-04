@@ -124,19 +124,6 @@ run "cilium_policy_audit_mode_requires_cilium" {
   expect_failures = [check.enable_cilium_policy_audit_mode_requires_cilium_provider]
 }
 
-run "cilium_gateway_api_requires_kube_proxy_replacement" {
-  command = plan
-
-  variables {
-    cni_provider         = "none"
-    enable_hubble        = false
-    enable_argocd        = false
-    cilium_gateway_api   = true
-  }
-
-  expect_failures = [check.cilium_gateway_api_requires_kube_proxy_replacement]
-}
-
 run "alertmanager_requires_prometheus" {
   command = plan
 

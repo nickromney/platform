@@ -209,7 +209,6 @@ run "gateway_tls_enabled" {
     enable_gitea       = true
     enable_sso         = false
     enable_gateway_tls = true
-    cilium_gateway_api = false
   }
 
   assert {
@@ -225,11 +224,6 @@ run "gateway_tls_enabled" {
   assert {
     condition     = strcontains(kubectl_manifest.argocd_app_cert_manager_config[0].yaml_body, "retry:") && strcontains(kubectl_manifest.argocd_app_cert_manager_config[0].yaml_body, "limit: 20") && strcontains(kubectl_manifest.argocd_app_cert_manager_config[0].yaml_body, "maxDuration: 5m")
     error_message = "Expected cert-manager-config ArgoCD Application YAML to retry through cert-manager webhook startup"
-  }
-
-  assert {
-    condition     = length(kubectl_manifest.argocd_app_nginx_gateway_fabric) == 1
-    error_message = "Expected kubectl_manifest.argocd_app_nginx_gateway_fabric to exist on the NGINX Gateway path (cilium_gateway_api=false)"
   }
 
   assert {
@@ -253,7 +247,12 @@ run "gateway_tls_enabled" {
   }
 }
 
-run "cilium_gateway_api_does_not_install_nginx_gateway_fabric" {
+# Cilium is the only Gateway API implementation now. This ran with
+# cilium_gateway_api = true when that variable still chose between the two; the
+# assertions on the nginx-gateway-fabric Application and on the
+# platform-gateway-nginx-internal count expression went with the resources the
+# retirement deleted.
+run "gateway_stack_stays_off_nginx_gateway_fabric" {
   command = plan
 
   variables {
@@ -263,28 +262,17 @@ run "cilium_gateway_api_does_not_install_nginx_gateway_fabric" {
     enable_gitea                  = true
     enable_sso                    = false
     enable_gateway_tls            = true
-    cilium_gateway_api            = true
     cilium_kube_proxy_replacement = true
   }
 
   assert {
-    condition     = length(kubectl_manifest.argocd_app_nginx_gateway_fabric) == 0
-    error_message = "Expected nginx-gateway-fabric to stay a migration reference and not install when cilium_gateway_api=true"
-  }
-
-  assert {
     condition     = !contains(local.argocd_gitops_repo_app_names, "nginx-gateway-fabric")
-    error_message = "Expected the GitOps app list to omit nginx-gateway-fabric when cilium_gateway_api=true"
+    error_message = "Expected the GitOps app list to omit nginx-gateway-fabric"
   }
 
   assert {
     condition     = length(kubectl_manifest.argocd_app_platform_gateway) == 1
     error_message = "Expected the platform Gateway app to remain when Cilium owns Gateway API"
-  }
-
-  assert {
-    condition     = strcontains(file("${path.module}/gateway-bootstrap.tf"), "count = var.enable_sso && !var.cilium_gateway_api ? 1 : 0")
-    error_message = "Expected platform-gateway-nginx-internal to stay off the Cilium Gateway path"
   }
 
   assert {
