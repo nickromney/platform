@@ -8,7 +8,9 @@
 #
 # FRAME_OPTIONS selects the X-Frame-Options value: SAMEORIGIN for Keycloak
 # admin, which needs same-origin framing for its browser storage check, DENY
-# everywhere else.
+# everywhere else. The renderer also uses this script for routes that never
+# carried an NGF filter, so the source route manifests do not need to repeat
+# this shared policy.
 my $frame = $ENV{FRAME_OPTIONS} // 'DENY';
 
 sub header_block {
