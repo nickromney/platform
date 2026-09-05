@@ -205,7 +205,8 @@
       "environment": "uat",
       "rbac_group": "app-sentiment-uat",
       "requires": [
-        "ENABLE_APP_REPO_SENTIMENT"
+        "ENABLE_APP_REPO_SENTIMENT",
+        "ENABLE_UAT_APPS"
       ],
       "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-sentiment-uat\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"uat\",deployment=\"sentiment-router\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"uat\",deployment=\"sentiment-auth-ui\"}) > bool 0)) or vector(0))"
     },
@@ -218,7 +219,8 @@
       "environment": "uat",
       "rbac_group": "app-subnetcalc-uat",
       "requires": [
-        "ENABLE_APP_REPO_SUBNETCALC"
+        "ENABLE_APP_REPO_SUBNETCALC",
+        "ENABLE_UAT_APPS"
       ],
       "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-subnetcalc-uat\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"uat\",deployment=\"subnetcalc-router\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"uat\",deployment=\"subnetcalc-frontend\"}) > bool 0)) or vector(0))"
     }

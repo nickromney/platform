@@ -109,8 +109,8 @@ spec:
               cpu: 75m
               memory: 192Mi
             limits:
-              cpu: 300m
-              memory: 384Mi
+              cpu: 500m
+              memory: 512Mi
           extraFlags:
             - enable-feature=promql-at-modifier
             - enable-feature=extra-scrape-metrics
