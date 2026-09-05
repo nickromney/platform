@@ -351,6 +351,12 @@ ${local.grafana_plugins_values_yaml}
           type: ClusterIP
           port: 3000
         grafana.ini:
+          # Grafana 12 fetches its preinstalled apps from grafana.com at startup.
+          # On a local cluster with no egress that is two blocking calls that
+          # each run to timeout, and startup then overruns the liveness probe,
+          # so Grafana restarts before it ever reports healthy.
+          plugins:
+            preinstall_disabled: true
           server:
             root_url: ${local.grafana_public_url}
           dashboards:
