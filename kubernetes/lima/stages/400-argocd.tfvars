@@ -9,6 +9,8 @@ kubeconfig_context = "limavm-k3s"
 
 enable_image_preload       = false
 cni_provider               = "cilium"
+cilium_kube_proxy_replacement = true
+cilium_k8s_service_host      = "127.0.0.1"
 enable_hubble              = true
 enable_argocd              = true
 enable_gitea               = false

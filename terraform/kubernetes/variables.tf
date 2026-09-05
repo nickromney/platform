@@ -269,6 +269,18 @@ variable "cilium_native_routing_cidr" {
   default     = "10.244.0.0/16"
 }
 
+variable "cilium_k8s_service_host" {
+  description = "Apiserver host Cilium dials when it replaces kube-proxy. Empty keeps the kind default, the control-plane container name on the kind Docker network. Other substrates need their own: k3s in a Lima VM runs Cilium host-networked beside the server, so it uses the loopback address."
+  type        = string
+  default     = ""
+}
+
+variable "cilium_k8s_service_port" {
+  description = "Apiserver port that accompanies cilium_k8s_service_host."
+  type        = number
+  default     = 6443
+}
+
 variable "enable_policies" {
   description = "Enable Kyverno + cluster policies (Cilium + Kyverno) sourced from the in-cluster Gitea repo."
   type        = bool
