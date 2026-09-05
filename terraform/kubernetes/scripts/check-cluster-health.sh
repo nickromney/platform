@@ -1772,11 +1772,14 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
     done
   fi
 
-  if [[ "${EXPECT_APP_REPO_SUBNET_CALC}" == "true" ]]; then
+  # The subnetcalc repository can be enabled with its gateway lesson switched
+  # off, and then no simulator is deployed. Effective APIM state is what decides
+  # whether this application should be here.
+  if [[ "${EXPECT_APIM_EFFECTIVE}" == "true" ]]; then
     if argocd_app_exists "${ARGOCD_NS}" apim; then
       ok "Argo CD app apim exists"
     else
-      fail_soft "Argo CD app apim missing (enable_app_repo_subnetcalc=true${tfvars_hint})"
+      fail_soft "Argo CD app apim missing (APIM simulator effective${tfvars_hint})"
     fi
   fi
 
