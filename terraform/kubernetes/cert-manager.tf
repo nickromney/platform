@@ -24,6 +24,14 @@ spec:
       releaseName: cert-manager
       values: |
         installCRDs: true
+        # A laptop that sleeps, or a single node under provisioning load, can
+        # stall lease renewal past the 40s chart default. cert-manager's /livez
+        # then returns 500 and the kubelet restarts a controller that is fine.
+        global:
+          leaderElection:
+            leaseDuration: 120s
+            renewDeadline: 100s
+            retryPeriod: 20s
         containerSecurityContext:
           runAsNonRoot: true
           runAsUser: 65532

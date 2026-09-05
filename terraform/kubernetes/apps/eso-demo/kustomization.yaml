@@ -1,4 +1,6 @@
 resources:
   - namespace.yaml
+  - reader-rbac.yaml
+  - source-secret.yaml
   - secretstore.yaml
   - externalsecret.yaml
