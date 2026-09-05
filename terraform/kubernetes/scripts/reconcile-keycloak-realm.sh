@@ -88,10 +88,15 @@ secret_field() {
     decode_b64 || true
 }
 
+# Both attempts buffer their stdout. A failing kcadm still writes to stdout, so
+# streaming the first attempt straight through and then retrying handed callers
+# an error line glued to the front of the JSON they were about to parse: the
+# realm reconcile died on "jq: parse error: Invalid numeric literal".
 kcadm() {
-  local stderr_file status retry_stderr_file retry_status restore_errexit
+  local stderr_file stdout_file status retry_stderr_file retry_stdout_file retry_status restore_errexit
 
   stderr_file="$(mktemp "${tmpdir}/kcadm.stderr.XXXXXX")"
+  stdout_file="$(mktemp "${tmpdir}/kcadm.stdout.XXXXXX")"
   restore_errexit=0
   case "$-" in
     *e*)
@@ -99,13 +104,14 @@ kcadm() {
       set +e
       ;;
   esac
-  kubectl -n "${KEYCLOAK_NAMESPACE}" exec "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@" 2>"${stderr_file}"
+  kubectl -n "${KEYCLOAK_NAMESPACE}" exec "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@" >"${stdout_file}" 2>"${stderr_file}"
   status=$?
   if [[ "${restore_errexit}" -eq 1 ]]; then
     set -e
   fi
   if [[ "${status}" -eq 0 ]]; then
-    rm -f "${stderr_file}"
+    cat "${stdout_file}"
+    rm -f "${stderr_file}" "${stdout_file}"
     return 0
   fi
 
@@ -113,6 +119,7 @@ kcadm() {
     warn "Keycloak admin token returned HTTP 401; re-authenticating and retrying kcadm once"
     if relogin_keycloak_admin_after_401; then
       retry_stderr_file="$(mktemp "${tmpdir}/kcadm.retry.stderr.XXXXXX")"
+      retry_stdout_file="$(mktemp "${tmpdir}/kcadm.retry.stdout.XXXXXX")"
       restore_errexit=0
       case "$-" in
         *e*)
@@ -120,33 +127,35 @@ kcadm() {
           set +e
           ;;
       esac
-      kubectl -n "${KEYCLOAK_NAMESPACE}" exec "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@" 2>"${retry_stderr_file}"
+      kubectl -n "${KEYCLOAK_NAMESPACE}" exec "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@" >"${retry_stdout_file}" 2>"${retry_stderr_file}"
       retry_status=$?
       if [[ "${restore_errexit}" -eq 1 ]]; then
         set -e
       fi
       if [[ "${retry_status}" -eq 0 ]]; then
-        rm -f "${stderr_file}" "${retry_stderr_file}"
+        cat "${retry_stdout_file}"
+        rm -f "${stderr_file}" "${stdout_file}" "${retry_stderr_file}" "${retry_stdout_file}"
         return 0
       fi
       cat "${retry_stderr_file}" >&2
-      rm -f "${stderr_file}" "${retry_stderr_file}"
+      rm -f "${stderr_file}" "${stdout_file}" "${retry_stderr_file}" "${retry_stdout_file}"
       return "${retry_status}"
     fi
   fi
 
   cat "${stderr_file}" >&2
-  rm -f "${stderr_file}"
+  rm -f "${stderr_file}" "${stdout_file}"
   return "${status}"
 }
 
 kcadm_stdin() {
-  local stdin_file stderr_file status retry_stderr_file retry_status restore_errexit
+  local stdin_file stderr_file stdout_file status retry_stderr_file retry_stdout_file retry_status restore_errexit
 
   stdin_file="$(mktemp "${tmpdir}/kcadm.stdin.XXXXXX")"
   cat >"${stdin_file}"
 
   stderr_file="$(mktemp "${tmpdir}/kcadm.stderr.XXXXXX")"
+  stdout_file="$(mktemp "${tmpdir}/kcadm.stdout.XXXXXX")"
   restore_errexit=0
   case "$-" in
     *e*)
@@ -154,13 +163,14 @@ kcadm_stdin() {
       set +e
       ;;
   esac
-  kubectl -n "${KEYCLOAK_NAMESPACE}" exec -i "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@" <"${stdin_file}" 2>"${stderr_file}"
+  kubectl -n "${KEYCLOAK_NAMESPACE}" exec -i "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@" <"${stdin_file}" >"${stdout_file}" 2>"${stderr_file}"
   status=$?
   if [[ "${restore_errexit}" -eq 1 ]]; then
     set -e
   fi
   if [[ "${status}" -eq 0 ]]; then
-    rm -f "${stdin_file}" "${stderr_file}"
+    cat "${stdout_file}"
+    rm -f "${stdin_file}" "${stderr_file}" "${stdout_file}"
     return 0
   fi
 
@@ -168,6 +178,7 @@ kcadm_stdin() {
     warn "Keycloak admin token returned HTTP 401; re-authenticating and retrying kcadm once"
     if relogin_keycloak_admin_after_401; then
       retry_stderr_file="$(mktemp "${tmpdir}/kcadm.retry.stderr.XXXXXX")"
+      retry_stdout_file="$(mktemp "${tmpdir}/kcadm.retry.stdout.XXXXXX")"
       restore_errexit=0
       case "$-" in
         *e*)
@@ -175,23 +186,24 @@ kcadm_stdin() {
           set +e
           ;;
       esac
-      kubectl -n "${KEYCLOAK_NAMESPACE}" exec -i "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@" <"${stdin_file}" 2>"${retry_stderr_file}"
+      kubectl -n "${KEYCLOAK_NAMESPACE}" exec -i "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@" <"${stdin_file}" >"${retry_stdout_file}" 2>"${retry_stderr_file}"
       retry_status=$?
       if [[ "${restore_errexit}" -eq 1 ]]; then
         set -e
       fi
       if [[ "${retry_status}" -eq 0 ]]; then
-        rm -f "${stdin_file}" "${stderr_file}" "${retry_stderr_file}"
+        cat "${retry_stdout_file}"
+        rm -f "${stdin_file}" "${stderr_file}" "${stdout_file}" "${retry_stderr_file}" "${retry_stdout_file}"
         return 0
       fi
       cat "${retry_stderr_file}" >&2
-      rm -f "${stdin_file}" "${stderr_file}" "${retry_stderr_file}"
+      rm -f "${stdin_file}" "${stderr_file}" "${stdout_file}" "${retry_stderr_file}" "${retry_stdout_file}"
       return "${retry_status}"
     fi
   fi
 
   cat "${stderr_file}" >&2
-  rm -f "${stdin_file}" "${stderr_file}"
+  rm -f "${stdin_file}" "${stderr_file}" "${stdout_file}"
   return "${status}"
 }
 
