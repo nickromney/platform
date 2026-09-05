@@ -57,12 +57,15 @@ from pathlib import Path
 namespaces_tf = (Path(os.environ["REPO_ROOT"]) / "terraform/kubernetes/namespaces.tf").read_text(encoding="utf-8")
 for fragment in (
     'resource "kubernetes_network_policy_v1" "gitea_argocd_bootstrap"',
-    'name      = "allow-argocd-bootstrap"',
-    '"kubernetes.io/metadata.name" = var.argocd_namespace',
+    'name      = "allow-gitea-bootstrap"',
     'port     = "3000"',
     'port     = "2222"',
 ):
     assert fragment in namespaces_tf, fragment
+
+# A source selector here would isolate Gitea whenever the generated default-deny
+# is absent, cutting off the NodePort Terraform uses to create the org.
+assert "kubernetes.io/metadata.name" not in namespaces_tf.split("gitea_argocd_bootstrap", 1)[1].split("depends_on", 1)[0]
 
 print("validated Gitea GitOps bootstrap allow")
 PY

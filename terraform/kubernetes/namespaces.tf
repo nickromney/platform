@@ -20,12 +20,19 @@ resource "kubernetes_namespace_v1" "gitea" {
 # CD, which reaches Gitea over this very path. An apply that stops between the
 # two seals Gitea off and cannot recover: Argo cannot read the repository that
 # holds the policy that would let it read the repository. This Terraform-owned
-# allow keeps the bootstrap path open without weakening the default-deny.
+# allow keeps the bootstrap path open.
+#
+# The rule names no source on purpose. A NetworkPolicy that selects a pod turns
+# on ingress isolation for it, so an argocd-only rule would be the whole policy
+# for Gitea whenever the generated default-deny is absent, and would cut off
+# the NodePort that Terraform itself uses to create the org and repositories.
+# Naming no source narrows this to two ports rather than every port, which is
+# the surface Gitea already publishes through the NodePort and the gateway.
 resource "kubernetes_network_policy_v1" "gitea_argocd_bootstrap" {
   count = var.enable_gitea && var.enable_argocd ? 1 : 0
 
   metadata {
-    name      = "allow-argocd-bootstrap"
+    name      = "allow-gitea-bootstrap"
     namespace = kubernetes_namespace_v1.gitea[0].metadata[0].name
   }
 
@@ -39,14 +46,6 @@ resource "kubernetes_network_policy_v1" "gitea_argocd_bootstrap" {
     policy_types = ["Ingress"]
 
     ingress {
-      from {
-        namespace_selector {
-          match_labels = {
-            "kubernetes.io/metadata.name" = var.argocd_namespace
-          }
-        }
-      }
-
       ports {
         port     = "3000"
         protocol = "TCP"
