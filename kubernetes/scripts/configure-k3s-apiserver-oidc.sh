@@ -72,7 +72,10 @@ OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-headlamp}"
 MKCERT_CA_DEST="${MKCERT_CA_DEST:-/etc/rancher/k3s/mkcert-rootCA.pem}"
 K3S_CONFIG_FRAGMENT="${K3S_CONFIG_FRAGMENT:-/etc/rancher/k3s/config.yaml.d/90-headlamp-oidc.yaml}"
 PLATFORM_GATEWAY_NAMESPACE="${PLATFORM_GATEWAY_NAMESPACE:-platform-gateway}"
-PLATFORM_GATEWAY_INTERNAL_SVC="${PLATFORM_GATEWAY_INTERNAL_SVC:-platform-gateway-nginx-internal}"
+# Cilium owns Gateway API now, and it names the Service after the Gateway. The
+# old nginx-internal Service is gone, which stopped this script dead before it
+# could reach the apiserver.
+PLATFORM_GATEWAY_INTERNAL_SVC="${PLATFORM_GATEWAY_INTERNAL_SVC:-cilium-gateway-platform-gateway}"
 GATEWAY_DEPLOY_NAME="${GATEWAY_DEPLOY_NAME:-platform-gateway-nginx}"
 NGINX_GATEWAY_NAMESPACE="${NGINX_GATEWAY_NAMESPACE:-nginx-gateway}"
 NGINX_GATEWAY_DEPLOY_NAME="${NGINX_GATEWAY_DEPLOY_NAME:-nginx-gateway}"
@@ -202,12 +205,23 @@ fi
 ok "${K3S_OIDC_RUNTIME_LABEL} node: ${K3S_OIDC_NODE_NAME}"
 ok "gateway internal clusterIP: ${GATEWAY_IP}"
 
+# Cilium runs its Envoy host-networked from a DaemonSet in kube-system, so the
+# Gateway namespace holds neither a data-plane Deployment nor endpoints for the
+# Service. The Gateway's own Programmed condition is the signal there. Keep the
+# Deployment path for any substrate that still ships one.
 gateway_data_plane_ready() {
-  kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" rollout status "deploy/${GATEWAY_DEPLOY_NAME}" --timeout=10s >/dev/null 2>&1 || return 1
+  local endpoint_count programmed
 
-  local endpoint_count
-  endpoint_count="$(kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" get endpoints "$PLATFORM_GATEWAY_INTERNAL_SVC" -o jsonpath='{range .subsets[*].addresses[*]}x{end}' 2>/dev/null | wc -c | tr -d ' ')"
-  [[ "${endpoint_count:-0}" -gt 0 ]]
+  if kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" get "deploy/${GATEWAY_DEPLOY_NAME}" >/dev/null 2>&1; then
+    kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" rollout status "deploy/${GATEWAY_DEPLOY_NAME}" --timeout=10s >/dev/null 2>&1 || return 1
+
+    endpoint_count="$(kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" get endpoints "$PLATFORM_GATEWAY_INTERNAL_SVC" -o jsonpath='{range .subsets[*].addresses[*]}x{end}' 2>/dev/null | wc -c | tr -d ' ')"
+    [[ "${endpoint_count:-0}" -gt 0 ]]
+    return
+  fi
+
+  programmed="$(kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" get gateway "$PLATFORM_GATEWAY_NAME" -o jsonpath='{range .status.conditions[?(@.type=="Programmed")]}{.status}{end}' 2>/dev/null || true)"
+  [[ "${programmed}" == "True" ]]
 }
 
 request_gateway_reconcile() {
