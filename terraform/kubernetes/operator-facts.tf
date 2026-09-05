@@ -24,6 +24,7 @@ locals {
     enable_grafana                  = var.enable_grafana
     enable_actions_runner           = var.enable_actions_runner
     enable_apim_simulator           = var.enable_apim_simulator
+    enable_subnetcalc_apim_gateway  = var.enable_subnetcalc_apim_gateway
     enable_agentgateway_ai_gateway  = var.enable_agentgateway_ai_gateway
     enable_app_repo_subnetcalc      = var.enable_app_repo_subnetcalc
     enable_app_repo_sentiment       = var.enable_app_repo_sentiment

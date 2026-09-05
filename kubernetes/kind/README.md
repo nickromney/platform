@@ -565,13 +565,16 @@ applies `apps/eso-demo`:
 
 ```mermaid
 flowchart LR
-    store["SecretStore<br/>fake provider"] --> ext["ExternalSecret<br/>fake-provider-demo"]
+    source["Secret<br/>eso-demo-source"] --> store["SecretStore<br/>kubernetes provider"]
+    store --> ext["ExternalSecret<br/>kubernetes-provider-demo"]
     ext --> secret["Secret<br/>eso-demo-materialized"]
 ```
 
-The fake provider keeps the demo self-contained: it stores `demo/api-key` in
-the `SecretStore`, the `ExternalSecret` maps that remote key to `api-key`, and
-ESO materializes a normal Kubernetes Secret named `eso-demo-materialized`.
+The kubernetes provider keeps the demo self-contained without reaching for the
+fake provider, which upstream marks unmaintained and warns about on every
+reconcile. A plain Secret in the namespace stands in for the remote secret
+manager, a least-privilege service account reads it, and ESO materializes a
+normal Kubernetes Secret named `eso-demo-materialized`.
 
 A real provider keeps the same application shape. Replace the `SecretStore`
 provider block with a provider such as AWS Secrets Manager, Azure Key Vault,
