@@ -166,6 +166,31 @@ image_build_cache_hit() {
   return 0
 }
 
+# The build inputs that decide whether an image would differ: its name, the
+# release tag, the source fingerprint, the Dockerfile and the build args. When
+# this tag is already in the cache the image is byte-identical to one we built
+# before, so an unrelated commit only needs a new commit tag, not a rebuild.
+image_build_input_tag() {
+  local image_name="$1"
+  local version_tag="$2"
+  local fingerprint_tag="$3"
+  local dockerfile_path="$4"
+  shift 4
+  local digest=""
+
+  [ -n "${fingerprint_tag}" ] || return 0
+
+  digest="$(
+    export LC_ALL=C
+    {
+      printf '%s\n%s\n%s\n' "${image_name}" "${version_tag}" "${fingerprint_tag}"
+      [ ! -f "${dockerfile_path}" ] || shasum -a 256 <"${dockerfile_path}"
+      printf '%s\n' "$@"
+    } | shasum -a 256 | awk '{print $1}'
+  )"
+  printf 'inputs-%s\n' "${digest:0:20}"
+}
+
 image_build_tag_and_push() {
   local build_ref="$1"
   local target_ref="$2"
@@ -209,6 +234,8 @@ image_build_build_and_push_cached() {
   local commit_tag=""
   local commit_ref=""
   local fingerprint_ref=""
+  local input_tag=""
+  local input_ref=""
   local cmd=()
 
   commit_tag="$(image_build_commit_tag)"
@@ -219,6 +246,11 @@ image_build_build_and_push_cached() {
     fingerprint_ref="${CACHE_PUSH_HOST}/${repo}:${fingerprint_tag}"
   fi
 
+  input_tag="$(image_build_input_tag "${image_name}" "${version_tag}" "${fingerprint_tag}" "${dockerfile_path}" "$@")"
+  if [ -n "${input_tag}" ]; then
+    input_ref="${CACHE_PUSH_HOST}/${repo}:${input_tag}"
+  fi
+
   if image_build_cache_hit "${repo}" "${version_tag}" "${latest_tag}" "${fingerprint_tag}" "${commit_tag}"; then
     echo "OK   cached ${version_ref}"
     if declare -F image_signing_sign_ref >/dev/null 2>&1; then
@@ -226,7 +258,20 @@ image_build_build_and_push_cached() {
       image_signing_sign_ref "${latest_ref}"
       image_signing_sign_ref "${commit_ref}"
       image_signing_sign_ref "${fingerprint_ref}"
+      image_signing_sign_ref "${input_ref}"
     fi
+    return 0
+  fi
+
+  if [ "${FORCE_REBUILD:-0}" != "1" ] && [ -n "${input_tag}" ] \
+    && image_build_tag_exists "${CACHE_PUSH_HOST}" "${repo}" "${input_tag}"; then
+    echo "OK   reused ${input_ref}"
+    docker pull "${input_ref}"
+    docker tag "${input_ref}" "${build_ref}"
+    image_build_tag_and_push "${build_ref}" "${version_ref}"
+    image_build_push_optional_tag "${build_ref}" "${latest_ref}" "${version_ref}"
+    image_build_push_optional_tag "${build_ref}" "${commit_ref}" "${version_ref}" "${latest_ref}"
+    image_build_push_optional_tag "${build_ref}" "${fingerprint_ref}" "${version_ref}" "${latest_ref}" "${commit_ref}"
     return 0
   fi
 
@@ -243,6 +288,7 @@ image_build_build_and_push_cached() {
   image_build_push_optional_tag "${build_ref}" "${latest_ref}" "${version_ref}"
   image_build_push_optional_tag "${build_ref}" "${commit_ref}" "${version_ref}" "${latest_ref}"
   image_build_push_optional_tag "${build_ref}" "${fingerprint_ref}" "${version_ref}" "${latest_ref}" "${commit_ref}"
+  image_build_push_optional_tag "${build_ref}" "${input_ref}" "${version_ref}" "${latest_ref}" "${commit_ref}" "${fingerprint_ref}"
 
   echo "PUSH  ${version_ref}"
 }
@@ -299,6 +345,10 @@ image_build_catalog_build_loop() {
 
   while IFS=$'\t' read -r image_id image_name _build_context _dockerfile_path _build_tag; do
     [ -n "${image_id}" ] || continue
+    if declare -F image_selection_enabled >/dev/null 2>&1 && ! image_selection_enabled "${category}" "${image_id}"; then
+      echo "SKIP ${image_id} (disabled)"
+      continue
+    fi
     image_build_catalog_build_and_push "${category}" "${image_id}" "${image_name}"
   done < <(image_catalog_build_specs "${category}" "${builder}")
 }

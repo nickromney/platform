@@ -437,14 +437,24 @@ EOF
     [ "${status}" -eq 0 ]
     # The uat workspace stays Terraform-owned; only the workload sync stops.
     [[ "${output}" == *"enable_uat_apps = false"* ]]
-    # Metrics pair off. The logging path is retained, but deliberately NOT by
-    # affirming it here -- stage 900 enables victoria-logs, and the otel gateway
-    # follows from enable_otel_gateway_effective, which ORs in victoria-logs.
-    # Affirming either would force it on at stage 100 and trip a check block.
-    [[ "${output}" == *"enable_prometheus = false"* ]]
-    [[ "${output}" == *"enable_grafana = false"* ]]
+    # Visibility is the point of the small profile, so metrics, dashboards and
+    # logs all stay. They are retained by omission, not by affirming them here:
+    # stage 900 enables prometheus, grafana and victoria-logs, and the otel
+    # gateway follows from enable_otel_gateway_effective, which ORs in
+    # victoria-logs. Affirming any of them would force it on at stage 100 and
+    # trip a check block. Alertmanager goes, because it only pages nobody.
+    [[ "${output}" == *"enable_alertmanager = false"* ]]
+    [[ "${output}" != *"enable_prometheus"* ]]
+    [[ "${output}" != *"enable_grafana"* ]]
     [[ "${output}" != *"enable_victoria_logs"* ]]
     [[ "${output}" != *"enable_otel_gateway"* ]]
+    # One sample app repository and no API gateway demos: the second repo and
+    # the gateway lessons are opt-in, not part of the everyday small stack.
+    [[ "${output}" == *"enable_app_repo_subnetcalc = false"* ]]
+    [[ "${output}" == *"enable_apim_simulator = false"* ]]
+    [[ "${output}" == *"enable_agentgateway_ai_gateway = false"* ]]
+    # Keycloak stays: SSO is the identity lesson, and it is never disabled here.
+    [[ "${output}" != *"enable_sso"* ]]
     # Request tunables now default to the measured local-cluster reservations,
     # so local-8gb must not restate them. A profile may only reduce.
     [[ "${output}" != *"oauth2_proxy_memory_request"* ]]
@@ -591,4 +601,42 @@ PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"none affirming"* ]]
+}
+
+@test "memory-constrained resource profiles lower the Docker VM preflight threshold" {
+  # The 8GiB default threshold was measured against the full stage-900 stack.
+  # A profile that turns capabilities off should not be refused on a Docker VM
+  # sized for what it actually runs.
+  run env -u KIND_PREFLIGHT_MIN_DOCKER_MEM_GB "${SCRIPT}" preview --execute \
+    --variant kind \
+    --stage 900 \
+    --action apply \
+    --preset resource-profile=local-8gb \
+    --tfvars-file "${BATS_TEST_TMPDIR}/operator/kind-900-preflight.tfvars"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"KIND_PREFLIGHT_MIN_DOCKER_MEM_GB=5"* ]]
+}
+
+@test "an operator's own preflight threshold survives the resource profile" {
+  run env KIND_PREFLIGHT_MIN_DOCKER_MEM_GB=7 "${SCRIPT}" preview --execute \
+    --variant kind \
+    --stage 900 \
+    --action apply \
+    --preset resource-profile=local-8gb \
+    --tfvars-file "${BATS_TEST_TMPDIR}/operator/kind-900-preflight-override.tfvars"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"KIND_PREFLIGHT_MIN_DOCKER_MEM_GB"* ]]
+}
+
+@test "the full stage-900 profile keeps the measured Docker VM threshold" {
+  run env -u KIND_PREFLIGHT_MIN_DOCKER_MEM_GB "${SCRIPT}" preview --execute \
+    --variant kind \
+    --stage 900 \
+    --action apply \
+    --tfvars-file "${BATS_TEST_TMPDIR}/operator/kind-900-preflight-default.tfvars"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"KIND_PREFLIGHT_MIN_DOCKER_MEM_GB"* ]]
 }

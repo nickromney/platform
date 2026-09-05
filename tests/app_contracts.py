@@ -1164,8 +1164,16 @@ def keycloak_optimized_image_contract_violations(repo_root: Path) -> tuple[str, 
         if fragment not in sso_tf:
             violations.append(f"sso.tf missing optimized Keycloak fragment {fragment}")
 
-    if "keycloak_source_tag=" not in build_script:
-        violations.append("build-local-platform-images.sh should expose keycloak_source_tag")
+    # Keycloak is built through the catalog helper, which derives its own source
+    # fingerprint tag. The builder no longer computes per-image tag variables.
+    builds_keycloak_from_catalog = (
+        "keycloak" in build_script
+        and 'image_build_catalog_build_and_push platform "${image_id}" "${image_id}"' in build_script
+    )
+    if not builds_keycloak_from_catalog:
+        violations.append(
+            "build-local-platform-images.sh should build keycloak from the image catalog"
+        )
 
     platform_images = {
         image.get("id"): image
@@ -3673,15 +3681,13 @@ def local_platform_source_fingerprint_cache_contract_violations(repo_root: Path)
             "image_catalog_external_ids()",
         ),
         "build script": (
-            "idp_core_source_tag=",
-            "backstage_source_tag=",
-            "platform_mcp_source_tag=",
-            'image_build_catalog_build_and_push platform idp-core idp-core "${idp_core_source_tag}"',
-            'image_build_catalog_build_and_push platform backstage backstage "${backstage_source_tag}"',
-            'image_build_catalog_build_and_push platform platform-mcp platform-mcp "${platform_mcp_source_tag}"',
+            "for image_id in idp-core platform-mcp auth-chat chatgpt-sim backstage keycloak; do",
+            'image_selection_enabled platform "${image_id}"',
+            'image_build_catalog_build_and_push platform "${image_id}" "${image_id}"',
         ),
         "image build lib": (
             'image_build_tag_exists "${CACHE_PUSH_HOST}" "${repo}" "${fingerprint_tag}"',
+            'image_build_tag_exists "${CACHE_PUSH_HOST}" "${repo}" "${input_tag}"',
         ),
         "render script": (
             "platform_mcp_image_tag=",

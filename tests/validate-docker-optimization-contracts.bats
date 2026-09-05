@@ -761,7 +761,7 @@ contract_lines = [
 assert callable(local_platform_source_fingerprint_cache_contract_violations)
 assert "local_platform_source_fingerprint_cache_contract_violations" in content
 assert not any("source_fingerprint_tag()" in line for line in contract_lines), "local platform source fingerprint cache policy should move to tests/app_contracts.py"
-assert not any("idp_core_source_tag=" in line for line in contract_lines), "local platform source fingerprint cache policy should move to tests/app_contracts.py"
+assert not any("image_build_catalog_build_and_push platform" in line for line in contract_lines), "local platform source fingerprint cache policy should move to tests/app_contracts.py"
 assert not any("image_catalog_source_tag platform" in line for line in contract_lines), "local platform source fingerprint cache policy should move to tests/app_contracts.py"
 assert not any("apps/platform-mcp/app/internal" in line for line in contract_lines), "local platform source fingerprint cache policy should move to tests/app_contracts.py"
 

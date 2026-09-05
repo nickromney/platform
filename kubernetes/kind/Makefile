@@ -762,6 +762,7 @@ apply: workflow-validate-stage
 		"$(BUILD_TFVAR_ARGS)" --execute \
 			$(stack_tfvar_args_full) \
 	); \
+	export IMAGE_BUILD_TFVARS_FILES="$$(printf '%s\n' "$${tfvar_files[@]}")"; \
 	prefer_external_platform_images="$$( "$(RESOLVE_TFVAR_VALUE)" --execute prefer_external_platform_images false "$${tfvar_files[@]}" )"; \
 	enable_sso="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_sso false "$${tfvar_files[@]}" )"; \
 	enable_backstage="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_backstage true "$${tfvar_files[@]}" )"; \
