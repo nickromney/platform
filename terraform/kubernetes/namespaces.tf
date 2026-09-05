@@ -15,6 +15,55 @@ resource "kubernetes_namespace_v1" "gitea" {
   ]
 }
 
+# Kyverno generates a default-deny NetworkPolicy for every isolated namespace,
+# and the allow rules that reopen Gitea arrive as Cilium policies through Argo
+# CD, which reaches Gitea over this very path. An apply that stops between the
+# two seals Gitea off and cannot recover: Argo cannot read the repository that
+# holds the policy that would let it read the repository. This Terraform-owned
+# allow keeps the bootstrap path open without weakening the default-deny.
+resource "kubernetes_network_policy_v1" "gitea_argocd_bootstrap" {
+  count = var.enable_gitea && var.enable_argocd ? 1 : 0
+
+  metadata {
+    name      = "allow-argocd-bootstrap"
+    namespace = kubernetes_namespace_v1.gitea[0].metadata[0].name
+  }
+
+  spec {
+    pod_selector {
+      match_labels = {
+        "app.kubernetes.io/name" = "gitea"
+      }
+    }
+
+    policy_types = ["Ingress"]
+
+    ingress {
+      from {
+        namespace_selector {
+          match_labels = {
+            "kubernetes.io/metadata.name" = var.argocd_namespace
+          }
+        }
+      }
+
+      ports {
+        port     = "3000"
+        protocol = "TCP"
+      }
+
+      ports {
+        port     = "2222"
+        protocol = "TCP"
+      }
+    }
+  }
+
+  depends_on = [
+    kubernetes_namespace_v1.gitea,
+  ]
+}
+
 resource "kubectl_manifest" "namespace_cert_manager" {
   count = (var.enable_cert_manager || var.enable_gateway_tls) && var.enable_argocd ? 1 : 0
 
