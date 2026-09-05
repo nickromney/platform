@@ -442,6 +442,11 @@ apim_effective() {
   is_true "${ENABLE_APIM_SIMULATOR}" || { is_true "${ENABLE_APP_REPO_SUBNETCALC}" && is_true "${ENABLE_SUBNETCALC_APIM_GATEWAY}"; }
 }
 
+# Keep this aligned with enable_mcp_effective in terraform/kubernetes/locals.tf.
+mcp_effective() {
+  is_true "${ENABLE_SSO}" && { apim_effective || is_true "${ENABLE_AGENTGATEWAY_AI_GATEWAY}"; }
+}
+
 IMAGE_REPO_OWNER="${GITEA_REPO_OWNER}"
 
 replace_image_ref() {
@@ -2051,7 +2056,7 @@ prune_argocd_app_manifests() {
     remove_if_present "${apps_dir}/78-idp.application.yaml"
   fi
 
-  if ! is_true "${ENABLE_SSO}" || { ! apim_effective && ! is_true "${ENABLE_AGENTGATEWAY_AI_GATEWAY}"; }; then
+  if ! mcp_effective; then
     remove_if_present "${apps_dir}/79-mcp.application.yaml"
     remove_if_present "${apps_dir}/80-auth-chat.application.yaml"
     remove_if_present "${apps_dir}/80-chatgpt-sim.application.yaml"
@@ -2193,6 +2198,23 @@ prune_gateway_routes_manifests() {
     remove_referencegrant_service "${routes_dir}/referencegrant-sso.yaml" "oauth2-proxy-apim"
     remove_if_present "${routes_dir}/referencegrant-apim.yaml"
     remove_kustomization_entry "${kustomization_file}" "referencegrant-apim.yaml"
+  fi
+
+  # The MCP applications are pruned with the same condition, so leaving these
+  # routes behind advertised four hostnames whose backends were never deployed.
+  # The gateway answered 500 on each and check-gateway-urls failed the apply.
+  if ! mcp_effective; then
+    remove_if_present "${routes_dir}/httproute-mcp.yaml"
+    remove_if_present "${routes_dir}/httproute-mcp-console.yaml"
+    remove_if_present "${routes_dir}/httproute-auth-chat.yaml"
+    remove_if_present "${routes_dir}/httproute-chatgpt-sim.yaml"
+    remove_kustomization_entry "${kustomization_file}" "httproute-mcp.yaml"
+    remove_kustomization_entry "${kustomization_file}" "httproute-mcp-console.yaml"
+    remove_kustomization_entry "${kustomization_file}" "httproute-auth-chat.yaml"
+    remove_kustomization_entry "${kustomization_file}" "httproute-chatgpt-sim.yaml"
+    remove_referencegrant_service "${routes_dir}/referencegrant-sso.yaml" "oauth2-proxy-mcp-console"
+    remove_referencegrant_service "${routes_dir}/referencegrant-sso.yaml" "oauth2-proxy-auth-chat"
+    remove_referencegrant_service "${routes_dir}/referencegrant-sso.yaml" "oauth2-proxy-chatgpt-sim"
   fi
 
   if ! is_true "${ENABLE_AGENTGATEWAY_AI_GATEWAY}"; then
