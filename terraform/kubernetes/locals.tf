@@ -706,6 +706,7 @@ locals {
     enable_app_repo_subnetcalc           = var.enable_app_repo_subnetcalc
     enable_uat_apps                      = var.enable_uat_apps
     enable_apim_simulator                = local.enable_apim_simulator_effective
+    enable_subnetcalc_apim_gateway        = var.enable_subnetcalc_apim_gateway
     enable_agentgateway_ai_gateway       = var.enable_agentgateway_ai_gateway
     agentgateway_chart_version           = var.agentgateway_chart_version
     agentgateway_namespace               = var.agentgateway_namespace

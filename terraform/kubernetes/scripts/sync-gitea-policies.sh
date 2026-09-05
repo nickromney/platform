@@ -2294,6 +2294,22 @@ configure_subnetcalc_direct_api() {
   fi
 }
 
+# Without an APIM simulator in the cluster there is nothing behind the routers'
+# /api upstream, and nginx refuses to start on an unresolvable host rather than
+# degrading, so both routers crashloop. Send each app's API traffic straight to
+# its own backend instead. configure_subnetcalc_direct_api covers the narrower
+# case where APIM exists but the subnetcalc gateway lesson is switched off.
+configure_routers_without_apim() {
+  local repo_dir="$1"
+  local workloads_file="${repo_dir}/apps/workloads/base/all.yaml"
+
+  ! apim_effective || return 0
+  [[ -f "${workloads_file}" ]] || return 0
+
+  LC_ALL=C perl -0pi -e 's|(name: sentiment-router-nginx.*?proxy_pass )http://subnetcalc-apim-simulator\.apim\.svc\.cluster\.local:8000;|${1}http://sentiment-api:8080;|s' "${workloads_file}"
+  LC_ALL=C perl -0pi -e 's|(name: subnetcalc-router-nginx.*?proxy_pass )http://subnetcalc-apim-simulator\.apim\.svc\.cluster\.local:8000;|${1}http://subnetcalc-api:8000;|s' "${workloads_file}"
+}
+
 configure_progressive_delivery() {
   local repo_dir="$1"
   local kustomization_file="${repo_dir}/apps/dev/kustomization.yaml"
@@ -2578,6 +2594,7 @@ render_policy_repo_tree() {
     remove_backstage_idp_resources "${repo_dir}/apps/idp/all.yaml"
   fi
   configure_subnetcalc_direct_api "${repo_dir}"
+  configure_routers_without_apim "${repo_dir}"
   configure_progressive_delivery "${repo_dir}"
   render_argo_rollouts_application_manifest "${repo_dir}/apps/argocd-apps/87-argo-rollouts.application.yaml"
   render_grafana_application_manifest "${repo_dir}/apps/argocd-apps/95-grafana.application.yaml"

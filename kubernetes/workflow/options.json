@@ -609,11 +609,6 @@
           "subnetcalc-api": "${local_registry_runtime_host}/platform/subnetcalc-api:0.1.0",
           "subnetcalc-frontend": "${local_registry_runtime_host}/platform/subnetcalc-frontend:0.1.0"
         },
-        "enable_hubble": true,
-        "enable_prometheus": true,
-        "enable_grafana": true,
-        "enable_victoria_logs": true,
-        "enable_observability_agent": true,
         "enable_headlamp": false
       }
     },
