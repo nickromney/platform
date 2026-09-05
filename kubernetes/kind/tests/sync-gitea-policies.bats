@@ -841,6 +841,20 @@ EOF
   [ "${status}" -eq 0 ]
 }
 
+@test "render_policy_repo_tree leaves no router pointing at an absent APIM simulator" {
+  # nginx refuses to start when an upstream host does not resolve, so a router
+  # left pointing at the APIM service crashloops in dev and uat both.
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=false ENABLE_SUBNETCALC_APIM_GATEWAY=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-no-apim' >/dev/null; ! grep -Fq 'subnetcalc-apim-simulator.apim.svc.cluster.local' '${BATS_TEST_TMPDIR}/render-no-apim/repo/apps/workloads/base/all.yaml'"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "render_policy_repo_tree keeps the APIM upstream when the simulator is deployed" {
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=true ENABLE_SUBNETCALC_APIM_GATEWAY=true ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-with-apim' >/dev/null; grep -Fq 'subnetcalc-apim-simulator.apim.svc.cluster.local' '${BATS_TEST_TMPDIR}/render-with-apim/repo/apps/workloads/base/all.yaml'"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "render_policy_repo_tree matches full golden tree for minimal contract" {
   assert_policy_render_tree_matches_golden "minimal"
 }
