@@ -45,3 +45,28 @@ PY
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated matching Prometheus server settings"* ]]
 }
+
+@test "Gitea keeps a Terraform-owned allow so GitOps can bootstrap itself" {
+  # The Cilium allow rules for Gitea arrive through Argo CD, which reads them
+  # from Gitea. Without a Terraform-owned allow beside the generated
+  # default-deny, an interrupted apply leaves that loop unrecoverable.
+  run uv run --isolated python - <<'PY'
+import os
+from pathlib import Path
+
+namespaces_tf = (Path(os.environ["REPO_ROOT"]) / "terraform/kubernetes/namespaces.tf").read_text(encoding="utf-8")
+for fragment in (
+    'resource "kubernetes_network_policy_v1" "gitea_argocd_bootstrap"',
+    'name      = "allow-argocd-bootstrap"',
+    '"kubernetes.io/metadata.name" = var.argocd_namespace',
+    'port     = "3000"',
+    'port     = "2222"',
+):
+    assert fragment in namespaces_tf, fragment
+
+print("validated Gitea GitOps bootstrap allow")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated Gitea GitOps bootstrap allow"* ]]
+}
