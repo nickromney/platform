@@ -34,7 +34,10 @@ default_kubeconfig_path="${DEFAULT_KUBECONFIG_PATH:-$HOME/.kube/config}"
 merge_kubeconfig_to_default="${MERGE_KUBECONFIG_TO_DEFAULT:-0}"
 k3s_channel="${K3S_CHANNEL:-stable}"
 k3s_version="${K3S_VERSION:-}"
-server_extra_args="${K3S_SERVER_EXTRA_ARGS:---flannel-backend=none --disable-network-policy --disable=traefik --disable=servicelb}"
+# --disable-kube-proxy is what lets Cilium own service routing. Its Gateway API
+# controller refuses to start otherwise, logging "Gateway API support requires
+# kube-proxy-replacement enabled", and every gateway host then answers nothing.
+server_extra_args="${K3S_SERVER_EXTRA_ARGS:---flannel-backend=none --disable-network-policy --disable=traefik --disable=servicelb --disable-kube-proxy}"
 agent_extra_args="${K3S_AGENT_EXTRA_ARGS:-}"
 lima_vm_user="${LIMA_VM_USER:-${USER}}"
 image_list_file="${IMAGE_LIST_FILE:-}"

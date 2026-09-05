@@ -584,6 +584,7 @@ locals {
   enable_sentiment_workloads_effective  = var.enable_app_repo_sentiment
   enable_subnetcalc_workloads_effective = var.enable_app_repo_subnetcalc
   enable_apim_simulator_effective       = var.enable_apim_simulator || (local.enable_subnetcalc_workloads_effective && var.enable_subnetcalc_apim_gateway)
+  cilium_k8s_service_host_effective     = trimspace(var.cilium_k8s_service_host) != "" ? trimspace(var.cilium_k8s_service_host) : local.kind_control_plane_container_name
   enable_mcp_effective                  = var.enable_sso && (local.enable_apim_simulator_effective || var.enable_agentgateway_ai_gateway)
 
   policies_repo_name        = "policies"
@@ -706,7 +707,7 @@ locals {
     enable_app_repo_subnetcalc           = var.enable_app_repo_subnetcalc
     enable_uat_apps                      = var.enable_uat_apps
     enable_apim_simulator                = local.enable_apim_simulator_effective
-    enable_subnetcalc_apim_gateway        = var.enable_subnetcalc_apim_gateway
+    enable_subnetcalc_apim_gateway       = var.enable_subnetcalc_apim_gateway
     enable_agentgateway_ai_gateway       = var.enable_agentgateway_ai_gateway
     agentgateway_chart_version           = var.agentgateway_chart_version
     agentgateway_namespace               = var.agentgateway_namespace
@@ -875,8 +876,8 @@ locals {
       # so it needs the endpoint directly. The control-plane container name
       # resolves on the kind Docker network, and 6443 is the in-cluster port
       # regardless of which host port kind publishes.
-      k8sServiceHost        = var.cilium_kube_proxy_replacement ? local.kind_control_plane_container_name : null
-      k8sServicePort        = var.cilium_kube_proxy_replacement ? 6443 : null
+      k8sServiceHost        = var.cilium_kube_proxy_replacement ? local.cilium_k8s_service_host_effective : null
+      k8sServicePort        = var.cilium_kube_proxy_replacement ? var.cilium_k8s_service_port : null
       routingMode           = "native"
       autoDirectNodeRoutes  = true
       ipv4NativeRoutingCIDR = var.cilium_native_routing_cidr
