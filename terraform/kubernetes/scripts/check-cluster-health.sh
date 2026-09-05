@@ -2048,7 +2048,7 @@ elif kubectl get ns external-secrets >/dev/null 2>&1; then
   else
     fail_soft "external-secrets deployment missing (enable_external_secrets=true${tfvars_hint})"
   fi
-  if kubectl get ns eso-demo >/dev/null 2>&1 && kubectl -n eso-demo get externalsecret fake-provider-demo >/dev/null 2>&1; then
+  if kubectl get ns eso-demo >/dev/null 2>&1 && kubectl -n eso-demo get externalsecret kubernetes-provider-demo >/dev/null 2>&1; then
     ok "eso-demo ExternalSecret exists"
     if kubectl -n eso-demo get secret eso-demo-materialized >/dev/null 2>&1; then
       ok "eso-demo materialized Secret exists"
