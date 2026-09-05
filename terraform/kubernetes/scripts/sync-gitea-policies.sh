@@ -2286,7 +2286,7 @@ configure_subnetcalc_direct_api() {
     LC_ALL=C perl -0pi -e '
       s/The router sends browser API traffic through the shared APIM simulator\./The router sends browser API traffic directly to the subnetcalc API./g;
       s/The subnetcalc API receives browser traffic only from the shared APIM simulator\./The subnetcalc API receives browser traffic only from the subnetcalc router./g;
-      s/"k8s:io\.kubernetes\.pod\.namespace": apim\n//g;
+      s/[ \t]*"k8s:io\.kubernetes\.pod\.namespace": apim\n//g;
       s/"k8s:tier": gateway\n            "k8s:app\.kubernetes\.io\/name": subnetcalc-apim-simulator/"k8s:tier": backend\n            "k8s:app.kubernetes.io\/name": subnetcalc-api/;
       s/"k8s:tier": gateway\n            "k8s:app\.kubernetes\.io\/name": subnetcalc-apim-simulator/"k8s:tier": gateway\n            "k8s:app.kubernetes.io\/name": subnetcalc-router/;
       s/port: "8000"/port: "8080"/;

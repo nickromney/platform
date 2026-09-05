@@ -849,6 +849,38 @@ EOF
   [ "${status}" -eq 0 ]
 }
 
+@test "render_policy_repo_tree emits parseable YAML with the subnetcalc gateway off" {
+  # The direct-API rewrite deleted a label line without its indentation, which
+  # left the next line over-indented. Argo CD reported it only as a kustomize
+  # build failure across the whole cilium-policies tree.
+  render_dir="${BATS_TEST_TMPDIR}/render-direct-api"
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=true ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=false ENABLE_SUBNETCALC_APIM_GATEWAY=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${render_dir}' >/dev/null"
+  [ "${status}" -eq 0 ]
+
+  run uv run --isolated --with pyyaml python - "${render_dir}/repo/cluster-policies" <<'PYEOF'
+import sys
+from pathlib import Path
+
+import yaml
+
+root = Path(sys.argv[1])
+checked = 0
+for path in sorted(root.rglob("*.yaml")):
+    with path.open(encoding="utf-8") as handle:
+        try:
+            list(yaml.safe_load_all(handle))
+        except yaml.YAMLError as error:
+            raise AssertionError(f"{path.relative_to(root)}: {error}") from error
+    checked += 1
+
+assert checked, "no rendered policy files found"
+print(f"parsed {checked} rendered policy file(s)")
+PYEOF
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"rendered policy file(s)"* ]]
+}
+
 @test "render_policy_repo_tree keeps the APIM upstream when the simulator is deployed" {
   run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=true ENABLE_SUBNETCALC_APIM_GATEWAY=true ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-with-apim' >/dev/null; grep -Fq 'subnetcalc-apim-simulator.apim.svc.cluster.local' '${BATS_TEST_TMPDIR}/render-with-apim/repo/apps/workloads/base/all.yaml'"
 
