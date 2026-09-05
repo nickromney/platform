@@ -43,7 +43,7 @@ resource "kubernetes_network_policy_v1" "gitea_argocd_bootstrap" {
       }
     }
 
-    policy_types = ["Ingress"]
+    policy_types = ["Ingress", "Egress"]
 
     ingress {
       ports {
@@ -53,6 +53,52 @@ resource "kubernetes_network_policy_v1" "gitea_argocd_bootstrap" {
 
       ports {
         port     = "2222"
+        protocol = "TCP"
+      }
+    }
+
+    # Serving a git fetch means answering an SSH key lookup, which means
+    # resolving and reaching Postgres. Without these, Gitea accepts the
+    # connection and then reports "permission denied" on a key that is
+    # perfectly valid, which reads as a credential problem and is not one.
+    egress {
+      to {
+        namespace_selector {
+          match_labels = {
+            "kubernetes.io/metadata.name" = "kube-system"
+          }
+        }
+
+        pod_selector {
+          match_labels = {
+            "k8s-app" = "kube-dns"
+          }
+        }
+      }
+
+      ports {
+        port     = "53"
+        protocol = "UDP"
+      }
+
+      ports {
+        port     = "53"
+        protocol = "TCP"
+      }
+    }
+
+    egress {
+      to {
+        pod_selector {}
+      }
+
+      ports {
+        port     = "5432"
+        protocol = "TCP"
+      }
+
+      ports {
+        port     = "6379"
         protocol = "TCP"
       }
     }

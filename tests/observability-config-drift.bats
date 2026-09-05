@@ -60,12 +60,17 @@ for fragment in (
     'name      = "allow-gitea-bootstrap"',
     'port     = "3000"',
     'port     = "2222"',
+    'policy_types = ["Ingress", "Egress"]',
+    '"k8s-app" = "kube-dns"',
+    'port     = "5432"',
 ):
     assert fragment in namespaces_tf, fragment
 
-# A source selector here would isolate Gitea whenever the generated default-deny
-# is absent, cutting off the NodePort Terraform uses to create the org.
-assert "kubernetes.io/metadata.name" not in namespaces_tf.split("gitea_argocd_bootstrap", 1)[1].split("depends_on", 1)[0]
+# A source selector on the ingress rule would isolate Gitea whenever the
+# generated default-deny is absent, cutting off the NodePort Terraform uses to
+# create the org. The egress rules do carry selectors, so check only ingress.
+ingress_rule = namespaces_tf.split("gitea_argocd_bootstrap", 1)[1].split("ingress {", 1)[1].split("egress {", 1)[0]
+assert "from {" not in ingress_rule, ingress_rule
 
 print("validated Gitea GitOps bootstrap allow")
 PY
