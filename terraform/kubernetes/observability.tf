@@ -315,13 +315,17 @@ spec:
           passwordKey: admin-password
         persistence:
           enabled: false
+        # Grafana 12 does substantial work before it answers /api/health, and a
+        # 75m ceiling throttled that past the liveness probe, so the kubelet
+        # kept restarting it. A limit is a ceiling, not a reservation, so a
+        # generous one costs nothing once Grafana is idle.
         resources:
           requests:
             cpu: 20m
             memory: 48Mi
           limits:
-            cpu: 75m
-            memory: 192Mi
+            cpu: 1000m
+            memory: 256Mi
         extraInitContainers:
           - name: stage-victorialogs-plugin
             image: ${local.grafana_image_registry_effective}/${local.grafana_image_repository_effective}:${local.grafana_image_tag_effective}
