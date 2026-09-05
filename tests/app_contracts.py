@@ -162,6 +162,8 @@ def _launchpad_selected_tiles(launchpad: dict[str, Any]) -> list[dict[str, Any]]
         "ENABLE_APP_REPO_SENTIMENT",
         "ENABLE_APP_REPO_SUBNETCALC",
         "ENABLE_UAT_APPS",
+        "ENABLE_APIM",
+        "ENABLE_MCP",
     }
     return sorted(
         (

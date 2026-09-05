@@ -19,7 +19,10 @@
       "service": "platform-mcp",
       "owner": "platform",
       "environment": "local",
-      "expr": "((max(kube_deployment_status_replicas_available{namespace=\"mcp\",deployment=\"platform-mcp\"}) > bool 0) or max(argocd_app_info{name=\"mcp\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))"
+      "expr": "((max(kube_deployment_status_replicas_available{namespace=\"mcp\",deployment=\"platform-mcp\"}) > bool 0) or max(argocd_app_info{name=\"mcp\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))",
+      "requires": [
+        "ENABLE_MCP"
+      ]
     },
     {
       "title": "Platform MCP Endpoint",
@@ -30,7 +33,8 @@
       "environment": "local",
       "rbac_group": "platform-viewers",
       "requires": [
-        "ENABLE_SSO"
+        "ENABLE_SSO",
+        "ENABLE_MCP"
       ],
       "expr": "((max(kube_deployment_status_replicas_available{namespace=\"mcp\",deployment=\"platform-mcp\"}) > bool 0) or max(argocd_app_info{name=\"mcp\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))"
     },
@@ -43,7 +47,8 @@
       "environment": "local",
       "rbac_group": "platform-viewers",
       "requires": [
-        "ENABLE_SSO"
+        "ENABLE_SSO",
+        "ENABLE_MCP"
       ],
       "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-mcp-console\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"mcp\",deployment=\"mcp-inspector\"}) > bool 0)) or vector(0))"
     },
@@ -166,7 +171,8 @@
       "environment": "local",
       "rbac_group": "platform-viewers",
       "requires": [
-        "ENABLE_APP_REPO_SUBNETCALC"
+        "ENABLE_APP_REPO_SUBNETCALC",
+        "ENABLE_APIM"
       ],
       "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-apim\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"apim\",deployment=\"subnetcalc-apim-simulator\"}) > bool 0)) or vector(0))"
     },
@@ -179,7 +185,8 @@
       "environment": "dev",
       "rbac_group": "platform-viewers",
       "requires": [
-        "ENABLE_SSO"
+        "ENABLE_SSO",
+        "ENABLE_MCP"
       ],
       "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-auth-chat\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"auth-chat\"}) > bool 0)) or vector(0))"
     },
@@ -192,7 +199,8 @@
       "environment": "dev",
       "rbac_group": "platform-viewers",
       "requires": [
-        "ENABLE_SSO"
+        "ENABLE_SSO",
+        "ENABLE_MCP"
       ],
       "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-chatgpt-sim\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"chatgpt-sim\"}) > bool 0)) or vector(0))"
     },
