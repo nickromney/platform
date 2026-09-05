@@ -17,6 +17,8 @@ source "${REPO_ROOT}/kubernetes/workflow/image-catalog-context-lib.sh"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/kubernetes/workflow/image-build-lib.sh"
 # shellcheck source=/dev/null
+source "${REPO_ROOT}/kubernetes/workflow/image-selection-lib.sh"
+# shellcheck source=/dev/null
 source "${REPO_ROOT}/kubernetes/scripts/image-signing-lib.sh"
 
 GRAFANA_CATALOG_BUILD_JSON="$(image_catalog_build_json platform grafana-victorialogs)"
@@ -215,76 +217,55 @@ grafana_build_context=""
 argo_rollouts_gatewayapi_plugin_binary=""
 argo_rollouts_gatewayapi_plugin_build_context=""
 
-mirror_image_into_cache \
-  "${GRAFANA_BASE_IMAGE_SOURCE}" \
-  "${CACHE_PUSH_HOST}" \
-  "${grafana_base_repo}" \
-  "${GRAFANA_IMAGE_TAG}" \
-  "${FORCE_REBUILD}"
+if image_selection_enabled platform grafana-victorialogs; then
+  mirror_image_into_cache \
+    "${GRAFANA_BASE_IMAGE_SOURCE}" \
+    "${CACHE_PUSH_HOST}" \
+    "${grafana_base_repo}" \
+    "${GRAFANA_IMAGE_TAG}" \
+    "${FORCE_REBUILD}"
 
-mirror_image_into_cache \
-  "${PLUGIN_FETCH_IMAGE_SOURCE}" \
-  "${CACHE_PUSH_HOST}" \
-  "${plugin_fetch_repo}" \
-  "${PLUGIN_FETCH_IMAGE_TAG}" \
-  "${FORCE_REBUILD}"
+  mirror_image_into_cache \
+    "${PLUGIN_FETCH_IMAGE_SOURCE}" \
+    "${CACHE_PUSH_HOST}" \
+    "${plugin_fetch_repo}" \
+    "${PLUGIN_FETCH_IMAGE_TAG}" \
+    "${FORCE_REBUILD}"
 
-prepare_grafana_plugin_archive grafana_plugin_archive
-prepare_grafana_build_context grafana_build_context "${grafana_plugin_archive}"
+  prepare_grafana_plugin_archive grafana_plugin_archive
+  prepare_grafana_build_context grafana_build_context "${grafana_plugin_archive}"
 
-image_build_build_and_push_cached \
-  "grafana-victorialogs" \
-  "${grafana_build_context}" \
-  "${grafana_build_context}/Dockerfile" \
-  "${grafana_version_tag}" \
-  "" \
-  --build-arg GRAFANA_BASE_IMAGE="${grafana_base_ref}" \
-  --build-arg PLUGIN_FETCH_IMAGE="${plugin_fetch_ref}" \
-  --build-arg GRAFANA_IMAGE_TAG="${GRAFANA_IMAGE_TAG}"
-
-prepare_argo_rollouts_gatewayapi_plugin_binary argo_rollouts_gatewayapi_plugin_binary
-prepare_argo_rollouts_gatewayapi_plugin_build_context argo_rollouts_gatewayapi_plugin_build_context "${argo_rollouts_gatewayapi_plugin_binary}"
-
-image_build_build_and_push_cached \
-  "argo-rollouts-gatewayapi-plugin" \
-  "${argo_rollouts_gatewayapi_plugin_build_context}" \
-  "${argo_rollouts_gatewayapi_plugin_build_context}/Dockerfile" \
-  "${argo_rollouts_gatewayapi_plugin_version_tag}" \
-  ""
-
-idp_core_source_tag="$(
-  image_catalog_source_tag platform idp-core
-)"
-platform_mcp_source_tag="$(
-  image_catalog_source_tag platform platform-mcp
-)"
-auth_chat_source_tag="$(
-  image_catalog_source_tag platform auth-chat
-)"
-chatgpt_sim_source_tag="$(
-  image_catalog_source_tag platform chatgpt-sim
-)"
-backstage_source_tag="$(
-  if [ "${ENABLE_BACKSTAGE}" = "true" ]; then
-    image_catalog_source_tag platform backstage
-  fi
-)"
-keycloak_source_tag="$(
-  image_catalog_source_tag platform keycloak
-)"
-
-image_build_catalog_build_and_push platform idp-core idp-core "${idp_core_source_tag}"
-
-image_build_catalog_build_and_push platform platform-mcp platform-mcp "${platform_mcp_source_tag}"
-
-image_build_catalog_build_and_push platform auth-chat auth-chat "${auth_chat_source_tag}"
-
-image_build_catalog_build_and_push platform chatgpt-sim chatgpt-sim "${chatgpt_sim_source_tag}"
-
-if [ "${ENABLE_BACKSTAGE}" = "true" ]; then
-  image_build_catalog_build_and_push platform backstage backstage "${backstage_source_tag}"
+  image_build_build_and_push_cached \
+    "grafana-victorialogs" \
+    "${grafana_build_context}" \
+    "${grafana_build_context}/Dockerfile" \
+    "${grafana_version_tag}" \
+    "" \
+    --build-arg GRAFANA_BASE_IMAGE="${grafana_base_ref}" \
+    --build-arg PLUGIN_FETCH_IMAGE="${plugin_fetch_ref}" \
+    --build-arg GRAFANA_IMAGE_TAG="${GRAFANA_IMAGE_TAG}"
 else
-  echo "SKIP backstage (ENABLE_BACKSTAGE=false)"
+  echo "SKIP grafana-victorialogs (disabled)"
 fi
 
-image_build_catalog_build_and_push platform keycloak keycloak "${keycloak_source_tag}"
+if image_selection_enabled platform argo-rollouts-gatewayapi-plugin; then
+  prepare_argo_rollouts_gatewayapi_plugin_binary argo_rollouts_gatewayapi_plugin_binary
+  prepare_argo_rollouts_gatewayapi_plugin_build_context argo_rollouts_gatewayapi_plugin_build_context "${argo_rollouts_gatewayapi_plugin_binary}"
+
+  image_build_build_and_push_cached \
+    "argo-rollouts-gatewayapi-plugin" \
+    "${argo_rollouts_gatewayapi_plugin_build_context}" \
+    "${argo_rollouts_gatewayapi_plugin_build_context}/Dockerfile" \
+    "${argo_rollouts_gatewayapi_plugin_version_tag}" \
+    ""
+else
+  echo "SKIP argo-rollouts-gatewayapi-plugin (disabled)"
+fi
+
+for image_id in idp-core platform-mcp auth-chat chatgpt-sim backstage keycloak; do
+  if image_selection_enabled platform "${image_id}"; then
+    image_build_catalog_build_and_push platform "${image_id}" "${image_id}"
+  else
+    echo "SKIP ${image_id} (disabled)"
+  fi
+done

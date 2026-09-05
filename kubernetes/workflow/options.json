@@ -521,6 +521,9 @@
         "kind",
         "lima"
       ],
+      "preflight": {
+        "docker_memory_gb": 4
+      },
       "overlay": {
         "enable_backstage": false,
         "enable_external_secrets": false,
@@ -537,6 +540,9 @@
         "kind",
         "lima"
       ],
+      "preflight": {
+        "docker_memory_gb": 6
+      },
       "overlay": {
         "enable_backstage": false
       }
@@ -549,13 +555,18 @@
         "kind",
         "lima"
       ],
+      "preflight": {
+        "docker_memory_gb": 5
+      },
       "overlay": {
+        "enable_alertmanager": false,
+        "enable_app_repo_subnetcalc": false,
+        "enable_subnetcalc_apim_gateway": false,
+        "enable_apim_simulator": false,
+        "enable_agentgateway_ai_gateway": false,
         "enable_backstage": false,
         "enable_uat_apps": false,
         "enable_external_secrets": false,
-        "enable_prometheus": false,
-        "enable_alertmanager": false,
-        "enable_grafana": false,
         "enable_headlamp": false,
         "enable_progressive_delivery": false,
         "argocd_applicationset_enabled": false,
@@ -602,11 +613,11 @@
           "subnetcalc-api": "${local_registry_runtime_host}/platform/subnetcalc-api:0.1.0",
           "subnetcalc-frontend": "${local_registry_runtime_host}/platform/subnetcalc-frontend:0.1.0"
         },
-        "enable_hubble": false,
-        "enable_prometheus": false,
-        "enable_grafana": false,
-        "enable_victoria_logs": false,
-        "enable_observability_agent": false,
+        "enable_hubble": true,
+        "enable_prometheus": true,
+        "enable_grafana": true,
+        "enable_victoria_logs": true,
+        "enable_observability_agent": true,
         "enable_headlamp": false
       }
     },

@@ -12,6 +12,8 @@ source "${REPO_ROOT}/kubernetes/workflow/image-catalog-lib.sh"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/kubernetes/workflow/image-build-lib.sh"
 # shellcheck source=/dev/null
+source "${REPO_ROOT}/kubernetes/workflow/image-selection-lib.sh"
+# shellcheck source=/dev/null
 source "${REPO_ROOT}/kubernetes/scripts/image-signing-lib.sh"
 
 VARIANT_LABEL="${VARIANT_LABEL:-Kubernetes variant}"

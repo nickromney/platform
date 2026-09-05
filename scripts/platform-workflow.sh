@@ -634,6 +634,24 @@ append_image_distribution_env() {
   esac
 }
 
+# A profile that turns capabilities off needs less of a Docker VM than the full
+# stage-900 stack the default preflight threshold was measured against. An
+# explicit KIND_PREFLIGHT_MIN_DOCKER_MEM_GB in the caller's environment wins.
+append_resource_profile_env() {
+  local docker_memory_gb=""
+
+  [[ -z "${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB:-}" ]] || return 0
+  docker_memory_gb="$(
+    jq -r --arg id "${PRESET_RESOURCE_PROFILE}" '
+      .presets[]
+      | select(.group == "resource_profile" and .id == $id)
+      | .preflight.docker_memory_gb // empty
+    ' "${WORKFLOW_OPTIONS_FILE}"
+  )"
+  [[ -n "${docker_memory_gb}" ]] || return 0
+  append_env_override "KIND_PREFLIGHT_MIN_DOCKER_MEM_GB=${docker_memory_gb}"
+}
+
 append_network_profile_env() {
   case "${PRESET_NETWORK_PROFILE}" in
     cilium) ;;
@@ -646,6 +664,7 @@ build_command_args() {
   WORKFLOW_COMMAND_ARGS=()
   append_image_distribution_env
   append_network_profile_env
+  append_resource_profile_env
   if has_tfvars_overrides; then
     append_env_override "PLATFORM_TFVARS=${TFVARS_FILE}"
   fi
