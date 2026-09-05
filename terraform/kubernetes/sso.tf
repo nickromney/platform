@@ -1553,7 +1553,10 @@ resource "kubectl_manifest" "argocd_app_oauth2_proxy_idp" {
   for_each = var.enable_sso && var.enable_argocd ? merge(
     local.sso_idp_proxy_apps,
     local.sso_apim_proxy_apps,
-    local.enable_subnetcalc_workloads_effective ? local.sso_mcp_console_proxy_apps : {},
+    # The console fronts mcp-inspector, so it follows effective MCP state like
+    # its siblings below. Keying it on the subnetcalc repository deployed a
+    # proxy pointing at a Service that was never created.
+    local.enable_mcp_effective ? local.sso_mcp_console_proxy_apps : {},
     local.enable_mcp_effective ? local.sso_auth_chat_proxy_apps : {},
     local.enable_mcp_effective ? local.sso_chatgpt_sim_proxy_apps : {},
   ) : {}
