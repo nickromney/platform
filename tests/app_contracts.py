@@ -161,6 +161,7 @@ def _launchpad_selected_tiles(launchpad: dict[str, Any]) -> list[dict[str, Any]]
         "ENABLE_HEADLAMP",
         "ENABLE_APP_REPO_SENTIMENT",
         "ENABLE_APP_REPO_SUBNETCALC",
+        "ENABLE_UAT_APPS",
     }
     return sorted(
         (

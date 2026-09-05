@@ -448,11 +448,12 @@ EOF
     [[ "${output}" != *"enable_grafana"* ]]
     [[ "${output}" != *"enable_victoria_logs"* ]]
     [[ "${output}" != *"enable_otel_gateway"* ]]
-    # One sample app repository and no API gateway demos: the second repo and
-    # the gateway lessons are opt-in, not part of the everyday small stack.
-    [[ "${output}" == *"enable_app_repo_subnetcalc = false"* ]]
-    [[ "${output}" == *"enable_apim_simulator = false"* ]]
-    [[ "${output}" == *"enable_agentgateway_ai_gateway = false"* ]]
+    # The sample apps and the API gateway demos stay for now. The dev workload
+    # bundle apps/workloads/base/all.yaml is a single unconditional manifest
+    # whose routers proxy to the APIM simulator, so dropping either one
+    # crashloops the routers that remain. Splitting that bundle comes first.
+    [[ "${output}" != *"enable_apim_simulator"* ]]
+    [[ "${output}" != *"enable_agentgateway_ai_gateway"* ]]
     # Keycloak stays: SSO is the identity lesson, and it is never disabled here.
     [[ "${output}" != *"enable_sso"* ]]
     # Request tunables now default to the measured local-cluster reservations,
@@ -615,7 +616,7 @@ PY
     --tfvars-file "${BATS_TEST_TMPDIR}/operator/kind-900-preflight.tfvars"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"KIND_PREFLIGHT_MIN_DOCKER_MEM_GB=5"* ]]
+  [[ "${output}" == *"KIND_PREFLIGHT_MIN_DOCKER_MEM_GB=6"* ]]
 }
 
 @test "an operator's own preflight threshold survives the resource profile" {

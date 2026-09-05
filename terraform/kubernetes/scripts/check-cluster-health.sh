@@ -1316,12 +1316,14 @@ launchpad_toggles_json() {
     --argjson headlamp "$(expect_bool_json "${EXPECT_HEADLAMP}")" \
     --argjson sentiment "$(expect_bool_json "${EXPECT_APP_REPO_SENTIMENT}")" \
     --argjson subnetcalc "$(expect_bool_json "${EXPECT_APP_REPO_SUBNET_CALC}")" \
+    --argjson uat "$(expect_bool_json "$([[ "${EXPECT_UAT_APPS}" != "false" ]] && echo true || echo false)")" \
     '{
       ENABLE_SSO: $sso,
       ENABLE_BACKSTAGE: $backstage,
       ENABLE_HEADLAMP: $headlamp,
       ENABLE_APP_REPO_SENTIMENT: $sentiment,
-      ENABLE_APP_REPO_SUBNETCALC: $subnetcalc
+      ENABLE_APP_REPO_SUBNETCALC: $subnetcalc,
+      ENABLE_UAT_APPS: $uat
     }'
 }
 

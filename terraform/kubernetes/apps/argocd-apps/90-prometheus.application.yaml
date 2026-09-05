@@ -62,8 +62,8 @@ spec:
             enabled: false
           resources:
             requests:
-              cpu: 100m
-              memory: 256Mi
+              cpu: 75m
+              memory: 192Mi
             limits:
               cpu: 500m
               memory: 512Mi
@@ -72,7 +72,7 @@ spec:
             - enable-feature=extra-scrape-metrics
             - web.enable-lifecycle
             - web.enable-remote-write-receiver
-          retention: 6h
+          retention: 4h
         extraScrapeConfigs: |
           - job_name: argocd-metrics
             kubernetes_sd_configs:

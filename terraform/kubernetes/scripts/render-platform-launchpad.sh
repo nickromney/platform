@@ -31,6 +31,7 @@ Environment variables:
   ENABLE_HEADLAMP
   ENABLE_APP_REPO_SENTIMENT
   ENABLE_APP_REPO_SUBNETCALC
+  ENABLE_UAT_APPS
 EOF
   printf '\n%s\n' "$(shell_cli_standard_options)"
 }
@@ -80,6 +81,7 @@ build_toggles_json() {
   local enable_headlamp=false
   local enable_sentiment=false
   local enable_subnetcalc=false
+  local enable_uat=false
 
   if is_true "${ENABLE_SSO:-true}"; then enable_sso=true; fi
   # Backstage is opt-in, so this defaults to false: a tile for a portal that
@@ -88,6 +90,7 @@ build_toggles_json() {
   if is_true "${ENABLE_HEADLAMP:-true}"; then enable_headlamp=true; fi
   if is_true "${ENABLE_APP_REPO_SENTIMENT:-true}"; then enable_sentiment=true; fi
   if is_true "${ENABLE_APP_REPO_SUBNETCALC:-true}"; then enable_subnetcalc=true; fi
+  if is_true "${ENABLE_UAT_APPS:-true}"; then enable_uat=true; fi
 
   jq -cn \
     --argjson sso "${enable_sso}" \
@@ -95,12 +98,14 @@ build_toggles_json() {
     --argjson headlamp "${enable_headlamp}" \
     --argjson sentiment "${enable_sentiment}" \
     --argjson subnetcalc "${enable_subnetcalc}" \
+    --argjson uat "${enable_uat}" \
     '{
       ENABLE_SSO: $sso,
       ENABLE_BACKSTAGE: $backstage,
       ENABLE_HEADLAMP: $headlamp,
       ENABLE_APP_REPO_SENTIMENT: $sentiment,
-      ENABLE_APP_REPO_SUBNETCALC: $subnetcalc
+      ENABLE_APP_REPO_SUBNETCALC: $subnetcalc,
+      ENABLE_UAT_APPS: $uat
     }'
 }
 
