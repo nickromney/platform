@@ -35,6 +35,21 @@ notes live under [`docs/plans/archive`](plans/archive/).
 
 ## Done
 
+- Profile-aware provisioning and the conditional-config sweep (2026-09-06):
+  stage `900` now reaches `check-health` clean on the `local-8gb` and
+  `local-idp-16gb` kind profiles and on Lima, each from a clean reset. The
+  recurring defect was a `variables.tf` toggle some consumer never received, so
+  it read a default of true: four consumers of `enable_subnetcalc_apim_gateway`
+  alone produced a GitOps bootstrap deadlock, crashlooping sample-app routers,
+  malformed policy YAML from a rewrite that had never executed, and Launchpad
+  tiles for components the profile does not deploy. Image builds now follow the
+  selected profile, the two sample apps are separate manifests so a profile can
+  drop one, Lima received the Cilium Gateway cutover kind already had, and
+  Grafana's 75m CPU ceiling, which was throttling its startup past the liveness
+  probe, came off. Measured on a 9.36 GB Docker VM: stage `900` in 590s for
+  `local-8gb` and 643s for `local-idp-16gb`, down from 1204s, peaking around
+  6.4 to 6.7 GiB of container memory.
+
 - Launchpad live-state follow-up (2026-07-08): the post-proof Grafana
   discrepancy was real. Stage `900` now renders only enabled Launchpad tiles,
   checks each selected tile's PromQL and URL in `check-health`, treats the

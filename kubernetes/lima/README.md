@@ -112,6 +112,18 @@ Then use:
 - The Lima target profile also switches host-side Gitea automation to
   `gitea_local_access_mode = "port-forward"` so it stays decoupled from the
   broader host-gateway proxy surface.
+- Cilium owns Gateway API here, as it does on kind. That needs
+  `cilium_kube_proxy_replacement = true` from stage `200` and k3s started with
+  `--disable-kube-proxy`: Cilium's operator refuses to start its Gateway API
+  controller while k3s runs its own kube-proxy, and logs
+  `Gateway API support requires kube-proxy-replacement enabled`. The symptom is
+  a `GatewayClass` that never reaches Accepted and gateway hosts that answer
+  nothing.
+- Cilium runs its Envoy host-networked in the VM, so the gateway listens on the
+  VM's `443` rather than a NodePort. The host tunnel maps its own `30070` to
+  that port, written `30070:443` in `LIMA_SHARED_PORT_TUNNEL_PORTS`; the host's
+  own `443` belongs to the proxy container in front of the tunnel. A plain port
+  number in that list still means the same port on both sides.
 - Hardened platform images stay on their upstream refs (`dhi.io`, `quay.io`,
   `ghcr.io`, `docker.io`, and so on). When the host cache at
   `host.lima.internal:5002` is available, Lima configures containerd to try it
