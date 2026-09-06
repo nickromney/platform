@@ -38,31 +38,9 @@ source "${SCRIPT_DIR}/gitea-local-access.sh"
 body_file=""
 trap 'rm -f "${body_file:-}"; gitea_local_access_cleanup || true' EXIT
 
-gitea_http_code() {
-  local url="$1"
-  curl -sS -o /dev/null -w "%{http_code}" --connect-timeout 2 --max-time 5 "$url" 2>/dev/null || echo 000
-}
-
-gitea_is_reachable() {
-  local code
-  code="$(gitea_http_code "${GITEA_HTTP_BASE}/api/v1/version")"
-  if [[ "$code" =~ ^[234][0-9][0-9]$ ]]; then
-    return 0
-  fi
-
-  code="$(gitea_http_code "${GITEA_HTTP_BASE}/")"
-  [[ "$code" =~ ^[234][0-9][0-9]$ ]]
-}
-
 wait_for_gitea() {
-  local i
-  for ((i = 1; i <= GITEA_WAIT_MAX_SECONDS; i++)); do
-    if gitea_is_reachable; then
-      return 0
-    fi
-    sleep 1
-  done
-  fail "Gitea API not reachable at ${GITEA_HTTP_BASE} after ${GITEA_WAIT_MAX_SECONDS}s"
+  gitea_wait_until_reachable "${GITEA_WAIT_MAX_SECONDS}" ||
+    fail "Gitea API not reachable at ${GITEA_HTTP_BASE} after ${GITEA_WAIT_MAX_SECONDS}s"
 }
 
 urlencode_basic() {
