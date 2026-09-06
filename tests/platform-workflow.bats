@@ -448,11 +448,14 @@ EOF
     [[ "${output}" != *"enable_grafana"* ]]
     [[ "${output}" != *"enable_victoria_logs"* ]]
     [[ "${output}" != *"enable_otel_gateway"* ]]
-    # The sample apps and the API gateway demos stay. The manifests are split
-    # per app now, so dropping one is safe, but that is a capability decision
-    # rather than a memory one and belongs in its own change.
-    [[ "${output}" != *"enable_apim_simulator"* ]]
-    [[ "${output}" != *"enable_agentgateway_ai_gateway"* ]]
+    # One sample app and no API gateway demos. The manifests are split per app,
+    # so the unwanted one is pruned rather than deployed and left crashlooping.
+    # The full teaching stack is the default profile, which drops nothing.
+    [[ "${output}" == *"enable_app_repo_subnetcalc = false"* ]]
+    [[ "${output}" == *"enable_apim_simulator = false"* ]]
+    [[ "${output}" == *"enable_agentgateway_ai_gateway = false"* ]]
+    # Sentiment is the app it keeps, and it keeps it by omission.
+    [[ "${output}" != *"enable_app_repo_sentiment"* ]]
     # Keycloak stays: SSO is the identity lesson, and it is never disabled here.
     [[ "${output}" != *"enable_sso"* ]]
     # Request tunables now default to the measured local-cluster reservations,
