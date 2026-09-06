@@ -383,6 +383,9 @@ marginal:
 | 632s with the preset | health passed |
 | 2331s without it | failed; the Hubble UI rollout timed out mid-apply waiting on downloads |
 
+An apply that leaves the group unset now says so in the preview warnings, so the
+omission is visible before the run rather than after it.
+
 This is intentionally a workflow/operator-tfvars profile rather than a `950`
 stage. Stages are cumulative and monotonic; a lighter shape after stage `900`
 would break that ladder contract.
