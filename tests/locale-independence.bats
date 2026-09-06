@@ -63,27 +63,44 @@ setup() {
   [[ "${output}" != *"Setting locale failed"* ]]
 }
 
-@test "source fingerprinting is stable across locales" {
-  # The digest feeds image tags. If it moved with the host locale, two machines
-  # would disagree about whether an image needed rebuilding.
-  run bash -c "
+# Each locale gets its own process, with LANG set by exec before bash starts.
+# The obvious spelling -- `LANG=C source_fingerprint_tag ...` as a prefix inside
+# one shell -- is what made this test flake. Unwinding that temporary assignment
+# sends Homebrew bash through libintl's setlocale, which asks CoreFoundation for
+# the user's preferred languages; that call is unsafe in a forked child, and
+# command substitution forks. Under a loaded parallel gate bash segfaulted with
+# status 139 before the fingerprint code ran at all, which is why the failure
+# carried no output and never reproduced in isolation. Setting the locale at
+# exec time never enters that path.
+fingerprint_under_locale() {
+  env -u LC_ALL -u LANGUAGE LANG="$1" bash -c "
     set -euo pipefail
     export REPO_ROOT='${FIXTURE_ROOT}'
     source '${SOURCE_REPO_ROOT}/kubernetes/workflow/image-catalog-lib.sh'
-    a=\"\$(LANG=C source_fingerprint_tag '${FIXTURE_MODULE}')\"
-    b=\"\$(LANG='${BROKEN_LOCALE}' source_fingerprint_tag '${FIXTURE_MODULE}')\"
-    [ \"\${a}\" = \"\${b}\" ] || { echo \"digest drifted: \${a} vs \${b}\"; exit 1; }
-    printf '%s\n' \"\${a}\"
+    source_fingerprint_tag '${FIXTURE_MODULE}'
   "
+}
 
-  # This has failed twice under the full parallel gate and never in isolation,
-  # and the bare status assertion told us nothing about why. Print what the
-  # helper actually said so the next occurrence is diagnosable.
+@test "source fingerprinting is stable across locales" {
+  # The digest feeds image tags. If it moved with the host locale, two machines
+  # would disagree about whether an image needed rebuilding.
+  run fingerprint_under_locale C
+
+  # The bare status assertion told us nothing about why this failed. Print what
+  # the helper actually said so any recurrence is diagnosable.
   if [ "${status}" -ne 0 ]; then
-    printf 'source_fingerprint_tag failed with status %s:\n%s\n' "${status}" "${output}" >&2
+    printf 'source_fingerprint_tag failed under LANG=C with status %s:\n%s\n' "${status}" "${output}" >&2
   fi
   [ "${status}" -eq 0 ]
   [[ "${output}" == src-* ]]
+  c_digest="${output}"
+
+  run fingerprint_under_locale "${BROKEN_LOCALE}"
+  if [ "${status}" -ne 0 ]; then
+    printf 'source_fingerprint_tag failed under LANG=%s with status %s:\n%s\n' "${BROKEN_LOCALE}" "${status}" "${output}" >&2
+  fi
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "${c_digest}" ]
 }
 
 @test "every shasum call site runs under a forced locale" {
