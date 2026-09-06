@@ -69,8 +69,20 @@ require_docker() {
 # So reads are bounded and the plan degrades to a named gap. Only reads: the
 # prune and rm calls on the --execute path stay unbounded, because killing a
 # cleanup halfway is worse than waiting for it.
+# print_docker_df already degrades when the daemon is slow. This did not, so a
+# read that ran past its timeout returned 124 and took the whole script with it
+# under set -e. On a busy daemon that turned a preview into a hard failure, and
+# because the shell audit runs every entrypoint bare, it failed lint too.
 docker_read() {
-  run_with_timeout "${DOCKER_READ_TIMEOUT}" docker "$@"
+  local rc=0
+
+  run_with_timeout "${DOCKER_READ_TIMEOUT}" docker "$@" || rc=$?
+  if [[ "${rc}" -eq 124 ]]; then
+    echo "  docker $1 timed out after ${DOCKER_READ_TIMEOUT}s; plan may be incomplete" >&2
+    return 0
+  fi
+
+  return "${rc}"
 }
 
 print_docker_df() {

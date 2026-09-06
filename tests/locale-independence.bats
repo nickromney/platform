@@ -105,3 +105,18 @@ setup() {
 
   [ "${status}" -eq 0 ]
 }
+
+@test "source fingerprinting refuses a tree that matches nothing" {
+  # Every empty input hashes alike, so a missing path used to produce one
+  # shared tag that never changed. That is a silent wrong answer, and the
+  # failure it caused would surface far from here.
+  run bash -c "
+    export REPO_ROOT='${FIXTURE_ROOT}'
+    source '${SOURCE_REPO_ROOT}/kubernetes/workflow/image-catalog-lib.sh'
+    source_fingerprint_tag 'apps/shared/does-not-exist'
+  "
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"no files matched"* ]]
+  [[ "${output}" != *"src-"* ]]
+}

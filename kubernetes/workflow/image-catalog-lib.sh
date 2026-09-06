@@ -15,6 +15,8 @@ image_catalog_require() {
 source_fingerprint_tag() {
   local digest
 
+  local status=0
+
   digest="$(
     cd "${REPO_ROOT}" || exit 1
     # LC_ALL=C for the whole subshell, not just the sort. Every step here is
@@ -24,15 +26,32 @@ source_fingerprint_tag() {
     # once per source file, which produced hundreds of warning lines in the
     # middle of a kind apply.
     export LC_ALL=C
-    find "$@" -type f -print |
-      sort |
+    source_files="$(find "$@" -type f -print | sort)" || exit 1
+    # A tree that matches nothing hashes like any other empty input, so every
+    # missing path would share one tag and look unchanged forever. Refuse.
+    [ -n "${source_files}" ] || exit 2
+    printf '%s\n' "${source_files}" |
       while IFS= read -r source_file; do
         printf '%s\n' "${source_file}"
         shasum -a 256 "${source_file}"
       done |
       shasum -a 256 |
       awk '{print $1}'
-  )"
+  )" || status=$?
+
+  # An empty digest is not a cosmetic failure: every image would take the tag
+  # "src-" and collide. The pipeline can also come back empty when a step is
+  # killed under load rather than returning an error, so say what happened
+  # instead of emitting a tag that means nothing.
+  if [ "${status}" -eq 2 ]; then
+    echo "source_fingerprint_tag: no files matched $* under REPO_ROOT=${REPO_ROOT}" >&2
+    return 1
+  fi
+  if [ "${status}" -ne 0 ] || [ -z "${digest}" ]; then
+    echo "source_fingerprint_tag: could not fingerprint $* under REPO_ROOT=${REPO_ROOT} (status ${status})" >&2
+    return 1
+  fi
+
   printf 'src-%s' "${digest:0:20}"
 }
 
