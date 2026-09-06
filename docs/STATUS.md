@@ -35,6 +35,29 @@ notes live under [`docs/plans/archive`](plans/archive/).
 
 ## Done
 
+- The locale test flake was Homebrew bash, not the fingerprint code
+  (2026-09-06): `source fingerprinting is stable across locales` in
+  `tests/locale-independence.bats` failed only under a loaded parallel gate, and
+  the diagnostic added for it caught the cause on the next hunt. Status 139 with
+  no output: bash segfaulted before the fingerprint code ran. The crash reports
+  name the path. Writing `LANG=C source_fingerprint_tag ...` as a temporary
+  assignment prefixed on a shell function means bash unwinds that assignment
+  when the function returns, which calls libintl's `setlocale`, which asks
+  CoreFoundation for the user's preferred languages. That call is unsafe in a
+  forked child, and command substitution forks. The test now runs each locale in
+  its own process with `LANG` set by `env` at exec time, so nothing switches
+  locale in-process. Under the load that reproduced it, failures went from 7 in
+  80 runs to 0 in 160, and the full gate is green. Production call sites are not
+  exposed: they prefix the assignment onto external commands such as `shasum`
+  and always name an installed locale.
+
+- An apply with no image-distribution preset now warns (2026-09-06): omitting
+  `--preset image-distribution=local-cache` cost 2331s and a failed stage 900
+  where the same machine did 632s and healthy with it, and only the kind README
+  said so. `scripts/platform-workflow.sh` adds it to the preview warnings for a
+  kind apply whenever the group is unset, at every stage, because the containerd
+  mirror is written when the cluster is created.
+
 - Profile-aware provisioning and the conditional-config sweep (2026-09-06):
   stage `900` now reaches `check-health` clean on the `local-8gb` and
   `local-idp-16gb` kind profiles and on Lima, each from a clean reset. The

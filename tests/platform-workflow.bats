@@ -643,3 +643,38 @@ PY
   [ "${status}" -eq 0 ]
   [[ "${output}" != *"KIND_PREFLIGHT_MIN_DOCKER_MEM_GB"* ]]
 }
+
+@test "an apply with no image-distribution preset warns that every image will pull from upstream" {
+  # Omitting the preset once produced a 2331s failed stage 900 where the same
+  # machine did 632s and healthy with it, and nothing in the code said so.
+  run "${SCRIPT}" preview --execute \
+    --variant kind \
+    --stage 900 \
+    --action apply \
+    --tfvars-file "${BATS_TEST_TMPDIR}/operator/kind-stage900-no-cache.tfvars" \
+    --output json
+
+  [ "${status}" -eq 0 ]
+  preview_json="${output}"
+
+  run jq -r '.warnings | join("|")' <<<"${preview_json}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"image-distribution=local-cache"* ]]
+}
+
+@test "choosing an image-distribution preset silences the upstream-pull warning" {
+  run "${SCRIPT}" preview --execute \
+    --variant kind \
+    --stage 900 \
+    --action apply \
+    --preset image-distribution=local-cache \
+    --tfvars-file "${BATS_TEST_TMPDIR}/operator/kind-stage900-with-cache.tfvars" \
+    --output json
+
+  [ "${status}" -eq 0 ]
+  preview_json="${output}"
+
+  run jq -r '.warnings | join("|")' <<<"${preview_json}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"image-distribution=local-cache"* ]]
+}

@@ -126,6 +126,14 @@ with the `uat` security-context patches split the same way.
 
 ## Open and uncertain
 
+> Follow-up, same day: the first three items below are now settled. The locale
+> flake was a Homebrew bash segfault on the temporary-assignment unwind path,
+> not a fault in the fingerprint code, and the test no longer switches locale
+> in-process. The cache-preset omission now raises a preview warning. `docker
+> system df` measures 1.3s on an idle daemon, so its 47s was load, and
+> `docker-safe-clean.sh` already bounds every read. See the newest entries under
+> "Done" in `docs/STATUS.md`.
+
 - **The locale test flake is not fixed.** `source fingerprinting is stable
   across locales` in `tests/locale-independence.bats` failed three times under
   the full parallel gate and never in isolation. The shared-PID cache theory was

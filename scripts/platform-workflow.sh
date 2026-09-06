@@ -526,6 +526,15 @@ warnings_json() {
     warnings+=("Preset resource-profile=${PRESET_RESOURCE_PROFILE} sets worker_count, which may recreate or restart the cluster because it changes the stage 100 substrate boundary.")
   fi
 
+  # Leaving image-distribution unset points the cluster at upstream registries
+  # for every pull, which is the difference between a 632s healthy stage 900 and
+  # a 2331s failed one on the same machine. The mirror is written when the
+  # cluster is created, so stage 100 needs the preset as much as stage 900 does.
+  # Only "default" warns: choosing pull is a deliberate answer to this.
+  if [[ "${TARGET}" = "kind" && "${ACTION}" = "apply" && "${PRESET_IMAGE_DISTRIBUTION}" = "default" ]]; then
+    warnings+=("No image-distribution preset selected, so every image pulls from upstream; --preset image-distribution=local-cache is what makes a run finish in a sensible time, and it is needed at stage 100 as well because the containerd mirror is written when the cluster is created.")
+  fi
+
   if [[ "${#warnings[@]}" -eq 0 ]]; then
     printf '[]'
     return 0
