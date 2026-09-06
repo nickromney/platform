@@ -933,6 +933,23 @@ PYEOF
   [ -f "${base_dir}/subnetcalc.yaml" ]
 }
 
+@test "the pruned dev and uat overlays still build" {
+  # kustomize fails the whole overlay when a patch names a Deployment that is
+  # not in the resource list, so pruning an app has to take its patches too.
+  render_dir="${BATS_TEST_TMPDIR}/render-kustomize"
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=false ENABLE_SUBNETCALC_APIM_GATEWAY=true ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${render_dir}' >/dev/null"
+  [ "${status}" -eq 0 ]
+
+  [ ! -f "${render_dir}/repo/apps/uat/security-context-patches-sentiment.yaml" ]
+
+  for overlay in dev uat; do
+    run kubectl kustomize "${render_dir}/repo/apps/${overlay}"
+    [ "${status}" -eq 0 ]
+    [[ "${output}" != *sentiment* ]]
+    [[ "${output}" == *subnetcalc-api* ]]
+  done
+}
+
 @test "render_policy_repo_tree matches full golden tree for minimal contract" {
   assert_policy_render_tree_matches_golden "minimal"
 }

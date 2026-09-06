@@ -24,7 +24,7 @@ Key denial reasons:
 - containers in `uat` must drop `ALL` capabilities
 - privileged containers are not allowed
 
-To unblock apply, a temporary patch (`apps/uat/security-context-patches.yaml`) added:
+To unblock apply, a temporary patch (`apps/uat/security-context-patches-sentiment.yaml` and `apps/uat/security-context-patches-subnetcalc.yaml`) added:
 
 - `privileged: false`
 - `allowPrivilegeEscalation: false`
@@ -62,7 +62,7 @@ The following was implemented immediately after this write-up:
 - Sentiment and SubnetCalc web containers now listen on `8080` (not `80`) in workload manifests and image nginx configs.
 - Kubernetes Services for these components remain on `port: 80` with `targetPort: 8080`.
 - `dev` and `uat` Cilium policies for router/frontend and sso/router paths were updated to `8080`.
-- `apps/uat/security-context-patches.yaml` no longer adds `NET_BIND_SERVICE`; it keeps `drop: [ALL]` and `privileged: false`.
+- `apps/uat/security-context-patches-sentiment.yaml` and `apps/uat/security-context-patches-subnetcalc.yaml` no longer adds `NET_BIND_SERVICE`; it keeps `drop: [ALL]` and `privileged: false`.
 
 Follow-up hardening after this rollout:
 
