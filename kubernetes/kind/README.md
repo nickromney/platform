@@ -324,15 +324,33 @@ Actions runner.
 
 Measured on a Mac with a 9.36 GB Docker VM, a clean run of this profile takes
 about 30 seconds for stage `100` and eleven minutes for stage `900`, and peaks
-around 6.5 GiB of container memory.
+around 6.5 GiB of container memory. Those numbers assume the
+`image-distribution=local-cache` preset shown above; see
+[Pass the image-distribution preset](#pass-the-image-distribution-preset) for
+what omitting it costs.
 
 ## 8GB Local Profile
 
 `resource-profile=local-8gb` is the everyday small shape. It keeps SSO and
-Keycloak, the metrics and dashboards, logs and Hubble, and one sample app
-repository. It drops Alertmanager, Backstage, External Secrets, Headlamp,
-progressive delivery, the UAT workload sync, and the Argo CD ApplicationSet and
-notifications controllers.
+Keycloak, the metrics and dashboards, logs and Hubble, and `sentiment` as its
+single sample app. It drops the second app repository, the APIM simulator and
+the agentgateway AI gateway, which also removes the MCP server, its inspector,
+auth-chat and chatgpt-sim, and it drops Alertmanager, Backstage, External
+Secrets, Headlamp, progressive delivery, the UAT workload sync, and the Argo CD
+ApplicationSet and notifications controllers.
+
+```bash
+scripts/platform-workflow.sh apply --execute \
+  --variant kind \
+  --stage 900 \
+  --action apply \
+  --preset resource-profile=local-8gb \
+  --preset image-distribution=local-cache \
+  --auto-approve
+```
+
+The API gateway and AI gateway lessons are not lost; they live in the default
+stage-900 shape, which drops nothing.
 
 The profile only ever reduces. It is layered over every stage, not just `900`,
 so affirming a capability here would force it on at stage `100` where its
@@ -345,8 +363,25 @@ Memory-constrained profiles also lower the Docker VM preflight threshold, which
 otherwise demands 8GiB for every shape. The budget lives beside each profile in
 [`options.json`](../workflow/options.json) as `preflight.docker_memory_gb`, and
 an explicit `KIND_PREFLIGHT_MIN_DOCKER_MEM_GB` in your environment still wins.
-Measured peak for this profile is about 6.4 GiB of container memory, so a 4GiB
+Measured peak for this profile is 6.25 GiB of container memory, so a 4GiB
 Docker VM is not enough for it today.
+
+### Pass the image-distribution preset
+
+`--preset image-distribution=local-cache` is what points the cluster's
+containerd at the host registry that the build step already fills. Without it
+there is no `KIND_LOCAL_IMAGE_CACHE_HOST` in the generated command and the node
+pulls every image from upstream. Pass it to stage `100` as well as `900`: the
+mirror is written into the kind config when the cluster is created, not when the
+platform is applied.
+
+Measured on the same machine, same profile, same day, the difference is not
+marginal:
+
+| Stage 900 | Outcome |
+| --- | --- |
+| 632s with the preset | health passed |
+| 2331s without it | failed; the Hubble UI rollout timed out mid-apply waiting on downloads |
 
 This is intentionally a workflow/operator-tfvars profile rather than a `950`
 stage. Stages are cumulative and monotonic; a lighter shape after stage `900`
