@@ -327,3 +327,39 @@ gitea_local_access_cleanup() {
   GITEA_LOCAL_ACCESS_HTTP_READY=0
   GITEA_LOCAL_ACCESS_SSH_READY=0
 }
+
+# Both callers used to count loop iterations while calling the budget "seconds".
+# Each iteration makes two curl calls that run to their five-second timeout when
+# Gitea is unreachable, so a 600 budget waited closer to two hours: one apply
+# sat on an unreachable API for 1h48m before reporting it. Measure real time.
+gitea_wait_http_code() {
+  local url="$1"
+
+  curl -sS -o /dev/null -w "%{http_code}" --connect-timeout 2 --max-time 5 "${url}" 2>/dev/null || echo 000
+}
+
+gitea_wait_is_reachable() {
+  local code
+
+  code="$(gitea_wait_http_code "${GITEA_HTTP_BASE}/api/v1/version")"
+  if [[ "${code}" =~ ^[234][0-9][0-9]$ ]]; then
+    return 0
+  fi
+
+  code="$(gitea_wait_http_code "${GITEA_HTTP_BASE}/")"
+  [[ "${code}" =~ ^[234][0-9][0-9]$ ]]
+}
+
+gitea_wait_until_reachable() {
+  local budget="${1:-${GITEA_WAIT_MAX_SECONDS:-600}}"
+  local deadline=$((SECONDS + budget))
+
+  while (( SECONDS < deadline )); do
+    if gitea_wait_is_reachable; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  return 1
+}
