@@ -560,6 +560,10 @@
       },
       "overlay": {
         "enable_alertmanager": false,
+        "enable_app_repo_subnetcalc": false,
+        "enable_subnetcalc_apim_gateway": false,
+        "enable_apim_simulator": false,
+        "enable_agentgateway_ai_gateway": false,
         "enable_backstage": false,
         "enable_uat_apps": false,
         "enable_external_secrets": false,
