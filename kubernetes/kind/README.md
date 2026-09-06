@@ -317,9 +317,36 @@ scripts/platform-workflow.sh apply --execute \
 The generated command layers `.run/operator/kind-stage900.tfvars` over stage
 `900` and `targets/kind.tfvars` through `PLATFORM_TFVARS`. It keeps kind,
 Cilium, Argo CD, Gitea, gateway TLS, Keycloak SSO, oauth2-proxy, the Portal API,
-and subnetcalc as the single sample workload. It disables Hubble UI,
-APIM, agentgateway, chatgpt-sim, auth-chat, Langfuse, and the in-cluster Actions
-runner.
+and subnetcalc as the single sample workload, along with the visibility stack:
+Hubble, Prometheus, Grafana, VictoriaLogs and the collector. It disables APIM,
+agentgateway, chatgpt-sim, auth-chat, Headlamp, Langfuse, and the in-cluster
+Actions runner.
+
+Measured on a Mac with a 9.36 GB Docker VM, a clean run of this profile takes
+about 30 seconds for stage `100` and eleven minutes for stage `900`, and peaks
+around 6.5 GiB of container memory.
+
+## 8GB Local Profile
+
+`resource-profile=local-8gb` is the everyday small shape. It keeps SSO and
+Keycloak, the metrics and dashboards, logs and Hubble, and one sample app
+repository. It drops Alertmanager, Backstage, External Secrets, Headlamp,
+progressive delivery, the UAT workload sync, and the Argo CD ApplicationSet and
+notifications controllers.
+
+The profile only ever reduces. It is layered over every stage, not just `900`,
+so affirming a capability here would force it on at stage `100` where its
+dependencies do not exist yet. Capabilities it keeps come from the stage tfvars.
+
+Grafana is not separable from Prometheus: `enable_grafana` requires
+`enable_prometheus`, so a profile that wants dashboards keeps both.
+
+Memory-constrained profiles also lower the Docker VM preflight threshold, which
+otherwise demands 8GiB for every shape. The budget lives beside each profile in
+[`options.json`](../workflow/options.json) as `preflight.docker_memory_gb`, and
+an explicit `KIND_PREFLIGHT_MIN_DOCKER_MEM_GB` in your environment still wins.
+Measured peak for this profile is about 6.4 GiB of container memory, so a 4GiB
+Docker VM is not enough for it today.
 
 This is intentionally a workflow/operator-tfvars profile rather than a `950`
 stage. Stages are cumulative and monotonic; a lighter shape after stage `900`
@@ -478,6 +505,19 @@ flowchart LR
 - `argocd_applicationset_enabled = true` re-enables Argo CD fan-out patterns.
 - `argocd_notifications_enabled = true` restores the full controller set after the core install is stable.
 
+Gitea keeps a Terraform-owned NetworkPolicy, `allow-gitea-bootstrap`, opening
+its HTTP and SSH ports. Kyverno generates a default-deny for every isolated
+namespace, and the Cilium rules that reopen Gitea are delivered by Argo CD,
+which reads them from Gitea. An apply interrupted between those two steps used
+to seal Gitea off with no way back: every repo-backed Application went to
+`sync=Unknown` because the repo server could not read the repository holding the
+policy that would let it read the repository. The rule names no source, because
+a NetworkPolicy that selects a pod turns on isolation for it, and an
+argocd-only rule would have cut off the NodePort Terraform itself uses to
+create the org. Its egress half covers kube-dns and Gitea's own database:
+serving a git fetch means answering an SSH key lookup, and a Gitea that cannot
+reach Postgres reports a perfectly good deploy key as `permission denied`.
+
 ### Stage 600: add policy controls
 
 Stage 600 adds the policy layer. The useful mental model is that Cilium policies control runtime network paths, while Kyverno policies control what Kubernetes objects are allowed or mutated at admission time.
@@ -537,6 +577,27 @@ flowchart LR
 - `enable_gateway_tls = true` switches platform routes to HTTPS through Cilium Gateway.
 - `enable_headlamp = true` adds a Kubernetes dashboard.
 
+#### Two definitions per observability app
+
+`enable_app_of_apps` decides which Application deploys Prometheus, Grafana and
+the rest: the Terraform-rendered one in
+[`observability.tf`](../../terraform/kubernetes/observability.tf), or the static
+manifest under [`apps/argocd-apps`](../../terraform/kubernetes/apps/argocd-apps).
+The two hold their own copies of the same Helm values and had drifted to
+different memory limits and retention windows, so selecting a profile quietly
+selected a different Prometheus. A contract test now holds the server sizing and
+retention equal across both; when you change one, change the other.
+
+Two sizing notes worth carrying:
+
+- Grafana 12 needs real CPU before it answers `/api/health`. A 75m ceiling
+  throttled its startup past the liveness probe and the kubelet restarted it in
+  a loop. Limits are ceilings, not reservations, so it now requests 20m and caps
+  at a full core.
+- Grafana also fetches its preinstalled apps from grafana.com at startup. With
+  no egress those are two blocking calls that run to timeout, so
+  `plugins.preinstall_disabled` is set in both definitions.
+
 ### Stage 900: SSO
 
 Stage 900 adds [Keycloak](https://www.keycloak.org/) and `oauth2-proxy`, then swaps the
@@ -553,7 +614,7 @@ flowchart LR
 
 - `enable_sso = true` enables Keycloak and the `oauth2-proxy` layer.
 - `enable_argocd_oidc = true` lets Argo CD enforce the `platform-admins` and `platform-viewers` group mapping.
-- `enable_external_secrets = true` adds External Secrets Operator and the fake-provider `eso-demo` app.
+- `enable_external_secrets = true` adds External Secrets Operator and the `eso-demo` app, which uses the kubernetes provider.
 - `platform_gateway_routes_path = "apps/platform-gateway-routes-sso"` switches the ingress routes to the protected variant.
 - The earlier TLS and gateway work from stage 800 remains in place; stage 900 adds authentication on top.
 
