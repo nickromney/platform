@@ -448,10 +448,9 @@ EOF
     [[ "${output}" != *"enable_grafana"* ]]
     [[ "${output}" != *"enable_victoria_logs"* ]]
     [[ "${output}" != *"enable_otel_gateway"* ]]
-    # The sample apps and the API gateway demos stay for now. The dev workload
-    # bundle apps/workloads/base/all.yaml is a single unconditional manifest
-    # whose routers proxy to the APIM simulator, so dropping either one
-    # crashloops the routers that remain. Splitting that bundle comes first.
+    # The sample apps and the API gateway demos stay. The manifests are split
+    # per app now, so dropping one is safe, but that is a capability decision
+    # rather than a memory one and belongs in its own change.
     [[ "${output}" != *"enable_apim_simulator"* ]]
     [[ "${output}" != *"enable_agentgateway_ai_gateway"* ]]
     # Keycloak stays: SSO is the identity lesson, and it is never disabled here.

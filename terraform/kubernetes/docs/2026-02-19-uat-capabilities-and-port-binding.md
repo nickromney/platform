@@ -50,7 +50,7 @@ For a stricter locked-down model:
 
 The migration to non-privileged listen ports requires coordinated changes in:
 
-- base workload manifests (`apps/workloads/base/all.yaml`)
+- base workload manifests (`apps/workloads/base/sentiment.yaml`, `apps/workloads/base/subnetcalc.yaml`)
 - frontend image nginx configs (app repos)
 - `dev` and `uat` Cilium policies currently allowing/expecting `:80` between app tiers
 - UAT security patch to remove `NET_BIND_SERVICE` once pods bind non-privileged ports

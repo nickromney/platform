@@ -70,12 +70,8 @@ image_selection_enabled() {
     workload:subnetcalc-apim-simulator)
       image_selection_true enable_apim_simulator ||
         { image_selection_true enable_app_repo_subnetcalc && image_selection_true enable_subnetcalc_apim_gateway; } ;;
-    # The dev and uat namespaces are one static bundle, apps/workloads/base/all.yaml,
-    # deployed whenever either app repo is on. Either repo therefore needs every
-    # workload image, so neither can be skipped on its own flag.
-    workload:sentiment-*|workload:subnetcalc-*)
-      image_selection_true enable_app_repo_sentiment ||
-        image_selection_true enable_app_repo_subnetcalc ;;
+    workload:sentiment-*) image_selection_true enable_app_repo_sentiment ;;
+    workload:subnetcalc-*) image_selection_true enable_app_repo_subnetcalc ;;
     *) echo "Unknown image selection: ${category}:${image_id}" >&2; return 1 ;;
   esac
 }

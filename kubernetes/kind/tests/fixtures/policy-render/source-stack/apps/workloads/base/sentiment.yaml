@@ -1,12 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: workload-base
+  name: workload-sentiment
 spec:
   template:
     spec:
       containers:
         - name: sentiment-api
           image: localhost:30090/platform/sentiment-api:latest
-        - name: subnetcalc-frontend
-          image: localhost:30090/platform/subnetcalc-frontend:latest

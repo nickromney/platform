@@ -1,12 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: workload-base
+  name: workload-sentiment
 spec:
   template:
     spec:
       containers:
         - name: sentiment-api
           image: host.docker.internal:5002/platform/sentiment-api:golden
-        - name: subnetcalc-frontend
-          image: host.docker.internal:5002/platform/subnetcalc-frontend:golden

@@ -2293,7 +2293,7 @@ render_gateway_route_forwarded_headers() {
 
 configure_subnetcalc_direct_api() {
   local repo_dir="$1"
-  local workloads_file="${repo_dir}/apps/workloads/base/all.yaml"
+  local workloads_file="${repo_dir}/apps/workloads/base/subnetcalc.yaml"
   local policy_file="${repo_dir}/cluster-policies/cilium/projects/subnetcalc/subnetcalc-http-routes.yaml"
 
   is_true "${ENABLE_APP_REPO_SUBNETCALC}" || return 0
@@ -2321,15 +2321,41 @@ configure_subnetcalc_direct_api() {
 # degrading, so both routers crashloop. Send each app's API traffic straight to
 # its own backend instead. configure_subnetcalc_direct_api covers the narrower
 # case where APIM exists but the subnetcalc gateway lesson is switched off.
+# The sample apps used to share one manifest, so turning either repository off
+# still deployed both, and the dev routers crashlooped against services their
+# own profile had removed. Each app is its own file now, and this drops the one
+# that is not wanted.
+prune_workload_manifests() {
+  local repo_dir="$1"
+  local base_dir="${repo_dir}/apps/workloads/base"
+  local kustomization_file="${base_dir}/kustomization.yaml"
+
+  [[ -d "${base_dir}" ]] || return 0
+
+  if ! is_true "${ENABLE_APP_REPO_SENTIMENT}"; then
+    remove_if_present "${base_dir}/sentiment.yaml"
+    remove_kustomization_entry "${kustomization_file}" "sentiment.yaml"
+  fi
+
+  if ! is_true "${ENABLE_APP_REPO_SUBNETCALC}"; then
+    remove_if_present "${base_dir}/subnetcalc.yaml"
+    remove_kustomization_entry "${kustomization_file}" "subnetcalc.yaml"
+  fi
+}
+
 configure_routers_without_apim() {
   local repo_dir="$1"
-  local workloads_file="${repo_dir}/apps/workloads/base/all.yaml"
+  local sentiment_file="${repo_dir}/apps/workloads/base/sentiment.yaml"
+  local subnetcalc_file="${repo_dir}/apps/workloads/base/subnetcalc.yaml"
 
   ! apim_effective || return 0
-  [[ -f "${workloads_file}" ]] || return 0
 
-  LC_ALL=C perl -0pi -e 's|(name: sentiment-router-nginx.*?proxy_pass )http://subnetcalc-apim-simulator\.apim\.svc\.cluster\.local:8000;|${1}http://sentiment-api:8080;|s' "${workloads_file}"
-  LC_ALL=C perl -0pi -e 's|(name: subnetcalc-router-nginx.*?proxy_pass )http://subnetcalc-apim-simulator\.apim\.svc\.cluster\.local:8000;|${1}http://subnetcalc-api:8000;|s' "${workloads_file}"
+  if [[ -f "${sentiment_file}" ]]; then
+    LC_ALL=C perl -0pi -e 's|(name: sentiment-router-nginx.*?proxy_pass )http://subnetcalc-apim-simulator\.apim\.svc\.cluster\.local:8000;|${1}http://sentiment-api:8080;|s' "${sentiment_file}"
+  fi
+  if [[ -f "${subnetcalc_file}" ]]; then
+    LC_ALL=C perl -0pi -e 's|(name: subnetcalc-router-nginx.*?proxy_pass )http://subnetcalc-apim-simulator\.apim\.svc\.cluster\.local:8000;|${1}http://subnetcalc-api:8000;|s' "${subnetcalc_file}"
+  fi
 }
 
 configure_progressive_delivery() {
@@ -2608,13 +2634,15 @@ render_policy_repo_tree() {
   rewrite_public_hostnames "${repo_dir}"
   apply_external_workload_images "${repo_dir}/apps/apim/all.yaml"
   apply_external_workload_images "${repo_dir}/apps/mcp/all.yaml"
-  apply_external_workload_images "${repo_dir}/apps/workloads/base/all.yaml"
+  apply_external_workload_images "${repo_dir}/apps/workloads/base/sentiment.yaml"
+  apply_external_workload_images "${repo_dir}/apps/workloads/base/subnetcalc.yaml"
   apply_external_workload_images "${repo_dir}/apps/dev/all.yaml"
   apply_external_workload_images "${repo_dir}/apps/uat/all.yaml"
   apply_external_platform_images "${repo_dir}"
   if ! is_true "${ENABLE_BACKSTAGE}"; then
     remove_backstage_idp_resources "${repo_dir}/apps/idp/all.yaml"
   fi
+  prune_workload_manifests "${repo_dir}"
   configure_subnetcalc_direct_api "${repo_dir}"
   configure_routers_without_apim "${repo_dir}"
   configure_progressive_delivery "${repo_dir}"
@@ -2625,7 +2653,8 @@ render_policy_repo_tree() {
   rewrite_image_owner "${repo_dir}/apps/mcp/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/auth-chat/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/chatgpt-sim/all.yaml"
-  rewrite_image_owner "${repo_dir}/apps/workloads/base/all.yaml"
+  rewrite_image_owner "${repo_dir}/apps/workloads/base/sentiment.yaml"
+  rewrite_image_owner "${repo_dir}/apps/workloads/base/subnetcalc.yaml"
   rewrite_image_owner "${repo_dir}/apps/dev/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/uat/all.yaml"
   render_platform_gateway_for_cilium "${repo_dir}"

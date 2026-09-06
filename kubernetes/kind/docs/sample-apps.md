@@ -35,7 +35,7 @@ The important split is:
 
 That routing is documented in:
 
-- [`subnetcalc-router-nginx` in all.yaml](../../../terraform/kubernetes/apps/workloads/base/all.yaml)
+- [`subnetcalc-router-nginx` in subnetcalc.yaml](../../../terraform/kubernetes/apps/workloads/base/subnetcalc.yaml)
 - [`subnetcalc-http-routes.yaml`](../../../terraform/kubernetes/cluster-policies/cilium/projects/subnetcalc/subnetcalc-http-routes.yaml)
 - [`apim/all.yaml`](../../../terraform/kubernetes/apps/apim/all.yaml)
 
