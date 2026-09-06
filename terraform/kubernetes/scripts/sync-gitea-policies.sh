@@ -1271,7 +1271,11 @@ remove_kustomization_entry() {
 
   local tmp_file
   tmp_file=$(mktemp)
-  grep -Fv "  - ${resource_file}" "${kustomization_file}" > "${tmp_file}" || true
+  # resources: entries name the file directly, patches: entries wrap it in a
+  # path: key. Both forms are removed so a pruned manifest cannot be left
+  # referenced from either list.
+  grep -Fv "  - ${resource_file}" "${kustomization_file}" |
+    grep -Fv "  - path: ${resource_file}" > "${tmp_file}" || true
   mv "${tmp_file}" "${kustomization_file}"
 }
 
@@ -2332,14 +2336,24 @@ prune_workload_manifests() {
 
   [[ -d "${base_dir}" ]] || return 0
 
+  local uat_dir="${repo_dir}/apps/uat"
+  local uat_kustomization="${uat_dir}/kustomization.yaml"
+
+  # The uat overlay patches each Deployment by name, and kustomize fails the
+  # whole build on a patch whose target is not there, so the patches follow
+  # their app out.
   if ! is_true "${ENABLE_APP_REPO_SENTIMENT}"; then
     remove_if_present "${base_dir}/sentiment.yaml"
     remove_kustomization_entry "${kustomization_file}" "sentiment.yaml"
+    remove_if_present "${uat_dir}/security-context-patches-sentiment.yaml"
+    remove_kustomization_entry "${uat_kustomization}" "security-context-patches-sentiment.yaml"
   fi
 
   if ! is_true "${ENABLE_APP_REPO_SUBNETCALC}"; then
     remove_if_present "${base_dir}/subnetcalc.yaml"
     remove_kustomization_entry "${kustomization_file}" "subnetcalc.yaml"
+    remove_if_present "${uat_dir}/security-context-patches-subnetcalc.yaml"
+    remove_kustomization_entry "${uat_kustomization}" "security-context-patches-subnetcalc.yaml"
   fi
 }
 

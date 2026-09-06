@@ -2,4 +2,5 @@ namespace: uat
 resources:
   - ../workloads/base
 patches:
-  - path: security-context-patches.yaml
+  - path: security-context-patches-sentiment.yaml
+  - path: security-context-patches-subnetcalc.yaml
