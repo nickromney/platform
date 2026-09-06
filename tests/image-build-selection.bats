@@ -9,7 +9,7 @@ setup() {
 enable_sso = true
 enable_argocd = true
 enable_grafana = false
-enable_app_repo_sentiment = false
+enable_app_repo_sentiment = true
 enable_app_repo_subnetcalc = false
 enable_apim_simulator = false
 enable_subnetcalc_apim_gateway = false
@@ -19,7 +19,7 @@ VARS
   run bash -eu -c '
     source "$REPO_ROOT/kubernetes/workflow/image-selection-lib.sh"
     image_selection_enabled platform keycloak
-    ! image_selection_enabled workload sentiment-api
+    image_selection_enabled workload sentiment-api
     ! image_selection_enabled workload subnetcalc-api
     ! image_selection_enabled platform platform-mcp
     ! image_selection_enabled platform auth-chat
@@ -57,17 +57,17 @@ VARS
   [[ "$output" != *UNEXPECTED_BUILD* ]]
 }
 
-@test "either app repository still needs every workload image" {
-  # apps/workloads/base/all.yaml is one bundle covering both sample apps, so
-  # enabling only one of them still deploys, and still needs, both.
+@test "each app repository selects only its own workload images" {
+  # The sample apps are separate manifests now, so one can be deployed without
+  # the other and its images are the only ones that need building.
   printf 'enable_app_repo_sentiment = true\nenable_app_repo_subnetcalc = false\nenable_argocd = true\n' \
     >"${BATS_TEST_TMPDIR}/one-app.tfvars"
   export IMAGE_BUILD_TFVARS_FILES="${BATS_TEST_TMPDIR}/one-app.tfvars"
   run bash -eu -c '
     source "$REPO_ROOT/kubernetes/workflow/image-selection-lib.sh"
     image_selection_enabled workload sentiment-api
-    image_selection_enabled workload subnetcalc-api
-    image_selection_enabled workload subnetcalc-frontend
+    ! image_selection_enabled workload subnetcalc-api
+    ! image_selection_enabled workload subnetcalc-frontend
   '
   [ "$status" -eq 0 ]
 }

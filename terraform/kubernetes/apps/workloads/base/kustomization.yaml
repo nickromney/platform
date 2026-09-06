@@ -1,2 +1,3 @@
 resources:
-  - all.yaml
+  - sentiment.yaml
+  - subnetcalc.yaml

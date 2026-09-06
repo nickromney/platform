@@ -1,0 +1,10 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workload-subnetcalc
+spec:
+  template:
+    spec:
+      containers:
+        - name: subnetcalc-frontend
+          image: host.docker.internal:5002/platform/subnetcalc-frontend:golden

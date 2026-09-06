@@ -538,7 +538,7 @@ locals {
       image_names             = ["sentiment-api", "sentiment-auth-ui"]
       policy_checks = [
         {
-          file            = "apps/workloads/base/all.yaml"
+          file            = "apps/workloads/base/sentiment.yaml"
           required_images = ["sentiment-api", "sentiment-auth-ui"]
         }
       ]
@@ -554,7 +554,7 @@ locals {
       image_names             = ["subnetcalc-api", "subnetcalc-frontend", "subnetcalc-apim-simulator"]
       policy_checks = [
         {
-          file            = "apps/workloads/base/all.yaml"
+          file            = "apps/workloads/base/subnetcalc.yaml"
           required_images = ["subnetcalc-api", "subnetcalc-frontend"]
         },
         {

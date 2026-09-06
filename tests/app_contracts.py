@@ -612,7 +612,7 @@ def kubernetes_workload_hardening_expectations() -> dict[str, dict[str, dict[str
         "/var/run/nginx": "emptyDir",
     }
     return {
-        "terraform/kubernetes/apps/workloads/base/all.yaml": {
+        "terraform/kubernetes/apps/workloads/base/sentiment.yaml": {
             "sentiment-api": {
                 "container": "api",
                 "mounts": {"/data": "persistentVolumeClaim", "/tmp": "emptyDir"},
@@ -628,6 +628,8 @@ def kubernetes_workload_hardening_expectations() -> dict[str, dict[str, dict[str
                     **nginx_tmpfs,
                 },
             },
+        },
+        "terraform/kubernetes/apps/workloads/base/subnetcalc.yaml": {
             "subnetcalc-api": {
                 "container": "api",
                 "mounts": {"/tmp": "emptyDir"},
@@ -819,7 +821,8 @@ def kubernetes_http_service_metadata_contract_violations(repo_root: Path) -> tup
 
 def kubernetes_http_service_manifest_paths() -> tuple[str, ...]:
     return (
-        "terraform/kubernetes/apps/workloads/base/all.yaml",
+        "terraform/kubernetes/apps/workloads/base/sentiment.yaml",
+        "terraform/kubernetes/apps/workloads/base/subnetcalc.yaml",
         "terraform/kubernetes/apps/chatgpt-sim/all.yaml",
         "terraform/kubernetes/apps/idp/all.yaml",
     )
@@ -4917,10 +4920,24 @@ def _kubernetes_workload_security_expectations() -> dict[str, dict[str, int]]:
     }
 
 
+def workload_base_documents(repo_root: Path) -> list[Any]:
+    """Every document across the split sample-app manifests.
+
+    The two apps used to share one all.yaml. Callers that reason about the
+    workload baseline want both, so they read them through here rather than
+    naming files.
+    """
+    base = repo_root / "terraform" / "kubernetes" / "apps" / "workloads" / "base"
+    docs: list[Any] = []
+    for name in ("sentiment.yaml", "subnetcalc.yaml"):
+        docs.extend(load_yaml_all(base / name))
+    return docs
+
+
 def kubernetes_workload_runtime_user_contract_violations(repo_root: Path) -> tuple[str, ...]:
     docs = [
         doc
-        for doc in load_yaml_all(repo_root / "terraform" / "kubernetes" / "apps" / "workloads" / "base" / "all.yaml")
+        for doc in workload_base_documents(repo_root)
         if doc
     ]
     deployments = {
@@ -4978,7 +4995,7 @@ def _browser_router_expectations() -> dict[str, BrowserRouterExpectation]:
 def browser_router_auth_api_contract_violations(repo_root: Path) -> tuple[str, ...]:
     docs = [
         doc
-        for doc in load_yaml_all(repo_root / "terraform" / "kubernetes" / "apps" / "workloads" / "base" / "all.yaml")
+        for doc in workload_base_documents(repo_root)
         if doc
     ]
     config_maps = {
@@ -5038,7 +5055,7 @@ def _deployment_container_env(deployment: dict[str, Any]) -> dict[str, str]:
 def sentiment_kubernetes_frontend_apim_contract_violations(repo_root: Path) -> tuple[str, ...]:
     workload_docs = [
         doc
-        for doc in load_yaml_all(repo_root / "terraform" / "kubernetes" / "apps" / "workloads" / "base" / "all.yaml")
+        for doc in workload_base_documents(repo_root)
         if doc
     ]
     workload_by_kind_name = _manifest_docs_by_kind_name(workload_docs)
@@ -5126,7 +5143,7 @@ def sentiment_kubernetes_frontend_apim_contract_violations(repo_root: Path) -> t
 def sentiment_api_kubernetes_runtime_contract_violations(repo_root: Path) -> tuple[str, ...]:
     workload_docs = [
         doc
-        for doc in load_yaml_all(repo_root / "terraform" / "kubernetes" / "apps" / "workloads" / "base" / "all.yaml")
+        for doc in workload_base_documents(repo_root)
         if doc
     ]
     workload_by_kind_name = _manifest_docs_by_kind_name(workload_docs)
@@ -5982,7 +5999,7 @@ def preload_image_artifact_contract_violations(repo_root: Path) -> tuple[str, ..
 
 
 def subnetcalc_frontend_local_replica_contract_violations(repo_root: Path) -> tuple[str, ...]:
-    docs = load_yaml_all(repo_root / "terraform" / "kubernetes" / "apps" / "workloads" / "base" / "all.yaml")
+    docs = workload_base_documents(repo_root)
     frontend = next(
         (
             doc
@@ -5994,7 +6011,7 @@ def subnetcalc_frontend_local_replica_contract_violations(repo_root: Path) -> tu
         None,
     )
     if not frontend:
-        return ("terraform/kubernetes/apps/workloads/base/all.yaml missing subnetcalc-frontend Deployment",)
+        return ("terraform/kubernetes/apps/workloads/base/subnetcalc.yaml missing subnetcalc-frontend Deployment",)
 
     violations: list[str] = []
     spec = frontend.get("spec", {})
