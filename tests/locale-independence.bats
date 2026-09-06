@@ -76,6 +76,12 @@ setup() {
     printf '%s\n' \"\${a}\"
   "
 
+  # This has failed twice under the full parallel gate and never in isolation,
+  # and the bare status assertion told us nothing about why. Print what the
+  # helper actually said so the next occurrence is diagnosable.
+  if [ "${status}" -ne 0 ]; then
+    printf 'source_fingerprint_tag failed with status %s:\n%s\n' "${status}" "${output}" >&2
+  fi
   [ "${status}" -eq 0 ]
   [[ "${output}" == src-* ]]
 }
