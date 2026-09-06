@@ -50,7 +50,9 @@ notes live under [`docs/plans/archive`](plans/archive/).
   `local-8gb`, now one sample app with no gateway demos, and 643s for
   `local-idp-16gb`, down from 1204s, peaking between 6.25 and 6.7 GiB of
   container memory. Those runs pass `image-distribution=local-cache`; without
-  it the same profile pulls upstream and took 2331s before failing.
+  it the same profile pulls upstream and took 2331s before failing. Handoff
+  notes, including the failed approaches and what is still open, are in
+  [`2026-09-06-profile-aware-provisioning-handoff.md`](2026-09-06-profile-aware-provisioning-handoff.md).
 
 - Launchpad live-state follow-up (2026-07-08): the post-proof Grafana
   discrepancy was real. Stage `900` now renders only enabled Launchpad tiles,
