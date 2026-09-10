@@ -57,6 +57,7 @@ ALLOWLIST_ENFORCEMENT="${CHECK_GATEWAY_ALLOWLIST_ENFORCEMENT:-${ADMIN_ALLOWLIST_
 ALLOWLIST_ALLOWED_ORIGIN="${CHECK_GATEWAY_ALLOWLIST_ALLOWED_ORIGIN:-${ADMIN_ALLOWLIST_ALLOWED_ORIGIN:-}}"
 ALLOWLIST_DENIED_ORIGIN="${CHECK_GATEWAY_ALLOWLIST_DENIED_ORIGIN:-${ADMIN_ALLOWLIST_DENIED_ORIGIN:-}}"
 SEPARATE_ADMIN_DOMAIN=0
+ADMIN_SUFFIX_IS_DISTINCT=0
 ALLOWLIST_ADMIN_HOST_REGEXES=()
 shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
@@ -228,32 +229,74 @@ if [[ -z "${PLATFORM_BASE_DOMAIN}" ]]; then
   PLATFORM_BASE_DOMAIN="127.0.0.1.sslip.io"
 fi
 PLATFORM_ADMIN_BASE_DOMAIN="$(tfvar_get "" platform_admin_base_domain)"
-if [[ -n "${PLATFORM_ADMIN_BASE_DOMAIN}" && "${PLATFORM_ADMIN_BASE_DOMAIN}" != "${PLATFORM_BASE_DOMAIN}" ]]; then
+# Mirror separate_admin_domain_enabled in locals.tf: the flag means "an admin
+# domain was configured", not "it differs from the public domain". Setting both
+# tfvars to the same string still moves admin hosts off the .admin. infix, so
+# deriving this from inequality classified every admin route as public.
+if [[ -n "${PLATFORM_ADMIN_BASE_DOMAIN}" ]]; then
   SEPARATE_ADMIN_DOMAIN=1
 else
   SEPARATE_ADMIN_DOMAIN=0
-  [[ -n "${PLATFORM_ADMIN_BASE_DOMAIN}" ]] || PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN}"
+  PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN}"
+fi
+# The named admin hosts follow the flag above, but the "anything under the admin
+# suffix is admin" fallback cannot: when the two domains hold the same string
+# that suffix also matches every public app host.
+ADMIN_SUFFIX_IS_DISTINCT=0
+if [[ "${PLATFORM_ADMIN_BASE_DOMAIN}" != "${PLATFORM_BASE_DOMAIN}" ]]; then
+  ADMIN_SUFFIX_IS_DISTINCT=1
 fi
 ADMIN_ROUTE_ALLOWLIST_ENABLED=0
 if [[ -n "$(tfvar_list_entries "" admin_route_allowlist_cidrs)" ]]; then
   ADMIN_ROUTE_ALLOWLIST_ENABLED=1
 fi
 
+admin_service_host() {
+  local service="$1"
+
+  if [[ "${SEPARATE_ADMIN_DOMAIN}" == "1" ]]; then
+    printf '%s.%s\n' "${service}" "${PLATFORM_ADMIN_BASE_DOMAIN}"
+  else
+    printf '%s.admin.%s\n' "${service}" "${PLATFORM_BASE_DOMAIN}"
+  fi
+}
+
+# is_cilium_admin_route_host in sync-gitea-policies.sh consults this same named
+# service set before it falls back to the DNS suffixes, and honours the same
+# overrides. The two have to agree: a host the renderer writes into the
+# allowlist policy but this script calls public is one the enforcement matrix
+# then demands the denied origin reach, turning a working restriction into a
+# check failure.
+ADMIN_GATEWAY_HOSTS=(
+  "${ARGOCD_PUBLIC_HOST:-$(admin_service_host argocd)}"
+  "${GITEA_PUBLIC_HOST:-$(admin_service_host gitea)}"
+  "${GRAFANA_PUBLIC_HOST:-$(admin_service_host grafana)}"
+  "${HEADLAMP_PUBLIC_HOST:-$(admin_service_host headlamp)}"
+  "${HUBBLE_PUBLIC_HOST:-$(admin_service_host hubble)}"
+  "${KYVERNO_PUBLIC_HOST:-$(admin_service_host kyverno)}"
+  "${APIM_PUBLIC_HOST:-$(admin_service_host apim)}"
+)
+KEYCLOAK_GATEWAY_HOST="${KEYCLOAK_PUBLIC_HOST:-keycloak.${PLATFORM_ADMIN_BASE_DOMAIN}}"
+
 is_admin_gateway_host() {
   local host="$1"
 
   # Keycloak is the public identity-provider endpoint used by SSO redirects;
   # it can share a separate admin DNS suffix without becoming an operator-only
-  # route. The suffix checks cover the default and separate-admin-domain forms.
-  if [[ "${host}" == "keycloak.${PLATFORM_ADMIN_BASE_DOMAIN}" ]]; then
+  # route. The renderer excludes it first for the same reason.
+  if [[ "${host}" == "${KEYCLOAK_GATEWAY_HOST}" ]]; then
     return 1
+  fi
+
+  if array_contains "${host}" "${ADMIN_GATEWAY_HOSTS[@]}"; then
+    return 0
   fi
 
   if [[ "${host}" == *".admin.${PLATFORM_BASE_DOMAIN}" ]]; then
     return 0
   fi
 
-  if [[ "${SEPARATE_ADMIN_DOMAIN}" == "1" && "${host}" == *".${PLATFORM_ADMIN_BASE_DOMAIN}" ]]; then
+  if [[ "${ADMIN_SUFFIX_IS_DISTINCT}" == "1" && "${host}" == *".${PLATFORM_ADMIN_BASE_DOMAIN}" ]]; then
     return 0
   fi
 

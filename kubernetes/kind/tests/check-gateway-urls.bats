@@ -426,3 +426,31 @@ EOF
   [[ "${output}" == *"Admin allowlist denied origin 127.0.0.3: admin https://headlamp.admin.127.0.0.1.sslip.io/ -> 403"* ]]
   [[ "${output}" == *"Admin allowlist denied origin 127.0.0.3: public https://subnetcalc.uat.127.0.0.1.sslip.io/ -> 200"* ]]
 }
+
+@test "check-gateway-urls classifies an off-suffix admin host override as admin" {
+  facts_file="${BATS_TEST_TMPDIR}/allowlist-facts.json"
+  printf '%s\n' '{"platform_base_domain":"127.0.0.1.sslip.io","platform_admin_base_domain":"127.0.0.1.sslip.io","admin_route_allowlist_cidrs":["10.0.0.0/8"]}' >"${facts_file}"
+
+  # sync-gitea-policies.sh consults the same named-service overrides before the
+  # DNS suffixes, so a host that follows neither suffix must still land on the
+  # admin side here or the enforcement matrix contradicts the rendered policy.
+  run env OPERATOR_FACTS_FILE="${facts_file}" \
+    HEADLAMP_PUBLIC_HOST=subnetcalc.uat.127.0.0.1.sslip.io \
+    MOCK_PUBLIC_FORBIDDEN=1 "${SCRIPT}" --execute --wait-seconds 0
+
+  [[ "${output}" == *"https://subnetcalc.uat.127.0.0.1.sslip.io/ -> 403 (admin route blocked by configured allowlist from this source)"* ]]
+  [[ "${output}" == *"Cilium admin allowlist is missing HTTP host rule(s) for: subnetcalc.uat.127.0.0.1.sslip.io"* ]]
+}
+
+@test "check-gateway-urls does not treat every host as admin when both base domains match" {
+  facts_file="${BATS_TEST_TMPDIR}/allowlist-facts.json"
+  printf '%s\n' '{"platform_base_domain":"127.0.0.1.sslip.io","platform_admin_base_domain":"127.0.0.1.sslip.io","admin_route_allowlist_cidrs":["10.0.0.0/8"]}' >"${facts_file}"
+
+  # An admin domain set to the same string as the public one still counts as
+  # configured, but its suffix then matches every public app host too.
+  run env OPERATOR_FACTS_FILE="${facts_file}" "${SCRIPT}" --execute --wait-seconds 0
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Cilium admin allowlist covers every discovered admin hostname"* ]]
+  [[ "${output}" != *"missing HTTP host rule(s)"* ]]
+}
