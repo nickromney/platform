@@ -41,7 +41,44 @@ if [[ "${PLATFORM_DEVCONTAINER:-0}" == "1" ]]; then
     exit 98
   fi
 fi
-url="${*: -1}"
+
+url=""
+interface_origin=""
+while [[ $# -gt 0 ]]; do
+  case "${1}" in
+    --interface)
+      interface_origin="${2:-}"
+      shift 2
+      continue
+      ;;
+    https://*)
+      url="${1}"
+      ;;
+  esac
+  shift
+done
+
+if [[ -n "${interface_origin}" ]]; then
+  case "${interface_origin}:${url}" in
+    127.0.0.2:https://headlamp.admin.127.0.0.1.sslip.io/)
+      printf '302'
+      exit 0
+      ;;
+    127.0.0.3:https://headlamp.admin.127.0.0.1.sslip.io/)
+      printf '403'
+      exit 0
+      ;;
+    127.0.0.[23]:https://subnetcalc.uat.127.0.0.1.sslip.io/)
+      printf '200'
+      exit 0
+      ;;
+    127.0.0.[23]:https://keycloak.127.0.0.1.sslip.io/)
+      printf '200'
+      exit 0
+      ;;
+  esac
+fi
+
 case "${MOCK_GATEWAY_FAILURE:-0}:${url}" in
   0:https://llm.127.0.0.1.sslip.io/v1/models)
     if [[ "${MOCK_LLM_BACKEND_CAPACITY_LIMITED:-0}" == "1" ]]; then
@@ -64,10 +101,18 @@ case "${MOCK_GATEWAY_FAILURE:-0}:${url}" in
     exit 99
     ;;
   0:https://headlamp.admin.127.0.0.1.sslip.io/)
+    if [[ "${MOCK_ADMIN_FORBIDDEN:-0}" == "1" ]]; then
+      printf '403'
+      exit 0
+    fi
     printf '302'
     exit 0
     ;;
   0:https://subnetcalc.uat.127.0.0.1.sslip.io/)
+    if [[ "${MOCK_PUBLIC_FORBIDDEN:-0}" == "1" ]]; then
+      printf '403'
+      exit 0
+    fi
     printf '200'
     exit 0
     ;;
@@ -136,6 +181,21 @@ fi
 if [[ "${args}" == *"get gatewayclass cilium -o jsonpath="* ]] && printf '%s' "${args}" | grep -Fq 'type=="Accepted"'; then
   printf 'True'
   exit 0
+fi
+
+if [[ "${args}" == *"get ccnp cilium-gateway-admin-allowlist -o jsonpath="* ]]; then
+  if printf '%s' "${args}" | grep -Fq 'reserved:ingress'; then
+    printf 'Exists'
+    exit 0
+  fi
+  if printf '%s' "${args}" | grep -Fq 'fromCIDRSet[*].cidr'; then
+    printf '10.0.0.0/8'
+    exit 0
+  fi
+  if printf '%s' "${args}" | grep -Fq 'rules.http[*].host'; then
+    printf '^headlamp\.admin\.127\.0\.0\.1\.sslip\.io$'
+    exit 0
+  fi
 fi
 
 if [[ "${args}" == "-n platform-gateway get gateway platform-gateway" ]]; then
@@ -319,4 +379,50 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"HTTPS https://llm.127.0.0.1.sslip.io/v1/chat/completions -> 507 (agentgateway reached OpenAI-compatible backend; model unavailable or capacity-limited)"* ]]
+}
+
+@test "check-gateway-urls does not treat a public 403 as admin allowlist evidence" {
+  facts_file="${BATS_TEST_TMPDIR}/allowlist-facts.json"
+  printf '%s\n' '{"platform_base_domain":"127.0.0.1.sslip.io","platform_admin_base_domain":"127.0.0.1.sslip.io","admin_route_allowlist_cidrs":["10.0.0.0/8"]}' >"${facts_file}"
+
+  run env OPERATOR_FACTS_FILE="${facts_file}" MOCK_PUBLIC_FORBIDDEN=1 "${SCRIPT}" --execute --wait-seconds 0
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"HTTPS https://subnetcalc.uat.127.0.0.1.sslip.io/ -> 403"* ]]
+  [[ "${output}" != *"subnetcalc.uat.127.0.0.1.sslip.io/ -> 403 (admin route blocked"* ]]
+}
+
+@test "check-gateway-urls accepts an admin 403 only for an allowlisted admin route" {
+  facts_file="${BATS_TEST_TMPDIR}/allowlist-facts.json"
+  printf '%s\n' '{"platform_base_domain":"127.0.0.1.sslip.io","platform_admin_base_domain":"127.0.0.1.sslip.io","admin_route_allowlist_cidrs":["10.0.0.0/8"]}' >"${facts_file}"
+
+  run env OPERATOR_FACTS_FILE="${facts_file}" MOCK_ADMIN_FORBIDDEN=1 "${SCRIPT}" --execute --wait-seconds 0
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"HTTPS https://headlamp.admin.127.0.0.1.sslip.io/ -> 403 (admin route blocked by configured allowlist from this source)"* ]]
+}
+
+@test "check-gateway-urls reports an unconfigured allowlist enforcement matrix as not verified" {
+  facts_file="${BATS_TEST_TMPDIR}/allowlist-facts.json"
+  printf '%s\n' '{"platform_base_domain":"127.0.0.1.sslip.io","platform_admin_base_domain":"127.0.0.1.sslip.io","admin_route_allowlist_cidrs":["10.0.0.0/8"]}' >"${facts_file}"
+
+  run env OPERATOR_FACTS_FILE="${facts_file}" "${SCRIPT}" --execute --wait-seconds 0 --enforce-admin-allowlist
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"Admin allowlist enforcement NOT VERIFIED: both allowed and denied origin addresses are required"* ]]
+}
+
+@test "check-gateway-urls verifies admin allowlist behavior with distinct source sockets" {
+  facts_file="${BATS_TEST_TMPDIR}/allowlist-facts.json"
+  printf '%s\n' '{"platform_base_domain":"127.0.0.1.sslip.io","platform_admin_base_domain":"127.0.0.1.sslip.io","admin_route_allowlist_cidrs":["10.0.0.0/8"]}' >"${facts_file}"
+
+  run env OPERATOR_FACTS_FILE="${facts_file}" "${SCRIPT}" --execute --wait-seconds 0 \
+    --enforce-admin-allowlist \
+    --allowlist-allowed-origin 127.0.0.2 \
+    --allowlist-denied-origin 127.0.0.3
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Admin allowlist allowed origin 127.0.0.2: admin https://headlamp.admin.127.0.0.1.sslip.io/ -> 302"* ]]
+  [[ "${output}" == *"Admin allowlist denied origin 127.0.0.3: admin https://headlamp.admin.127.0.0.1.sslip.io/ -> 403"* ]]
+  [[ "${output}" == *"Admin allowlist denied origin 127.0.0.3: public https://subnetcalc.uat.127.0.0.1.sslip.io/ -> 200"* ]]
 }

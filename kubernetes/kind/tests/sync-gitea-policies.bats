@@ -2189,6 +2189,90 @@ EOF
   [[ "${output}" == *"- cilium-gateway-admin-allowlist.yaml"* ]]
 }
 
+@test "cilium admin policy parses host rules and multiple CIDRs into separate ingress entries" {
+  repo_dir="${BATS_TEST_TMPDIR}/parsed-policy-repo"
+  routes_dir="${repo_dir}/apps/platform-gateway-routes"
+  policy_dir="${repo_dir}/cluster-policies/cilium/shared"
+  mkdir -p "${routes_dir}" "${policy_dir}"
+  printf 'resources:\n' >"${policy_dir}/kustomization.yaml"
+
+  cat >"${routes_dir}/httproute-argocd.yaml" <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: argocd
+spec:
+  hostnames:
+    - argocd.admin.apps.example.test
+  rules: []
+EOF
+  cat >"${routes_dir}/httproute-keycloak.yaml" <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: keycloak
+spec:
+  hostnames:
+    - keycloak.admin.example.test
+  rules: []
+EOF
+  cat >"${routes_dir}/httproute-subnetcalc.yaml" <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: subnetcalc
+spec:
+  hostnames:
+    - subnetcalc.uat.apps.example.test
+  rules: []
+EOF
+
+  run bash -lc "export PLATFORM_BASE_DOMAIN='apps.example.test' PLATFORM_ADMIN_BASE_DOMAIN='admin.example.test' ADMIN_ROUTE_ALLOWLIST_CIDRS='10.0.0.0/8, 192.168.0.0/16'; source '${SCRIPT}'; render_cilium_admin_allowlist_policy '${repo_dir}'"
+
+  [ "${status}" -eq 0 ]
+  policy_file="${policy_dir}/cilium-gateway-admin-allowlist.yaml"
+  run yq -o=json "${policy_file}"
+  [ "${status}" -eq 0 ]
+  json_file="${BATS_TEST_TMPDIR}/parsed-policy.json"
+  printf '%s\n' "${output}" >"${json_file}"
+
+  run jq -e '
+    (.spec.ingress | length == 2)
+    and ((.spec.ingress[0].fromCIDRSet | map(.cidr)) == ["10.0.0.0/8", "192.168.0.0/16"])
+    and ((.spec.ingress[0].toPorts[0].rules.http | map(.host)) == ["^argocd\\.admin\\.apps\\.example\\.test$"])
+    and ((.spec.ingress[1].fromCIDRSet | map(.cidr)) == ["0.0.0.0/0", "::/0"])
+    and ((.spec.ingress[1].toPorts[0].rules.http | map(.host)) == ["^keycloak\\.admin\\.example\\.test$", "^subnetcalc\\.uat\\.apps\\.example\\.test$"])
+  ' "${json_file}"
+  [ "${status}" -eq 0 ]
+}
+
+@test "cilium admin policy fails explicitly when route directories are missing" {
+  repo_dir="${BATS_TEST_TMPDIR}/missing-route-policy-repo"
+  policy_dir="${repo_dir}/cluster-policies/cilium/shared"
+  mkdir -p "${policy_dir}"
+  printf 'resources:\n' >"${policy_dir}/kustomization.yaml"
+
+  run bash -lc "export PLATFORM_BASE_DOMAIN='apps.example.test' PLATFORM_ADMIN_BASE_DOMAIN='admin.example.test' ADMIN_ROUTE_ALLOWLIST_CIDRS='10.0.0.0/8'; source '${SCRIPT}'; render_cilium_admin_allowlist_policy '${repo_dir}'"
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"no admin HTTPRoute hostnames were found"* ]]
+}
+
+@test "cilium admin policy cleanup removes an empty allowlist from kustomization" {
+  repo_dir="${BATS_TEST_TMPDIR}/empty-allowlist-policy-repo"
+  policy_dir="${repo_dir}/cluster-policies/cilium/shared"
+  policy_file="${policy_dir}/cilium-gateway-admin-allowlist.yaml"
+  mkdir -p "${policy_dir}"
+  printf '%s\n' 'resources:' '  - cilium-gateway-admin-allowlist.yaml' >"${policy_dir}/kustomization.yaml"
+  printf '%s\n' 'apiVersion: cilium.io/v2' >"${policy_file}"
+
+  run bash -lc "export ADMIN_ROUTE_ALLOWLIST_CIDRS=; source '${SCRIPT}'; render_cilium_admin_allowlist_policy '${repo_dir}'"
+
+  [ "${status}" -eq 0 ]
+  [ ! -e "${policy_file}" ]
+  ! grep -Fq 'cilium-gateway-admin-allowlist.yaml' "${policy_dir}/kustomization.yaml"
+}
+
 @test "cilium route render gives the global headers to routes that never had a filter" {
   seed_gateway_routes
 

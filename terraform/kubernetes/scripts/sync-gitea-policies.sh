@@ -278,7 +278,7 @@ SENTIMENT_UAT_PUBLIC_HOST="${SENTIMENT_UAT_PUBLIC_HOST:-sentiment.uat.${PLATFORM
 SUBNETCALC_DEV_PUBLIC_HOST="${SUBNETCALC_DEV_PUBLIC_HOST:-subnetcalc.dev.${PLATFORM_BASE_DOMAIN}}"
 SUBNETCALC_UAT_PUBLIC_HOST="${SUBNETCALC_UAT_PUBLIC_HOST:-subnetcalc.uat.${PLATFORM_BASE_DOMAIN}}"
 APIM_PUBLIC_HOST="${APIM_PUBLIC_HOST:-apim.admin.${PLATFORM_BASE_DOMAIN}}"
-KEYCLOAK_PUBLIC_HOST="${KEYCLOAK_PUBLIC_HOST:-keycloak.${PLATFORM_BASE_DOMAIN}}"
+KEYCLOAK_PUBLIC_HOST="${KEYCLOAK_PUBLIC_HOST:-keycloak.${PLATFORM_ADMIN_BASE_DOMAIN}}"
 KEYCLOAK_REALM="${KEYCLOAK_REALM:-platform}"
 SSO_PUBLIC_URL="${SSO_PUBLIC_URL:-https://${KEYCLOAK_PUBLIC_HOST}/realms/${KEYCLOAK_REALM}}"
 MCP_PUBLIC_HOST="${MCP_PUBLIC_HOST:-mcp.${PLATFORM_BASE_DOMAIN}}"
@@ -1886,6 +1886,33 @@ cilium_http_host_regex() {
   printf '%s' "$1" | sed 's/[.[\\*^$()+?{|]/\\\\&/g'
 }
 
+is_cilium_admin_route_host() {
+  local host="$1"
+
+  # Keycloak must remain reachable for the SSO redirect and is deliberately
+  # not part of the operator-only admin route set, even when a separate admin
+  # DNS suffix is in use. The explicit host list also keeps custom host
+  # overrides working when they do not follow either default suffix.
+  if [[ "${host}" == "${KEYCLOAK_PUBLIC_HOST}" ]]; then
+    return 1
+  fi
+
+  case "${host}" in
+    "${ARGOCD_PUBLIC_HOST}"|"${GITEA_PUBLIC_HOST}"|"${GRAFANA_PUBLIC_HOST}"|"${HEADLAMP_PUBLIC_HOST}"|"${HUBBLE_PUBLIC_HOST}"|"${KYVERNO_PUBLIC_HOST}"|"${APIM_PUBLIC_HOST}")
+      return 0
+      ;;
+    *".admin.${PLATFORM_BASE_DOMAIN}")
+      return 0
+      ;;
+    *".${PLATFORM_ADMIN_BASE_DOMAIN}")
+      [[ "${PLATFORM_ADMIN_BASE_DOMAIN}" != "${PLATFORM_BASE_DOMAIN}" ]]
+      return
+      ;;
+  esac
+
+  return 1
+}
+
 render_cilium_admin_allowlist_policy() {
   local repo_dir="$1"
   local policy_dir="${repo_dir}/cluster-policies/cilium/shared"
@@ -1894,7 +1921,7 @@ render_cilium_admin_allowlist_policy() {
   local admin_hosts_file=""
   local all_hosts_file=""
   local public_hosts_file=""
-  local route_file routes_dir cidr host
+  local route_file routes_dir cidr host route_hosts route_is_admin
 
   [[ -d "${policy_dir}" ]] || return 0
 
@@ -1912,10 +1939,16 @@ render_cilium_admin_allowlist_policy() {
     [[ -d "${routes_dir}" ]] || continue
     for route_file in "${routes_dir}"/httproute-*.yaml; do
       [[ -e "${route_file}" ]] || continue
-      awk '/^  hostnames:/{hosts=1; next} hosts && /^    - / {print $2; next} hosts {hosts=0}' "${route_file}" >>"${all_hosts_file}"
-      if grep -Fq 'name: admin-allowlist' "${route_file}"; then
-        awk '/^  hostnames:/{hosts=1; next} hosts && /^    - / {print $2; next} hosts {hosts=0}' "${route_file}" >>"${admin_hosts_file}"
-      fi
+      route_is_admin=0
+      grep -Fq 'name: admin-allowlist' "${route_file}" && route_is_admin=1
+      route_hosts="$(awk '/^  hostnames:/{hosts=1; next} hosts && /^    - / {print $2; next} hosts {hosts=0}' "${route_file}")"
+      while IFS= read -r host; do
+        [[ -n "${host}" ]] || continue
+        printf '%s\n' "${host}" >>"${all_hosts_file}"
+        if [[ "${route_is_admin}" -eq 1 ]] || is_cilium_admin_route_host "${host}"; then
+          printf '%s\n' "${host}" >>"${admin_hosts_file}"
+        fi
+      done <<<"${route_hosts}"
     done
   done
   LC_ALL=C sort -u "${all_hosts_file}" -o "${all_hosts_file}"

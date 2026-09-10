@@ -119,3 +119,114 @@ EOF
   [[ "${output}" == *"docker push: cannot push manifest index: registry returned 400"* ]]
   [[ "${output}" == *"imagetools: server gave HTTP response to HTTPS client"* ]]
 }
+
+@test "shared image cache uses the registry-to-registry fallback after a push failure" {
+  home_dir="${BATS_TEST_TMPDIR}/docker-home"
+  mkdir -p "${home_dir}/.docker/cli-plugins"
+  touch "${home_dir}/.docker/cli-plugins/docker-buildx"
+
+  cat >"${TEST_BIN}/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${@: -1}" in
+  http://127.0.0.1:5002/v2/) printf '{}' ;;
+  http://127.0.0.1:5002/v2/*/tags/list) printf '{"tags":[]}' ;;
+  *) exit 1 ;;
+esac
+EOF
+  chmod +x "${TEST_BIN}/curl"
+
+  cat >"${TEST_BIN}/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"${LOG_FILE}"
+case "${1:-}" in
+  image|tag) exit 0 ;;
+  push)
+    echo 'cannot push manifest index: registry returned 400' >&2
+    exit 1
+    ;;
+  buildx)
+    [[ -L "${DOCKER_CONFIG}/cli-plugins" ]] || {
+      echo "buildx plugin directory was not preserved in scratch Docker config" >&2
+      exit 99
+    }
+    exit 0
+    ;;
+  *) exit 0 ;;
+esac
+EOF
+  chmod +x "${TEST_BIN}/docker"
+
+  printf 'quay.io/jetstack/cert-manager-controller:v1.21.1\n' >"${IMAGE_LIST_FILE}"
+
+  run env -u DOCKER_CONFIG HOME="${home_dir}" IMAGE_LIST_FILE="${IMAGE_LIST_FILE}" CACHE_PUSH_HOST="127.0.0.1:5002" LOG_FILE="${LOG_FILE}" "${SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  grep -Fx 'buildx imagetools create --prefer-index=false --tag 127.0.0.1:5002/jetstack/cert-manager-controller:v1.21.1 quay.io/jetstack/cert-manager-controller:v1.21.1' "${LOG_FILE}"
+  [[ "${output}" == *"SYNC quay.io/jetstack/cert-manager-controller:v1.21.1 -> 127.0.0.1:5002/jetstack/cert-manager-controller:v1.21.1"* ]]
+  [[ "${output}" != *"could not cache"* ]]
+}
+
+@test "shared image cache reports a cache hit without inspecting or copying the image" {
+  cat >"${TEST_BIN}/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${@: -1}" in
+  http://127.0.0.1:5002/v2/) printf '{}' ;;
+  http://127.0.0.1:5002/v2/*/tags/list) printf '{"tags":["v1.21.1","20260413-alpine3.23"]}' ;;
+  *) exit 1 ;;
+esac
+EOF
+  chmod +x "${TEST_BIN}/curl"
+
+  cat >"${TEST_BIN}/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "docker should not be called on a cache hit: $*" >&2
+exit 99
+EOF
+  chmod +x "${TEST_BIN}/docker"
+
+  printf 'quay.io/jetstack/cert-manager-controller:v1.21.1\n' >"${IMAGE_LIST_FILE}"
+
+  run env IMAGE_LIST_FILE="${IMAGE_LIST_FILE}" CACHE_PUSH_HOST="127.0.0.1:5002" "${SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"OK   cached 127.0.0.1:5002/jetstack/cert-manager-controller:v1.21.1"* ]]
+  [[ "${output}" != *"docker should not be called"* ]]
+}
+
+@test "shared image cache preserves docker pull diagnostics" {
+  cat >"${TEST_BIN}/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${@: -1}" in
+  http://127.0.0.1:5002/v2/) printf '{}' ;;
+  http://127.0.0.1:5002/v2/jetstack/cert-manager-controller/tags/list) printf '{"tags":[]}' ;;
+  *) exit 1 ;;
+esac
+EOF
+  chmod +x "${TEST_BIN}/curl"
+
+  cat >"${TEST_BIN}/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  image) exit 1 ;;
+  pull)
+    echo 'manifest unknown: upstream image is unavailable' >&2
+    exit 1
+    ;;
+  *) exit 0 ;;
+esac
+EOF
+  chmod +x "${TEST_BIN}/docker"
+
+  printf 'quay.io/jetstack/cert-manager-controller:v1.21.1\n' >"${IMAGE_LIST_FILE}"
+
+  run env IMAGE_LIST_FILE="${IMAGE_LIST_FILE}" CACHE_PUSH_HOST="127.0.0.1:5002" "${SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"could not pull quay.io/jetstack/cert-manager-controller:v1.21.1; docker pull: manifest unknown: upstream image is unavailable"* ]]
+}
