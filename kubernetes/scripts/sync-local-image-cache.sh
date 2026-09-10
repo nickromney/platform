@@ -58,7 +58,8 @@ http_fetch -fsS "http://${CACHE_PUSH_HOST}/v2/" >/dev/null 2>&1 || skip_or_fail 
 if [ -z "${DOCKER_CONFIG:-}" ]; then
   docker_config_dir="$(mktemp -d)"
   mkdir -p "${docker_config_dir}"
-  source_docker_config="${HOME}/.docker/config.json"
+  source_docker_dir="${HOME}/.docker"
+  source_docker_config="${source_docker_dir}/config.json"
   if [ -f "${source_docker_config}" ] && command -v jq >/dev/null 2>&1; then
     # Keep auths and helper bindings, minus any binding for the cache host.
     jq --arg cache "${CACHE_PUSH_HOST}" '
@@ -70,6 +71,12 @@ if [ -z "${DOCKER_CONFIG:-}" ]; then
   else
     printf '{}\n' >"${docker_config_dir}/config.json"
   fi
+  # Docker discovers CLI plugins relative to DOCKER_CONFIG. Keep the caller's
+  # buildx plugin visible in the scratch config or the registry-to-registry
+  # fallback degrades to an opaque "unknown flag" Docker error.
+  if [ -d "${source_docker_dir}/cli-plugins" ]; then
+    ln -s "${source_docker_dir}/cli-plugins" "${docker_config_dir}/cli-plugins"
+  fi
   export DOCKER_CONFIG="${docker_config_dir}"
   trap 'rm -rf "${docker_config_dir}"' EXIT
 fi
@@ -79,8 +86,10 @@ mirror_remote_image() {
   local repo=""
   local tag=""
   local cache_ref=""
+  local pull_log=""
   local push_log=""
   local imagetools_log=""
+  local pull_error=""
   local push_error=""
   local imagetools_error=""
 
@@ -93,10 +102,14 @@ mirror_remote_image() {
   fi
 
   if ! docker image inspect "${source_ref}" >/dev/null 2>&1; then
-    if ! docker pull "${source_ref}" >/dev/null 2>&1; then
-      warn "could not pull ${source_ref}"
+    pull_log="$(mktemp)"
+    if ! docker pull "${source_ref}" >"${pull_log}" 2>&1; then
+      pull_error="$(tr '\n' ' ' <"${pull_log}" | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+      rm -f "${pull_log}"
+      warn "could not pull ${source_ref}; docker pull: ${pull_error:-no diagnostic}"
       return 0
     fi
+    rm -f "${pull_log}"
   fi
 
   echo "SYNC ${source_ref} -> ${cache_ref}"

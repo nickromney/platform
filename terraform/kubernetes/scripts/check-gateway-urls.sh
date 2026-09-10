@@ -19,10 +19,17 @@ ok() { echo "OK   $*"; }
 usage() {
   cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
 Usage: @SCRIPT_NAME@ [--var-file PATH] [--host-port PORT] [--wait-seconds N] [--retry-interval-seconds N] [--extended]
+                    [--enforce-admin-allowlist]
+                    [--allowlist-allowed-origin ADDRESS] [--allowlist-denied-origin ADDRESS]
 
 Checks the Gateway API + TLS path for public and admin gateway URLs.
 Cilium is the only Gateway API implementation on kind.
 Use --extended (or EXTENDED=1) for deeper pod/endpoint diagnostics.
+
+--enforce-admin-allowlist runs a two-source matrix. It requires an origin that
+must reach every admin route and a distinct origin that must receive HTTP 403;
+both origins must still reach public routes. Set the two origins with the
+matching flags or CHECK_GATEWAY_ALLOWLIST_* environment variables.
 EOF
   printf '\n%s\n' "$(shell_cli_standard_options)"
 }
@@ -46,6 +53,11 @@ WAIT_SECONDS="${WAIT_SECONDS:-30}"
 RETRY_INTERVAL_SECONDS="${RETRY_INTERVAL_SECONDS:-3}"
 ROUTE_ENTRIES=()
 DEVCONTAINER_HOST_ALIAS="${PLATFORM_DEVCONTAINER_HOST_ALIAS:-${KIND_DEVCONTAINER_HOST_ALIAS:-host.docker.internal}}"
+ALLOWLIST_ENFORCEMENT="${CHECK_GATEWAY_ALLOWLIST_ENFORCEMENT:-${ADMIN_ALLOWLIST_ENFORCEMENT:-0}}"
+ALLOWLIST_ALLOWED_ORIGIN="${CHECK_GATEWAY_ALLOWLIST_ALLOWED_ORIGIN:-${ADMIN_ALLOWLIST_ALLOWED_ORIGIN:-}}"
+ALLOWLIST_DENIED_ORIGIN="${CHECK_GATEWAY_ALLOWLIST_DENIED_ORIGIN:-${ADMIN_ALLOWLIST_DENIED_ORIGIN:-}}"
+SEPARATE_ADMIN_DOMAIN=0
+ALLOWLIST_ADMIN_HOST_REGEXES=()
 shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
   if shell_cli_handle_standard_flag usage "$1"; then
@@ -74,6 +86,20 @@ while [[ $# -gt 0 ]]; do
       EXTENDED=1
       shift
       ;;
+    --enforce-admin-allowlist|--allowlist-enforcement)
+      ALLOWLIST_ENFORCEMENT=1
+      shift
+      ;;
+    --allowlist-allowed-origin|--allowlist-allowed-source)
+      [[ $# -ge 2 ]] || fail "missing value for $1"
+      ALLOWLIST_ALLOWED_ORIGIN="${2}"
+      shift 2
+      ;;
+    --allowlist-denied-origin|--allowlist-denied-source)
+      [[ $# -ge 2 ]] || fail "missing value for $1"
+      ALLOWLIST_DENIED_ORIGIN="${2}"
+      shift 2
+      ;;
     *)
       fail "Unknown argument: $1"
       ;;
@@ -84,6 +110,7 @@ shell_cli_maybe_execute_or_preview_summary usage "would check public and admin g
 
 [[ "${WAIT_SECONDS}" =~ ^[0-9]+$ ]] || fail "--wait-seconds must be an integer >= 0"
 [[ "${RETRY_INTERVAL_SECONDS}" =~ ^[0-9]+$ ]] || fail "--retry-interval-seconds must be an integer >= 0"
+[[ "${ALLOWLIST_ENFORCEMENT}" == "0" || "${ALLOWLIST_ENFORCEMENT}" == "1" ]] || fail "admin allowlist enforcement must be 0 or 1"
 
 if [[ "${#TFVARS_FILES[@]}" -gt 0 ]]; then
   for i in "${!TFVARS_FILES[@]}"; do
@@ -201,13 +228,53 @@ if [[ -z "${PLATFORM_BASE_DOMAIN}" ]]; then
   PLATFORM_BASE_DOMAIN="127.0.0.1.sslip.io"
 fi
 PLATFORM_ADMIN_BASE_DOMAIN="$(tfvar_get "" platform_admin_base_domain)"
-if [[ -z "${PLATFORM_ADMIN_BASE_DOMAIN}" ]]; then
-  PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN}"
+if [[ -n "${PLATFORM_ADMIN_BASE_DOMAIN}" && "${PLATFORM_ADMIN_BASE_DOMAIN}" != "${PLATFORM_BASE_DOMAIN}" ]]; then
+  SEPARATE_ADMIN_DOMAIN=1
+else
+  SEPARATE_ADMIN_DOMAIN=0
+  [[ -n "${PLATFORM_ADMIN_BASE_DOMAIN}" ]] || PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN}"
 fi
 ADMIN_ROUTE_ALLOWLIST_ENABLED=0
 if [[ -n "$(tfvar_list_entries "" admin_route_allowlist_cidrs)" ]]; then
   ADMIN_ROUTE_ALLOWLIST_ENABLED=1
 fi
+
+is_admin_gateway_host() {
+  local host="$1"
+
+  # Keycloak is the public identity-provider endpoint used by SSO redirects;
+  # it can share a separate admin DNS suffix without becoming an operator-only
+  # route. The suffix checks cover the default and separate-admin-domain forms.
+  if [[ "${host}" == "keycloak.${PLATFORM_ADMIN_BASE_DOMAIN}" ]]; then
+    return 1
+  fi
+
+  if [[ "${host}" == *".admin.${PLATFORM_BASE_DOMAIN}" ]]; then
+    return 0
+  fi
+
+  if [[ "${SEPARATE_ADMIN_DOMAIN}" == "1" && "${host}" == *".${PLATFORM_ADMIN_BASE_DOMAIN}" ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
+# shellcheck disable=SC2016 # '$' is intentionally a regex anchor, not shell syntax.
+gateway_host_regex() {
+  # This must match the parsed value of the YAML emitted by
+  # sync-gitea-policies.sh: the YAML double quotes turn the renderer's two
+  # backslashes into one regex escape in the live object.
+  printf '%s' "$1" | sed 's/[.[\\*^$()+?{|]/\\&/g'
+}
+
+gateway_route_kind() {
+  if is_admin_gateway_host "$1"; then
+    printf 'admin\n'
+  else
+    printf 'public\n'
+  fi
+}
 
 EXPECTED_CLUSTER_NAME="$(tfvar_get "" cluster_name)"
 EXPECT_KIND_PROVISIONING="$(tfvar_get "" provision_kind_cluster)"
@@ -240,16 +307,25 @@ reported_or_not() {
 probe_https_url() {
   local host="$1"
   local url="$2"
+  local route_kind="${3:-public}"
+  local source_origin="${4:-}"
   local tmp_err curl_rc code err
   local -a curl_args=()
 
   PROBE_OK=0
+  PROBE_CODE="000"
   PROBE_DETAIL=""
 
   if devcontainer_enabled; then
     curl_args=(--connect-to "${host}:${HOST_PORT}:${DEVCONTAINER_HOST_ALIAS}:${HOST_PORT}")
   else
     curl_args=(--resolve "${host}:${HOST_PORT}:127.0.0.1")
+  fi
+  if [[ -n "${source_origin}" ]]; then
+    # Bind the real client socket. Do not use X-Forwarded-For here: Cilium's
+    # policy decision must observe the source address that actually reaches
+    # the listener.
+    curl_args+=(--interface "${source_origin}")
   fi
 
   if [[ "${url}" == https://llm.*"/v1/chat/completions" ]]; then
@@ -260,9 +336,11 @@ probe_https_url() {
     if [[ -z "${model_name}" ]]; then
       if printf '%s\n' "${model_json}" | grep -Fq "upstream call failed"; then
         PROBE_OK=1
+        PROBE_CODE="503"
         PROBE_DETAIL="503 (agentgateway reached; OpenAI-compatible backend unavailable)"
         return 0
       fi
+      PROBE_CODE="000"
       PROBE_DETAIL="000 (could not discover OpenAI-compatible model from ${models_url})"
       return 0
     fi
@@ -280,6 +358,7 @@ probe_https_url() {
   set -e
   err="$(tr '\n' ' ' <"${tmp_err}" | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
   rm -f "${tmp_err}"
+  PROBE_CODE="${code:-000}"
 
   if [[ "${code}" =~ ^[23] ]]; then
     PROBE_OK=1
@@ -287,12 +366,9 @@ probe_https_url() {
     return 0
   fi
 
-  if [[ "${ADMIN_ROUTE_ALLOWLIST_ENABLED}" == "1" && "${code}" == "403" ]]; then
-    PROBE_OK=1
-    PROBE_DETAIL="${code} (blocked by admin allowlist from this source)"
-    return 0
-  fi
-
+  # These are explicit application-level auth expectations, not allowlist
+  # evidence. Keep them ahead of the admin-route branch so a machine endpoint
+  # returning 403 is not mislabeled as a source-IP denial.
   if [[ "${url}" == https://mcp.*"/mcp" && ( "${code}" == "401" || "${code}" == "403" ) ]]; then
     PROBE_OK=1
     PROBE_DETAIL="${code} (MCP machine path requires bearer token)"
@@ -308,6 +384,12 @@ probe_https_url() {
   if [[ "${url}" == https://llm.*"/v1/chat/completions" && "${code}" == "507" ]]; then
     PROBE_OK=1
     PROBE_DETAIL="${code} (agentgateway reached OpenAI-compatible backend; model unavailable or capacity-limited)"
+    return 0
+  fi
+
+  if [[ "${ADMIN_ROUTE_ALLOWLIST_ENABLED}" == "1" && "${route_kind}" == "admin" && "${code}" == "403" ]]; then
+    PROBE_OK=1
+    PROBE_DETAIL="${code} (admin route blocked by configured allowlist from this source)"
     return 0
   fi
 
@@ -330,16 +412,19 @@ probe_route_urls() {
     return 0
   fi
 
-  local entry host path url
+  local entry host path url route_kind rest
   for entry in "${ROUTE_ENTRIES[@]}"; do
     host="${entry%%|*}"
-    path="${entry#*|}"
+    rest="${entry#*|}"
+    path="${rest%%|*}"
+    route_kind="${rest#*|}"
+    [[ "${route_kind}" != "${rest}" ]] || route_kind="public"
     if [[ "${host}" == llm.* && "${path}" == "/v1" ]]; then
       path="/v1/chat/completions"
     fi
     url="https://${host}${port_suffix}${path}"
 
-    probe_https_url "${host}" "${url}"
+    probe_https_url "${host}" "${url}" "${route_kind}"
     if [[ "${PROBE_OK}" == "1" ]]; then
       HTTPS_RESULTS+=("OK|${url}|${PROBE_DETAIL}")
     else
@@ -347,6 +432,37 @@ probe_route_urls() {
       HTTPS_FAILURE_COUNT=$((HTTPS_FAILURE_COUNT + 1))
     fi
   done
+}
+
+check_allowlist_route_coverage() {
+  [[ "${ADMIN_ROUTE_ALLOWLIST_ENABLED}" == "1" ]] || return 0
+
+  if [[ "${#ALLOWLIST_ADMIN_HOST_REGEXES[@]}" -eq 0 ]]; then
+    # The policy shape check below reports the missing rule. Keep this helper
+    # quiet as well so one absent policy does not produce one failure per route.
+    return 0
+  fi
+
+  local entry host rest route_kind expected
+  local -a missing_hosts=()
+  for entry in "${ROUTE_ENTRIES[@]}"; do
+    host="${entry%%|*}"
+    rest="${entry#*|}"
+    route_kind="${rest#*|}"
+    [[ "${route_kind}" != "${rest}" ]] || route_kind="public"
+    [[ "${route_kind}" == "admin" ]] || continue
+
+    expected="^$(gateway_host_regex "${host}")$"
+    if ! array_contains "${expected}" "${ALLOWLIST_ADMIN_HOST_REGEXES[@]}"; then
+      missing_hosts+=("${host}")
+    fi
+  done
+
+  if [[ "${#missing_hosts[@]}" -eq 0 ]]; then
+    ok "Cilium admin allowlist covers every discovered admin hostname"
+  else
+    fail_soft "Cilium admin allowlist is missing HTTP host rule(s) for: ${missing_hosts[*]}"
+  fi
 }
 
 probe_tls_certificate() {
@@ -502,6 +618,18 @@ if [[ "${ADMIN_ROUTE_ALLOWLIST_ENABLED}" == "1" ]]; then
   else
     fail_soft "Cilium admin allowlist is missing configured CIDR(s): ${missing_cidrs[*]}"
   fi
+
+  allowlist_host_regexes="$(kubectl get ccnp cilium-gateway-admin-allowlist -o jsonpath='{.spec.ingress[0].toPorts[0].rules.http[*].host}' 2>/dev/null || true)"
+  ALLOWLIST_ADMIN_HOST_REGEXES=()
+  while IFS= read -r host_regex; do
+    [[ -n "${host_regex}" ]] || continue
+    ALLOWLIST_ADMIN_HOST_REGEXES+=("${host_regex}")
+  done < <(printf '%s\n' "${allowlist_host_regexes}" | tr ' ' '\n')
+  if [[ "${#ALLOWLIST_ADMIN_HOST_REGEXES[@]}" -gt 0 ]]; then
+    ok "Cilium admin allowlist contains ${#ALLOWLIST_ADMIN_HOST_REGEXES[@]} HTTP host rule(s)"
+  else
+    fail_soft "Cilium admin allowlist has no HTTP host rules"
+  fi
 fi
 
 echo ""
@@ -606,7 +734,7 @@ if kubectl -n gateway-routes get httproute >/dev/null 2>&1; then
       hostnames_lines="$(printf '%s\n' "${hostnames}" | tr ' ' '\n' | awk 'NF > 0')"
       while IFS= read -r hostname; do
         [[ -n "${hostname}" ]] || continue
-        route_entry="${hostname}|${route_path}"
+        route_entry="${hostname}|${route_path}|$(gateway_route_kind "${hostname}")"
         if [[ "${#ROUTE_ENTRIES[@]}" -eq 0 ]] || ! array_contains "${route_entry}" "${ROUTE_ENTRIES[@]}"; then
           ROUTE_ENTRIES+=("${route_entry}")
         fi
@@ -616,6 +744,8 @@ if kubectl -n gateway-routes get httproute >/dev/null 2>&1; then
 else
   fail_soft "Namespace gateway-routes missing or no HTTPRoute support"
 fi
+
+check_allowlist_route_coverage
 
 echo ""
 echo "Local HTTPS checks (host port ${HOST_PORT}):"
@@ -658,6 +788,73 @@ else
     done
   fi
 fi
+
+probe_allowlist_origin() {
+  local source_origin="$1"
+  local expected_admin_result="$2"
+  local label="$3"
+  local entry host rest path route_kind url
+
+  for entry in "${ROUTE_ENTRIES[@]}"; do
+    host="${entry%%|*}"
+    rest="${entry#*|}"
+    path="${rest%%|*}"
+    route_kind="${rest#*|}"
+    [[ "${route_kind}" != "${rest}" ]] || route_kind="public"
+    if [[ "${host}" == llm.* && "${path}" == "/v1" ]]; then
+      path="/v1/chat/completions"
+    fi
+    url="https://${host}${port_suffix}${path}"
+
+    probe_https_url "${host}" "${url}" "${route_kind}" "${source_origin}"
+    if [[ "${route_kind}" == "admin" ]]; then
+      if [[ "${expected_admin_result}" == "allowed" && "${PROBE_CODE}" =~ ^[23] ]]; then
+        ok "Admin allowlist ${label} origin ${source_origin}: admin ${url} -> ${PROBE_DETAIL}"
+      elif [[ "${expected_admin_result}" == "denied" && "${PROBE_CODE}" == "403" ]]; then
+        ok "Admin allowlist ${label} origin ${source_origin}: admin ${url} -> ${PROBE_DETAIL}"
+      else
+        fail_soft "Admin allowlist ${label} origin ${source_origin}: admin ${url} -> ${PROBE_DETAIL:-${PROBE_CODE}}"
+      fi
+    elif [[ "${PROBE_OK}" == "1" ]]; then
+      ok "Admin allowlist ${label} origin ${source_origin}: public ${url} -> ${PROBE_DETAIL}"
+    else
+      fail_soft "Admin allowlist ${label} origin ${source_origin}: public ${url} -> ${PROBE_DETAIL:-${PROBE_CODE}}"
+    fi
+  done
+}
+
+check_admin_allowlist_enforcement() {
+  if [[ "${ALLOWLIST_ENFORCEMENT}" != "1" ]]; then
+    if [[ "${ADMIN_ROUTE_ALLOWLIST_ENABLED}" == "1" ]]; then
+      warn "Admin allowlist enforcement: NOT VERIFIED (rerun with --enforce-admin-allowlist and two distinct origin addresses)"
+    fi
+    return 0
+  fi
+
+  if [[ "${ADMIN_ROUTE_ALLOWLIST_ENABLED}" != "1" ]]; then
+    fail_soft "Admin allowlist enforcement NOT VERIFIED: admin_route_allowlist_cidrs is empty"
+    return 0
+  fi
+  if [[ -z "${ALLOWLIST_ALLOWED_ORIGIN}" || -z "${ALLOWLIST_DENIED_ORIGIN}" ]]; then
+    fail_soft "Admin allowlist enforcement NOT VERIFIED: both allowed and denied origin addresses are required"
+    return 0
+  fi
+  if [[ "${ALLOWLIST_ALLOWED_ORIGIN}" == "${ALLOWLIST_DENIED_ORIGIN}" ]]; then
+    fail_soft "Admin allowlist enforcement NOT VERIFIED: allowed and denied origins must be distinct"
+    return 0
+  fi
+  if [[ "${#ROUTE_ENTRIES[@]}" -eq 0 ]]; then
+    fail_soft "Admin allowlist enforcement NOT VERIFIED: no discovered routes are available"
+    return 0
+  fi
+
+  echo ""
+  echo "Admin allowlist enforcement matrix (real source sockets):"
+  probe_allowlist_origin "${ALLOWLIST_ALLOWED_ORIGIN}" allowed allowed
+  probe_allowlist_origin "${ALLOWLIST_DENIED_ORIGIN}" denied denied
+}
+
+check_admin_allowlist_enforcement
 
 echo ""
 # The NGINX path pinned TLS versions and ciphersuites declaratively, through
