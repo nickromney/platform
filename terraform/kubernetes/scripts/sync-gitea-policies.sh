@@ -137,6 +137,8 @@ string|SENTIMENT_UAT_PUBLIC_HOST|sentiment_uat_public_host|
 string|SUBNETCALC_DEV_PUBLIC_HOST|subnetcalc_dev_public_host|
 string|SUBNETCALC_UAT_PUBLIC_HOST|subnetcalc_uat_public_host|
 string|APIM_PUBLIC_HOST|apim_public_host|
+string|KEYCLOAK_PUBLIC_HOST|keycloak_public_host|
+string|KEYCLOAK_REALM|keycloak_realm|platform
 string|ADMIN_ROUTE_ALLOWLIST_CIDRS|admin_route_allowlist_cidrs|
 string|GATEWAY_TRUSTED_PROXY_CIDRS|gateway_trusted_proxy_cidrs|
 bool|ENABLE_CERT_MANAGER|enable_cert_manager|true
