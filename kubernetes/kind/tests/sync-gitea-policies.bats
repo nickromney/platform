@@ -2383,3 +2383,31 @@ EOF
   # One per rule: the swapped /admin rule and the previously bare /public rule.
   [[ "${output}" == *"2"* ]]
 }
+
+@test "every render-input contract key is supplied by the Terraform render contract" {
+  # A key the renderer asks for but Terraform never sends does not fail: the
+  # renderer silently falls back to its own default and the operator's tfvars
+  # are ignored. That is how apim_public_host stayed wrong under a separate
+  # admin domain, so assert the two sides of the contract still line up.
+  locals_tf="${REPO_ROOT}/terraform/kubernetes/locals.tf"
+
+  registry_keys="$(bash -lc "source '${SCRIPT}'; render_gitops_render_inputs; render_external_image_inputs" |
+    awk -F'|' 'NF >= 3 && $3 != "" {print $3}' | LC_ALL=C sort -u)"
+  [ -n "${registry_keys}" ]
+
+  contract_keys="$(awk '
+    /^  policies_repo_render_contract = \{/ {inside = 1}
+    inside {
+      depth += gsub(/\{/, "{") - gsub(/\}/, "}")
+      if (depth == 0) {exit}
+      if ($0 ~ /^ +[a-z0-9_]+ +=/) {print $1}
+    }
+  ' "${locals_tf}" | LC_ALL=C sort -u)"
+  [ -n "${contract_keys}" ]
+
+  missing="$(comm -23 <(printf '%s\n' "${registry_keys}") <(printf '%s\n' "${contract_keys}"))"
+  [ -z "${missing}" ] || {
+    echo "render inputs with no Terraform contract key: ${missing}" >&2
+    false
+  }
+}

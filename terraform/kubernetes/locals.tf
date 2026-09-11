@@ -681,6 +681,8 @@ locals {
     platform_base_domain                 = local.platform_base_domain_effective
     platform_admin_base_domain           = local.platform_admin_base_domain_effective
     argocd_public_host                   = local.argocd_public_host
+    apim_public_host                     = local.apim_public_host
+    keycloak_public_host                 = local.keycloak_public_host
     sso_public_url                       = local.sso_public_url
     gitea_public_host                    = local.gitea_public_host
     grafana_public_host                  = local.grafana_public_host
