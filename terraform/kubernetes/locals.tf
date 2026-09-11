@@ -67,7 +67,6 @@ locals {
   cni_provider_effective               = lower(var.cni_provider)
   enable_cilium_effective              = local.cni_provider_effective == "cilium"
   enable_review_environments           = var.enable_argocd && var.enable_gitea
-  sso_provider_effective               = "keycloak"
   sso_provider_is_keycloak             = true
   platform_base_domain_effective       = lower(trimspace(var.platform_base_domain))
   platform_admin_base_domain_effective = trimspace(var.platform_admin_base_domain) != "" ? lower(trimspace(var.platform_admin_base_domain)) : local.platform_base_domain_effective
@@ -693,7 +692,6 @@ locals {
     sentiment_uat_public_host            = local.sentiment_uat_public_host
     subnetcalc_dev_public_host           = local.subnetcalc_dev_public_host
     subnetcalc_uat_public_host           = local.subnetcalc_uat_public_host
-    sso_provider                         = local.sso_provider_effective
     keycloak_realm                       = local.keycloak_realm
     enable_hubble                        = var.enable_hubble
     enable_policies                      = var.enable_policies
@@ -712,7 +710,6 @@ locals {
     enable_subnetcalc_apim_gateway       = var.enable_subnetcalc_apim_gateway
     enable_agentgateway_ai_gateway       = var.enable_agentgateway_ai_gateway
     agentgateway_chart_version           = var.agentgateway_chart_version
-    agentgateway_namespace               = var.agentgateway_namespace
     agentgateway_ai_gateway_model        = var.agentgateway_ai_gateway_model
     enable_prometheus                    = var.enable_prometheus
     enable_alertmanager                  = var.enable_alertmanager
@@ -745,16 +742,12 @@ locals {
     external_subnetcalc_frontend           = lookup(var.external_workload_image_refs, "subnetcalc-frontend", "")
     mcp_public_host                        = local.mcp_public_host
     mcp_console_public_host                = local.mcp_console_public_host
-    auth_chat_public_host                  = local.auth_chat_public_host
     agentgateway_ai_gateway_public_host    = local.agentgateway_ai_gateway_public_host
     prefer_external_platform               = var.prefer_external_platform_images
-    host_local_registry_enabled            = local.host_local_registry_enabled
-    host_local_registry_host               = local.host_local_registry_host_effective
     external_platform_grafana              = local.external_platform_grafana_image
     external_platform_idp_core             = local.external_platform_idp_core
     external_platform_backstage            = local.external_platform_backstage
     hardened_image_registry                = local.hardened_image_registry_effective
-    external_platform_hardened             = local.external_platform_hardened_registry
     cert_manager_chart_version             = var.cert_manager_chart_version
     grafana_chart_version                  = var.grafana_chart_version
     grafana_image_registry                 = local.grafana_image_registry_effective

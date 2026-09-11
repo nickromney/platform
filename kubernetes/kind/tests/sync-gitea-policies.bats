@@ -2396,7 +2396,7 @@ EOF
   [ -n "${registry_keys}" ]
 
   contract_keys="$(awk '
-    /^  policies_repo_render_contract = \{/ {inside = 1}
+    /^  policies_repo_render_contract = \{/ {inside = 1; depth = 1; next}
     inside {
       depth += gsub(/\{/, "{") - gsub(/\}/, "}")
       if (depth == 0) {exit}
@@ -2408,6 +2408,17 @@ EOF
   missing="$(comm -23 <(printf '%s\n' "${registry_keys}") <(printf '%s\n' "${contract_keys}"))"
   [ -z "${missing}" ] || {
     echo "render inputs with no Terraform contract key: ${missing}" >&2
+    false
+  }
+
+  # The other direction is dead weight rather than a wrong value, but it is
+  # still confusing: six keys were sent for a renderer that never read them.
+  # content_hash is the one deliberate exception, sent only so a changed stack
+  # directory redeploys.
+  unread="$(comm -13 <(printf '%s\n' "${registry_keys}") <(printf '%s\n' "${contract_keys}") |
+    grep -vx 'content_hash' || true)"
+  [ -z "${unread}" ] || {
+    echo "Terraform contract keys no render input reads: ${unread}" >&2
     false
   }
 }
