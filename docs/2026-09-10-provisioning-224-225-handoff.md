@@ -13,7 +13,7 @@ Finish and validate them instead of implementing the original proposals again.
 | --- | --- | --- |
 | Provisioning | Cache wiring and resource starvation have the strongest recorded timing evidence | Benchmark with identical profiles and cache state; preserve existing fixes |
 | [#225](https://github.com/nickromney/platform/issues/225) | Push diagnostics and a registry-copy fallback exist; successful mirroring is not established by current tests | Reproduce the four images, classify actual errors, prove cached images can be pulled |
-| [#224](https://github.com/nickromney/platform/issues/224) | Candidate policy renders; checks do not establish enforcement | Fix permissive probe classification, then prove allowed/denied client behavior |
+| [#224](https://github.com/nickromney/platform/issues/224) | DONE 2026-09-11: probe classification fixed, enforcement matrix added, live allow/deny proven | See `docs/2026-09-01-cilium-gateway-cutover.md` (admin IP allowlist) |
 
 <!-- markdownlint-enable MD013 -->
 
