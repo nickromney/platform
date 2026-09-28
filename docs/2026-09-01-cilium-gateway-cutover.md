@@ -187,6 +187,29 @@ Gateway API capability constraints (with Cilium-specific mitigation where availa
   selects that endpoint and contains every configured CIDR. See
   [#224](https://github.com/nickromney/platform/issues/224).
 
+  Enforcement was proven live on kind (2026-09-11) with
+  `admin_route_allowlist_cidrs = ["172.18.0.1/32"]`: the host got 302 on
+  admin and public routes. A sibling container at `172.18.0.3` got 403 on
+  admin routes and 302 on public ones. Hubble showed the denied requests as
+  `http-request DROPPED`. `cilium-dbg monitor --type drop` stays silent,
+  because the reject is an L7 HTTP 403, not a packet drop.
+
+  On kind, host requests reach the gateway from the Docker bridge gateway
+  (`172.18.0.1`), not from `127.0.0.1`. Allowlist that address, or a range
+  containing it. A loopback CIDR denies the host and looks like a broken
+  policy. `check-gateway-urls --enforce-admin-allowlist` binds the probe
+  socket with `curl --interface`. On a Docker Desktop host both origins
+  collapse to `172.18.0.1`, so the denied origin has to be probed from a
+  second address on the `kind` network, for example:
+
+  ```bash
+  docker run --rm --network kind curlimages/curl -sk -o /dev/null -w '%{http_code}\n' \
+    --resolve grafana.admin.127.0.0.1.sslip.io:443:<node-ip> \
+    https://grafana.admin.127.0.0.1.sslip.io/
+  ```
+
+  The default allowlist stays empty (permissive), so local profiles opt in.
+
 ## Single-node also works, and is the better shape
 
 Validated the same day, `KIND_WORKER_COUNT=0`, built from a full reset:
