@@ -151,19 +151,26 @@ unused_image_rows() {
 
   docker_read image ls --format '{{.ID}}	{{.Repository}}:{{.Tag}}	{{.Size}}' |
     awk -F '\t' -v used_file="${used_file}" -v protected_file="${protected_file}" '
+      # `docker image inspect` returns the full sha256 ID, while
+      # `docker image ls` truncates IDs to 12 characters by default. Keep the
+      # comparison in the same short-ID form Docker displays in its table.
+      function image_id_key(id) {
+        sub(/^sha256:/, "", id)
+        return substr(id, 1, 12)
+      }
       BEGIN {
         while ((getline line < used_file) > 0) {
-          if (line != "") used_map[line] = 1
+          if (line != "") used_map[image_id_key(line)] = 1
         }
         close(used_file)
         while ((getline line < protected_file) > 0) {
-          if (line != "") protected_map[line] = 1
+          if (line != "") protected_map[image_id_key(line)] = 1
         }
         close(protected_file)
       }
       $2 ~ /:<none>$/ { next }
-      used_map[$1] { next }
-      protected_map[$1] { next }
+      used_map[image_id_key($1)] { next }
+      protected_map[image_id_key($1)] { next }
       seen[$1] { next }
       {
         seen[$1] = 1

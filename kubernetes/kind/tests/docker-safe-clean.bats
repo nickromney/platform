@@ -55,6 +55,7 @@ OUT
 kindest/node:v1.35.1
 registry:2
 example:latest
+moby/buildkit:buildx-stable-1
 OUT
     exit 0
   fi
@@ -65,6 +66,7 @@ if [[ "${1:-}" == "image" && "${2:-}" == "inspect" ]]; then
     kindest/node:v1.35.1) echo "sha256:kindimg" ;;
     registry:2) echo "sha256:registryimg" ;;
     example:latest) echo "sha256:usedimg" ;;
+    moby/buildkit:buildx-stable-1) echo "sha256:28a898719c18aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" ;;
     *) exit 1 ;;
   esac
   exit 0
@@ -75,6 +77,7 @@ if [[ "${1:-}" == "image" && "${2:-}" == "ls" ]]; then
 kindimg	kindest/node:v1.35.1	989MB
 registryimg	registry:2	26.7MB
 usedimg	example:latest	12MB
+28a898719c18	moby/buildkit:buildx-stable-1	169.5MB
 platformimg	127.0.0.1:5002/platform/sentiment-api:latest	12MB
 oldimg	old-tool:latest	3.1GB
 oldimg	old-tool:v1	3.1GB
@@ -121,6 +124,7 @@ EOF
   [[ "${output}" == *"docker image prune -f"* ]]
   [[ "${output}" == *"old-tool:latest"* ]]
   [[ "${output}" == *"other-tool:latest"* ]]
+  [[ "${output}" != *"moby/buildkit:buildx-stable-1"* ]]
   [[ "${output}" != *"kindimg	kindest/node:v1.35.1"* ]]
   [[ "${output}" != *"registryimg	registry:2"* ]]
   [[ "${output}" != *"platformimg	127.0.0.1:5002/platform/sentiment-api:latest"* ]]
