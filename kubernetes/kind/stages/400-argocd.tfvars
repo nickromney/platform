@@ -9,7 +9,7 @@ kubeconfig_context   = "kind-kind-local"
 kind_api_server_port = 6443
 worker_count                      = 0
 cilium_kube_proxy_replacement     = true
-node_image           = "kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed"
+node_image           = "kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5"
 
 enable_image_preload            = true
 cni_provider                    = "cilium"

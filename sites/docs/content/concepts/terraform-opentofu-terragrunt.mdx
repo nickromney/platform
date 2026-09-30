@@ -185,7 +185,8 @@ The HCL stack is split by platform concern under `terraform/kubernetes`:
 | `.terraform.lock.hcl` | Provider lockfile. |
 
 The HCL itself also performs templating. For example, Kind config is generated
-from `terraform/kubernetes/templates/kind-config.yaml.tpl`:
+from `terraform/kubernetes/templates/kind-config.yaml.tpl`, and that rendered
+file is what `terraform_data.kind_cluster` passes to `kind create cluster --config`:
 
 ```hcl filename="terraform/kubernetes/cluster.tf"
 resource "local_file" "kind_config" {
@@ -208,7 +209,7 @@ The template then emits YAML from HCL data:
 networking:
   apiServerAddress: "127.0.0.1"
   apiServerPort: ${api_server_port}
-  disableDefaultCNI: true
+  disableDefaultCNI: ${disable_default_cni}
 nodes:
   - role: control-plane
 %{ if length(ports) > 0 ~}

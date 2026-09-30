@@ -71,7 +71,7 @@ resource "null_resource" "bootstrap_mkcert_ca" {
 
   triggers = {
     script_sha = filesha256(abspath("${local.stack_dir}/scripts/bootstrap-mkcert-ca.sh"))
-    cluster_id = var.provision_kind_cluster ? kind_cluster.local[0].id : "external:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : local.kubeconfig_path_expanded}"
+    cluster_id = var.provision_kind_cluster ? terraform_data.kind_cluster[0].id : "external:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : local.kubeconfig_path_expanded}"
   }
 
   provisioner "local-exec" {

@@ -11,7 +11,7 @@ resource "kubernetes_namespace_v1" "sso" {
   }
 
   depends_on = [
-    kind_cluster.local,
+    terraform_data.kind_cluster,
     null_resource.ensure_kind_kubeconfig,
   ]
 }

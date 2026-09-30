@@ -14,7 +14,7 @@ setup() {
   [ "${status}" -ne 0 ]
 }
 
-@test "preload-images blocks kind load with kind older than v0.32.0" {
+@test "preload-images blocks kind load with kind older than v0.33.0" {
   local stub_bin="${BATS_TEST_TMPDIR}/bin"
   local image_list="${BATS_TEST_TMPDIR}/images.txt"
   mkdir -p "${stub_bin}"
@@ -25,7 +25,7 @@ set -euo pipefail
 
 case "$*" in
   "version -q")
-    printf 'v0.31.0\n'
+    printf 'v0.32.0\n'
     ;;
   *)
     printf 'unexpected kind command: %s\n' "$*" >&2
@@ -39,11 +39,11 @@ EOF
   run env PATH="${stub_bin}:${PATH}" "${SCRIPT}" --execute --image-list "${image_list}" --cluster kind-local
 
   [ "${status}" -eq 1 ]
-  [[ "${output}" == *"kind load requires kind v0.32.0 or newer"* ]]
-  [[ "${output}" == *"installed kind v0.31.0"* ]]
+  [[ "${output}" == *"kind load requires kind v0.33.0 or newer"* ]]
+  [[ "${output}" == *"installed kind v0.32.0"* ]]
 }
 
-@test "preload-images allows kind load path with kind v0.32.0 or newer" {
+@test "preload-images allows kind load path with kind v0.33.0 or newer" {
   local stub_bin="${BATS_TEST_TMPDIR}/bin"
   local image_list="${BATS_TEST_TMPDIR}/images.txt"
   local lock_file="${BATS_TEST_TMPDIR}/preload.lock"
@@ -55,7 +55,7 @@ set -euo pipefail
 
 case "$*" in
   "version -q")
-    printf 'v0.32.0\n'
+    printf 'v0.33.0\n'
     ;;
   "get clusters")
     ;;
@@ -89,7 +89,7 @@ EOF
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"Kind cluster 'kind-local' not found"* ]]
-  [[ "${output}" != *"kind load requires kind v0.32.0 or newer"* ]]
+  [[ "${output}" != *"kind load requires kind v0.33.0 or newer"* ]]
 }
 
 @test "preload-images pull-only mode bypasses kind load version gate" {
@@ -128,7 +128,7 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Done (pull-only mode)."* ]]
   [[ "${output}" != *"kind should not be invoked"* ]]
-  [[ "${output}" != *"kind load requires kind v0.32.0 or newer"* ]]
+  [[ "${output}" != *"kind load requires kind v0.33.0 or newer"* ]]
 }
 
 @test "preload-images refresh-lock preserves explicit digest refs without retagging digest targets" {
@@ -228,7 +228,7 @@ set -euo pipefail
 
 case "$*" in
   "version -q")
-    printf 'v0.32.0\n'
+    printf 'v0.33.0\n'
     ;;
   "get clusters")
     printf 'kind-local\n'

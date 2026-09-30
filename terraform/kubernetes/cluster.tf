@@ -87,70 +87,52 @@ resource "local_file" "kind_config" {
     api_server_port                      = var.kind_api_server_port
     control_plane_kubeadm_config_patches = local.kind_control_plane_kubeadm_config_patches
     kube_proxy_mode                      = var.cilium_kube_proxy_replacement ? "none" : "iptables"
+    disable_default_cni                  = local.kind_disable_default_cni
   })
 }
 
-resource "kind_cluster" "local" {
+# The cluster is created by the pinned kind CLI (.devcontainer/toolchain-versions.sh)
+# from the rendered local_file.kind_config, not by the tehcyx/kind provider.
+# The provider embeds its own copy of kind, and its latest release (v0.11.0)
+# embeds kind v0.31.0, which renders kubeadm v1beta3 config that Kubernetes
+# 1.37's kubeadm rejects. Driving the CLI keeps node images and the kind that
+# understands them on one pin.
+resource "terraform_data" "kind_cluster" {
   count = var.provision_kind_cluster ? 1 : 0
 
-  name            = var.cluster_name
-  wait_for_ready  = false
-  kubeconfig_path = local.kubeconfig_path_expanded
-  node_image      = var.node_image
+  # Everything kind reads at create time. A change to any of it needs a new
+  # cluster, which is what the provider's ForceNew attributes used to do.
+  triggers_replace = {
+    name            = var.cluster_name
+    node_image      = var.node_image
+    kind_config_sha = sha256(local_file.kind_config[0].content)
+    kubeconfig_path = local.kubeconfig_path_expanded
+  }
 
-  kind_config {
-    kind        = "Cluster"
-    api_version = "kind.x-k8s.io/v1alpha4"
+  # Destroy-time provisioners can only read self, so carry what delete needs.
+  input = {
+    name            = var.cluster_name
+    kubeconfig_path = local.kubeconfig_path_expanded
+  }
 
-    networking {
-      api_server_address  = "127.0.0.1"
-      api_server_port     = var.kind_api_server_port
-      disable_default_cni = local.kind_disable_default_cni
-      kube_proxy_mode     = var.cilium_kube_proxy_replacement ? "none" : "iptables"
+  provisioner "local-exec" {
+    command     = "kind create cluster --name \"$KIND_CLUSTER_NAME\" --image \"$KIND_NODE_IMAGE\" --config \"$KIND_CONFIG_PATH\" --kubeconfig \"$KIND_KUBECONFIG_PATH\""
+    interpreter = ["/bin/bash", "-c"]
+    environment = {
+      KIND_CLUSTER_NAME    = var.cluster_name
+      KIND_NODE_IMAGE      = var.node_image
+      KIND_CONFIG_PATH     = local_file.kind_config[0].filename
+      KIND_KUBECONFIG_PATH = local.kubeconfig_path_expanded
     }
+  }
 
-    node {
-      role = "control-plane"
-
-      # Empty for every worker_count > 0, so the default multi-node topology
-      # keeps the control-plane taint it has always had. See
-      # local.kind_control_plane_kubeadm_config_patches.
-      kubeadm_config_patches = local.kind_control_plane_kubeadm_config_patches
-
-      dynamic "extra_port_mappings" {
-        for_each = local.extra_port_mappings
-        content {
-          container_port = extra_port_mappings.value.container_port
-          host_port      = extra_port_mappings.value.host_port
-          listen_address = extra_port_mappings.value.listen_address
-          protocol       = extra_port_mappings.value.protocol
-        }
-      }
-
-      dynamic "extra_mounts" {
-        for_each = local.kind_extra_mounts
-        content {
-          host_path      = extra_mounts.value.host_path
-          container_path = extra_mounts.value.container_path
-          read_only      = extra_mounts.value.read_only
-        }
-      }
-    }
-
-    dynamic "node" {
-      for_each = local.kind_workers
-      content {
-        role = "worker"
-
-        dynamic "extra_mounts" {
-          for_each = local.kind_extra_mounts
-          content {
-            host_path      = extra_mounts.value.host_path
-            container_path = extra_mounts.value.container_path
-            read_only      = extra_mounts.value.read_only
-          }
-        }
-      }
+  provisioner "local-exec" {
+    when        = destroy
+    command     = "kind delete cluster --name \"$KIND_CLUSTER_NAME\" --kubeconfig \"$KIND_KUBECONFIG_PATH\""
+    interpreter = ["/bin/bash", "-c"]
+    environment = {
+      KIND_CLUSTER_NAME    = self.input.name
+      KIND_KUBECONFIG_PATH = self.input.kubeconfig_path
     }
   }
 
@@ -165,7 +147,7 @@ resource "kind_cluster" "local" {
 
 resource "null_resource" "ensure_kind_kubeconfig" {
   triggers = {
-    cluster_id         = var.provision_kind_cluster ? kind_cluster.local[0].id : "external:${local.kubeconfig_path_expanded}:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : "default"}"
+    cluster_id         = var.provision_kind_cluster ? terraform_data.kind_cluster[0].id : "external:${local.kubeconfig_path_expanded}:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : "default"}"
     kubeconfig_path    = local.kubeconfig_path_expanded
     ensure_script_sha  = filesha256("${local.repo_root}/kubernetes/kind/scripts/ensure-kind-kubeconfig.sh")
     rewrite_script_sha = filesha256("${local.repo_root}/kubernetes/kind/scripts/rewrite-devcontainer-kubeconfig.sh")
@@ -187,7 +169,7 @@ resource "null_resource" "preload_images" {
   count = var.enable_image_preload && var.provision_kind_cluster ? 1 : 0
 
   triggers = {
-    cluster_id                  = kind_cluster.local[0].id
+    cluster_id                  = terraform_data.kind_cluster[0].id
     preload_script              = filesha256("${local.stack_dir}/scripts/preload-images.sh")
     preload_image_set           = filesha256(local.preload_image_list_path_effective)
     preload_image_list          = local.preload_image_list_path_effective
@@ -220,7 +202,7 @@ resource "null_resource" "preload_images" {
   }
 
   depends_on = [
-    kind_cluster.local,
+    terraform_data.kind_cluster,
     null_resource.ensure_kind_kubeconfig,
     null_resource.kind_restart_containerd_on_registry_config_change,
   ]
@@ -230,7 +212,7 @@ resource "null_resource" "kind_restart_containerd_on_registry_config_change" {
   count = var.provision_kind_cluster ? 1 : 0
 
   triggers = {
-    cluster_id                 = kind_cluster.local[0].id
+    cluster_id                 = terraform_data.kind_cluster[0].id
     dockerio_hosts_toml_sha    = sha256(local_file.containerd_hosts_dockerio[0].content)
     gitea_registry_host        = var.gitea_registry_host
     gitea_registry_node_host   = local.gitea_registry_node_host_effective
@@ -258,7 +240,7 @@ resource "null_resource" "kind_restart_containerd_on_registry_config_change" {
   }
 
   depends_on = [
-    kind_cluster.local,
+    terraform_data.kind_cluster,
     null_resource.ensure_kind_kubeconfig,
     local_file.containerd_hosts_dockerio,
     local_file.containerd_hosts_gitea,

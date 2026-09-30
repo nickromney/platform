@@ -70,6 +70,9 @@ echo "==> running the full Bats gate inside the devcontainer"
 # than Linux -- kind reports push_host=host.docker.internal, and lima reports
 # the *kind* kubeconfig, because KUBECONFIG_PATH is set globally to a
 # kind-specific value (worth fixing in devcontainer.json on its own merits).
+# PLATFORM_DEVCONTAINER=1 is the switch behind that wiring (kind's cache push
+# host, the SSO runner's resolver rules), and CAROOT points mkcert at the
+# devcontainer's real CA; CI sets neither.
 #
 # A plain shell, not a login shell: `bash -lc` re-sources the profile and puts
 # the overrides straight back.
@@ -82,7 +85,9 @@ PLATFORM_WORKSPACE="${REPO_ROOT}" \
     set -euo pipefail
     cd "${PLATFORM_WORKSPACE}"
     git config --global --add safe.directory "$(pwd)" || true
-    env -u KUBECONFIG_PATH \
+    env -u PLATFORM_DEVCONTAINER \
+        -u CAROOT \
+        -u KUBECONFIG_PATH \
         -u KIND_KUBECONFIG_PATH \
         -u DEFAULT_KUBECONFIG_PATH \
         -u PLATFORM_DEVCONTAINER_HOST_ALIAS \

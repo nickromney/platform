@@ -75,7 +75,7 @@ assert runner_config["runner"]["labels"] == ["self-hosted", "linux", "arm64", "i
 pod_spec = deployment["spec"]["template"]["spec"]
 assert pod_spec["serviceAccountName"] == "act-runner"
 init_by_name = {container["name"]: container for container in pod_spec["initContainers"]}
-assert init_by_name["install-kubectl"]["image"] == "kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed"
+assert init_by_name["install-kubectl"]["image"] == "kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5"
 assert "/tools/kubectl" in "\n".join(init_by_name["install-kubectl"]["command"])
 assert pod_spec["containers"][0]["env"][-1]["value"].startswith("/tools:")
 

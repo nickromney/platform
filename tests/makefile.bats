@@ -565,6 +565,8 @@ SH
   lint_shell_stub="${BATS_TEST_TMPDIR}/lint-shell.sh"
   lint_cilium_stub="${BATS_TEST_TMPDIR}/lint-cilium.sh"
   lint_kyverno_stub="${BATS_TEST_TMPDIR}/lint-kyverno.sh"
+  lint_python_stub="${BATS_TEST_TMPDIR}/lint-python.sh"
+  lint_shellcheck_stub="${BATS_TEST_TMPDIR}/lint-shellcheck.sh"
   log_file="${BATS_TEST_TMPDIR}/lint.log"
 
   cat >"${lint_yaml_stub}" <<EOF
@@ -609,9 +611,25 @@ printf 'kyverno %s\n' "\$*" >>"${log_file}"
 EOF
   chmod +x "${lint_kyverno_stub}"
 
+  cat >"${lint_python_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'python %s\n' "\$*" >>"${log_file}"
+EOF
+  chmod +x "${lint_python_stub}"
+
+  cat >"${lint_shellcheck_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'shellcheck %s\n' "\$*" >>"${log_file}"
+EOF
+  chmod +x "${lint_shellcheck_stub}"
+
   run make -C "${REPO_ROOT}" lint \
     LINT_YAML_SCRIPT="${lint_yaml_stub}" \
     LINT_MARKDOWN_SCRIPT="${lint_markdown_stub}" \
+    LINT_PYTHON_SCRIPT="${lint_python_stub}" \
+    LINT_SHELLCHECK_SCRIPT="${lint_shellcheck_stub}" \
     LINT_BASH32_SCRIPT="${lint_bash32_stub}" \
     AUDIT_SHELL_SCRIPTS_SCRIPT="${lint_shell_stub}" \
     VALIDATE_CILIUM_POLICIES_SCRIPT="${lint_cilium_stub}" \
@@ -622,7 +640,7 @@ EOF
   run cat "${log_file}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = $'yaml --execute\nmarkdown --execute\nbash32 --execute\nshell-audit --execute\ncilium --mode static --execute\nkyverno --mode static --execute' ]
+  [ "${output}" = $'yaml --execute\nmarkdown --execute\npython --execute\nbash32 --execute\nshell-audit --execute\nshellcheck --execute\ncilium --mode static --execute\nkyverno --mode static --execute' ]
 }
 
 @test "root lint-bash32 delegates directly to the Bash 3.2 audit script" {
