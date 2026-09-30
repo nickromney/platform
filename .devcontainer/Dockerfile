@@ -17,6 +17,7 @@ COPY install-toolchain.sh /tmp/devcontainer/install-toolchain.sh
 # hadolint ignore=DL3008
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        apache2-utils \
         bats \
         bash-completion \
         build-essential \

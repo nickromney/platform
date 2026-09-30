@@ -65,19 +65,25 @@ sample_is_named() {
 EOF
   cp "${TARGET}" "${PRISTINE}"
 
-  cat >"${SUITE}" <<'EOF'
+  # Bats 1.10 (the devcontainer's apt build) rewrites every line that starts
+  # with @test before running a file -- heredoc bodies included -- which would
+  # leave this fixture with no tests at all. Write @TEST and swap it on disk.
+  sed 's/^@TEST /@test /' >"${SUITE}" <<'EOF'
 setup() {
   source "${TARGET}"
 }
 
-@test "positive" { sample_is_positive 5; }
-@test "negative is not positive" { ! sample_is_positive -1; }
-@test "even" { sample_is_even 4; }
-@test "odd is not even" { ! sample_is_even 3; }
-@test "in range" { sample_in_range 5; }
-@test "out of range" { ! sample_in_range 11; }
-@test "named" { sample_is_named sample; }
-@test "not named" { ! sample_is_named other; }
+@TEST "positive" { sample_is_positive 5; }
+@TEST "negative is not positive" { ! sample_is_positive -1; }
+@TEST "even" { sample_is_even 4; }
+@TEST "odd is not even" { ! sample_is_even 3; }
+@TEST "in range" { sample_in_range 5; }
+@TEST "out of range" { ! sample_in_range 11; }
+@TEST "named" { sample_is_named sample; }
+@TEST "not named" { ! sample_is_named other; }
+# Pace each mutant's suite run. Without it the whole loop finishes in well under
+# a second on Linux, before the signal tests can interrupt it mid-run.
+@TEST "pace" { sleep 0.3; }
 EOF
 }
 

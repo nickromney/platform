@@ -8,6 +8,8 @@ setup() {
   export TEST_BIN="${BATS_TEST_TMPDIR}/bin"
   export HOME="${BATS_TEST_TMPDIR}/home"
   export MKCERT_CAROOT="${BATS_TEST_TMPDIR}/mkcert"
+  # mkcert honours CAROOT over HOME; the devcontainer sets it to a real CA.
+  export CAROOT="${MKCERT_CAROOT}"
   mkdir -p "${TEST_BIN}" "${HOME}" "${MKCERT_CAROOT}"
   export PATH="${TEST_BIN}:${PATH}"
 

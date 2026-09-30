@@ -116,31 +116,34 @@ PYEOF
   local sandbox="${BATS_TEST_TMPDIR}/probe"
   mkdir -p "${sandbox}"
 
+  # The fixtures spell @TEST and sed restores it: Bats 1.10 (the devcontainer's
+  # apt build) counts every line-leading @test in this file, heredocs included,
+  # and fails the run when the executed total comes up short.
   # Writes: literal, through a variable, and via a redirect.
-  cat >"${sandbox}/writer.bats" <<'EOF'
-@test "plants a fixture" {
+  sed 's/^@TEST /@test /' >"${sandbox}/writer.bats" <<'EOF'
+@TEST "plants a fixture" {
   rm -rf "${REPO_ROOT}/apps/zz-probe"
   mkdir -p "${REPO_ROOT}/apps/zz-probe"
 }
 EOF
-  cat >"${sandbox}/aliased.bats" <<'EOF'
+  sed 's/^@TEST /@test /' >"${sandbox}/aliased.bats" <<'EOF'
 setup() {
   export RUN_DIR="${REPO_ROOT}/.run/probe"
 }
-@test "writes through a name" {
+@TEST "writes through a name" {
   rm -rf "${RUN_DIR}"
 }
 EOF
-  cat >"${sandbox}/redirect.bats" <<'EOF'
-@test "redirects into the tree" {
+  sed 's/^@TEST /@test /' >"${sandbox}/redirect.bats" <<'EOF'
+@TEST "redirects into the tree" {
   printf 'x\n' >"${REPO_ROOT}/apps/zz-probe.txt"
 }
 EOF
 
   # Reads: the sandboxing idiom, where REPO_ROOT is the source and the
   # destination is the test's own tmpdir. These must not be flagged.
-  cat >"${sandbox}/reader.bats" <<'EOF'
-@test "copies out of the tree into a sandbox" {
+  sed 's/^@TEST /@test /' >"${sandbox}/reader.bats" <<'EOF'
+@TEST "copies out of the tree into a sandbox" {
   cp "${REPO_ROOT}/Makefile" "${BATS_TEST_TMPDIR}/Makefile"
   cp -R "${REPO_ROOT}/scripts/hooks" "${BATS_TEST_TMPDIR}/hooks"
   ln -s "${REPO_ROOT}/scripts/lib/shell-cli.sh" "${BATS_TEST_TMPDIR}/shell-cli.sh"
