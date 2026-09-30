@@ -144,6 +144,13 @@ EOF
   [ "${output}" = "$(printf 'v1.36.1\nv0.32.0')" ]
 }
 
+@test "check-version requires kind v0.33.0 for Kubernetes 1.37 node images" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; tag=\"\$(image_tag_from_ref 'kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5')\"; printf '%s\n%s\n' \"\${tag}\" \"\$(kind_load_minimum_version_for_node_tag \"\${tag}\")\""
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf 'v1.37.0\nv0.33.0')" ]
+}
+
 @test "check-version keeps running when kindest node tag lookup is unavailable" {
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; docker_hub_repo_tags() { return 1; }; kindest_node_latest_tag; printf 'after lookup\n'"
 

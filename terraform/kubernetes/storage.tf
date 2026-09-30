@@ -2,7 +2,7 @@ resource "null_resource" "kind_storage" {
   count = var.provision_kind_cluster && local.enable_cilium_effective ? 1 : 0
 
   triggers = {
-    cluster_id              = kind_cluster.local[0].id
+    cluster_id              = terraform_data.kind_cluster[0].id
     ensure_script_sha       = filesha256("${local.stack_dir}/scripts/ensure-kind-storage.sh")
     local_path_manifest_sha = filesha256("${local.stack_dir}/config/local-path-storage-v0.0.35.yaml")
     standard_manifest_sha   = filesha256("${local.stack_dir}/config/kind-standard-storageclass.yaml")

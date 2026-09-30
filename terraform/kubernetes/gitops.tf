@@ -475,7 +475,7 @@ resource "null_resource" "argocd_repo_server_restart" {
   count = local.enable_gitops_repo ? 1 : 0
 
   triggers = {
-    cluster_id       = var.provision_kind_cluster ? kind_cluster.local[0].id : "external:${local.kubeconfig_path_expanded}:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : "default"}"
+    cluster_id       = var.provision_kind_cluster ? terraform_data.kind_cluster[0].id : "external:${local.kubeconfig_path_expanded}:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : "default"}"
     gitea_host_key   = sha1(local.gitea_known_hosts_cluster_content)
     argocd_chart_ver = var.argocd_chart_version
     known_hosts_hash = local.argocd_gitops_repo_trust_hash
@@ -657,7 +657,7 @@ resource "null_resource" "wait_gitea_actions_runner_ready" {
 
   triggers = {
     # Re-run if the cluster identity changes (kind reset/recreate or kubeconfig/context switch).
-    cluster_id = var.provision_kind_cluster ? kind_cluster.local[0].id : "external:${local.kubeconfig_path_expanded}:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : "default"}"
+    cluster_id = var.provision_kind_cluster ? terraform_data.kind_cluster[0].id : "external:${local.kubeconfig_path_expanded}:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : "default"}"
     script_sha = filesha256("${local.stack_dir}/scripts/wait-for-gitea-actions-runner.sh")
     # If managed via app-of-apps, re-run when the manifest changes.
     runner_manifest_hash = var.enable_app_of_apps ? filesha256("${local.stack_dir}/apps/argocd-apps/60-gitea-actions-runner.application.yaml") : "n/a"

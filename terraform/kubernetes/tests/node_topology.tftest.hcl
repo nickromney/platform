@@ -8,10 +8,9 @@
 # kind does not pass. So the taint has to come off via kubeadm instead, and
 # these tests pin that it does.
 #
-# The stack writes the kind config twice: inline into the tehcyx/kind provider
-# (kind_cluster.local) and as a rendered file (local_file.kind_config) for the
-# kind CLI and the diagnostics that read it. Both are asserted, because a fix
-# to only one of them is a single-node cluster that schedules nothing.
+# The rendered file (local_file.kind_config) is what `kind create cluster
+# --config` reads (terraform_data.kind_cluster), so it is the only place the
+# patch has to land.
 
 variables {
   cni_provider  = "none"
@@ -32,31 +31,10 @@ run "single_node_makes_the_control_plane_schedulable" {
     error_message = "Expected worker_count = 0 to produce no worker nodes"
   }
 
-  # The provider path. tehcyx/kind v0.11.0 maps node.kubeadm_config_patches
-  # onto v1alpha4.Node.KubeadmConfigPatches, which kind applies to the
-  # generated kubeadm InitConfiguration as an RFC 7386 merge patch.
-  assert {
-    condition     = length(kind_cluster.local[0].kind_config[0].node) == 1
-    error_message = "Expected the inline kind_config to declare exactly one node at worker_count = 0"
-  }
-
-  assert {
-    condition     = kind_cluster.local[0].kind_config[0].node[0].role == "control-plane"
-    error_message = "Expected the only inline node to be the control plane"
-  }
-
-  # An explicitly empty taints list is kubeadm's "register this node with no
-  # taints"; leaving the field absent is what asks for the control-plane taint.
-  assert {
-    condition = length([
-      for patch in kind_cluster.local[0].kind_config[0].node[0].kubeadm_config_patches :
-      patch
-      if strcontains(patch, "kind: InitConfiguration") && strcontains(patch, "taints: []")
-    ]) == 1
-    error_message = "Expected the inline control-plane node to carry a kubeadm patch clearing nodeRegistration.taints"
-  }
-
-  # The rendered-template path has to agree with the inline path.
+  # kind applies kubeadmConfigPatches to the generated InitConfiguration as an
+  # RFC 7386 merge patch. An explicitly empty taints list is kubeadm's
+  # "register this node with no taints"; leaving the field absent is what asks
+  # for the control-plane taint.
   assert {
     condition     = strcontains(local_file.kind_config[0].content, "kubeadmConfigPatches:")
     error_message = "Expected the rendered kind config to carry kubeadmConfigPatches at worker_count = 0"
@@ -90,11 +68,6 @@ run "multi_node_keeps_the_control_plane_tainted" {
   assert {
     condition     = length(local.kind_control_plane_kubeadm_config_patches) == 0
     error_message = "Expected no kubeadm config patches once there is a worker to schedule onto"
-  }
-
-  assert {
-    condition     = length(kind_cluster.local[0].kind_config[0].node[0].kubeadm_config_patches) == 0
-    error_message = "Expected the inline control-plane node to keep its default taint at worker_count = 1"
   }
 
   assert {

@@ -70,7 +70,7 @@ LOCK_FILE=""
 REFRESH_LOCK=0
 PARALLELISM=4
 MODE="default"
-KIND_LOAD_MIN_VERSION="v0.32.0"
+KIND_LOAD_MIN_VERSION="v0.33.0"
 WORKFLOW_DOCKERFILES=(
   "apps/subnetcalc/app/Dockerfile"
   "apps/apim-simulator/app/Dockerfile"
@@ -598,7 +598,7 @@ ensure_kind_load_cli_compatible() {
     return 0
   fi
 
-  echo "kind load requires kind ${KIND_LOAD_MIN_VERSION} or newer for Kubernetes 1.36 node images; installed kind ${installed:-unknown}." >&2
+  echo "kind load requires kind ${KIND_LOAD_MIN_VERSION} or newer for Kubernetes 1.37 node images; installed kind ${installed:-unknown}." >&2
   echo "Upgrade kind or use --pull-only / registry image distribution instead of the kind load path." >&2
   exit 1
 }

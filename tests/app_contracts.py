@@ -5900,7 +5900,7 @@ def external_runtime_image_ref_expectations() -> dict[str, dict[str, int]]:
         "terraform/kubernetes/apps/gitea-actions-runner/deployment.yaml": {
             "image: docker:29.4.3-cli": 1,
             "image: gitea/act_runner:0.4.1": 2,
-            "image: kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed": 1,
+            "image: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5": 1,
         },
         "terraform/kubernetes/scripts/check-security.sh": {
             'POLICY_PROBE_IMAGE="curlimages/curl:8.19.0"': 1,
@@ -5939,7 +5939,7 @@ def preload_image_required_refs() -> tuple[str, ...]:
     return (
         "docker:29.4.3-cli",
         "gitea/act_runner:0.4.1",
-        "kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed",
+        "kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5",
         "mcr.microsoft.com/playwright:v1.58.2-noble",
         "dhi.io/golang:1.26-alpine3.23-dev",
         "dhi.io/static:20260413-alpine3.23",
@@ -5965,7 +5965,7 @@ def preload_image_lock_refs() -> tuple[str, ...]:
     return (
         "docker:29.4.3-cli",
         "gitea/act_runner:0.4.1",
-        "kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed",
+        "kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5",
         "mcr.microsoft.com/playwright:v1.58.2-noble",
         "docker.io/curlimages/curl:8.19.0",
         "curlimages/curl:8.19.0",

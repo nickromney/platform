@@ -34,7 +34,7 @@ resource "helm_release" "cilium" {
   values = [yamlencode(local.cilium_values)]
 
   depends_on = [
-    kind_cluster.local,
+    terraform_data.kind_cluster,
     null_resource.ensure_kind_kubeconfig,
     null_resource.preload_images,
     null_resource.hubble_ui_service_legacy_cleanup,

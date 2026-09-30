@@ -2185,7 +2185,9 @@ kind_load_minimum_version_for_node_tag() {
     return 0
   fi
 
-  if version_gte "${node_version}" "1.36.0"; then
+  if version_gte "${node_version}" "1.37.0"; then
+    printf '%s\n' "v0.33.0"
+  elif version_gte "${node_version}" "1.36.0"; then
     printf '%s\n' "v0.32.0"
   fi
 }

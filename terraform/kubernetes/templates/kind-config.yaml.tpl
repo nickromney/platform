@@ -3,7 +3,7 @@ apiVersion: kind.x-k8s.io/v1alpha4
 networking:
   apiServerAddress: "127.0.0.1"
   apiServerPort: ${api_server_port}
-  disableDefaultCNI: true
+  disableDefaultCNI: ${disable_default_cni}
   kubeProxyMode: "${kube_proxy_mode}"
 nodes:
   - role: control-plane

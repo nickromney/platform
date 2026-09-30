@@ -10,7 +10,7 @@ resource "kubernetes_namespace_v1" "argocd" {
   }
 
   depends_on = [
-    kind_cluster.local,
+    terraform_data.kind_cluster,
     null_resource.ensure_kind_kubeconfig,
   ]
 }
@@ -31,7 +31,7 @@ resource "helm_release" "argocd" {
   values = [yamlencode(local.argocd_values)]
 
   depends_on = [
-    kind_cluster.local,
+    terraform_data.kind_cluster,
     null_resource.ensure_kind_kubeconfig,
     helm_release.cilium,
     null_resource.kind_storage,

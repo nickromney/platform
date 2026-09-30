@@ -481,8 +481,14 @@ check-kind-state:
 		echo "Refusing to continue against a live cluster with zero-byte state."; \
 		exit 1; \
 	fi; \
-	if ! jq -e '.resources[] | select(.type=="kind_cluster" and .name=="local" and (.instances | length) > 0)' "$(STATE_FILE)" >/dev/null 2>&1; then \
-		echo "kind-local exists, but $(STATE_FILE) does not contain kind_cluster.local[0]."; \
+	if jq -e '.resources[] | select(.type=="kind_cluster" and .name=="local" and (.instances | length) > 0)' "$(STATE_FILE)" >/dev/null 2>&1; then \
+		echo "kind-local exists, but $(STATE_FILE) still tracks it as the retired tehcyx/kind kind_cluster.local[0]."; \
+		echo "The stack now creates the cluster with the kind CLI (terraform_data.kind_cluster), and OpenTofu cannot plan without the removed provider."; \
+		echo "Recreate it: make -C kubernetes/kind reset AUTO_APPROVE=1, then re-apply your stage."; \
+		exit 1; \
+	fi; \
+	if ! jq -e '.resources[] | select(.type=="terraform_data" and .name=="kind_cluster" and (.instances | length) > 0)' "$(STATE_FILE)" >/dev/null 2>&1; then \
+		echo "kind-local exists, but $(STATE_FILE) does not contain terraform_data.kind_cluster[0]."; \
 		if [ -f "$(STATE_FILE).backup" ]; then \
 			echo "A backup exists at $(STATE_FILE).backup."; \
 		fi; \

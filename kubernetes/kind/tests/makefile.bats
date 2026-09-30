@@ -1102,8 +1102,8 @@ EOF
   "version": 4,
   "resources": [
     {
-      "type": "kind_cluster",
-      "name": "local",
+      "type": "terraform_data",
+      "name": "kind_cluster",
       "instances": [{}]
     }
   ]
@@ -1141,6 +1141,47 @@ EOF
   [[ "${output}" == *".terraform.tfstate.lock.info"* ]]
   [[ "${output}" == *"Lock: OperationTypeApply; tester; 2026-05-02T06:07:31Z"* ]]
   [[ "${output}" == *"Refusing to continue while the previous Terraform/OpenTofu operation may still be active"* ]]
+}
+
+write_live_kind_stubs() {
+  cat >"${TEST_BIN}/docker" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/docker"
+
+  cat >"${TEST_BIN}/kind" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "get" && "${2:-}" == "clusters" ]]; then
+  printf 'kind-local\n'
+  exit 0
+fi
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/kind"
+}
+
+@test "kind check-kind-state sends retired tehcyx/kind state to reset" {
+  state_file="${BATS_TEST_TMPDIR}/terraform.tfstate"
+  printf '%s\n' '{"version":4,"resources":[{"type":"kind_cluster","name":"local","instances":[{}]}]}' >"${state_file}"
+  write_live_kind_stubs
+
+  run make -C "${REPO_ROOT}/kubernetes/kind" check-kind-state STATE_FILE="${state_file}"
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"retired tehcyx/kind kind_cluster.local[0]"* ]]
+  [[ "${output}" == *"make -C kubernetes/kind reset AUTO_APPROVE=1"* ]]
+}
+
+@test "kind check-kind-state accepts state tracking the kind CLI cluster" {
+  state_file="${BATS_TEST_TMPDIR}/terraform.tfstate"
+  printf '%s\n' '{"version":4,"resources":[{"type":"terraform_data","name":"kind_cluster","instances":[{}]}]}' >"${state_file}"
+  write_live_kind_stubs
+
+  run make -C "${REPO_ROOT}/kubernetes/kind" check-kind-state STATE_FILE="${state_file}"
+
+  [ "${status}" -eq 0 ]
 }
 
 @test "kind state-reset removes only the local terraform lock" {

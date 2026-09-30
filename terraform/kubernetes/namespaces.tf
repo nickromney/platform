@@ -10,7 +10,7 @@ resource "kubernetes_namespace_v1" "gitea" {
   }
 
   depends_on = [
-    kind_cluster.local,
+    terraform_data.kind_cluster,
     null_resource.ensure_kind_kubeconfig,
   ]
 }
@@ -127,7 +127,7 @@ __YAML__
   server_side_apply = true
 
   depends_on = [
-    kind_cluster.local,
+    terraform_data.kind_cluster,
     null_resource.ensure_kind_kubeconfig,
   ]
 }
@@ -150,7 +150,7 @@ __YAML__
   server_side_apply = true
 
   depends_on = [
-    kind_cluster.local,
+    terraform_data.kind_cluster,
     null_resource.ensure_kind_kubeconfig,
   ]
 }
@@ -173,7 +173,7 @@ __YAML__
   server_side_apply = true
 
   depends_on = [
-    kind_cluster.local,
+    terraform_data.kind_cluster,
     null_resource.ensure_kind_kubeconfig,
   ]
 }
@@ -190,7 +190,7 @@ resource "kubernetes_namespace_v1" "headlamp" {
   }
 
   depends_on = [
-    kind_cluster.local,
+    terraform_data.kind_cluster,
     null_resource.ensure_kind_kubeconfig,
   ]
 }
@@ -210,7 +210,7 @@ resource "kubernetes_namespace_v1" "gitea_runner" {
   }
 
   depends_on = [
-    kind_cluster.local,
+    terraform_data.kind_cluster,
     null_resource.ensure_kind_kubeconfig,
   ]
 }
@@ -230,7 +230,7 @@ resource "kubernetes_namespace_v1" "dev" {
   }
 
   depends_on = [
-    kind_cluster.local,
+    terraform_data.kind_cluster,
     null_resource.ensure_kind_kubeconfig,
   ]
 }
@@ -251,7 +251,7 @@ resource "kubernetes_namespace_v1" "uat" {
   }
 
   depends_on = [
-    kind_cluster.local,
+    terraform_data.kind_cluster,
     null_resource.ensure_kind_kubeconfig,
   ]
 }
@@ -271,7 +271,7 @@ resource "kubernetes_namespace_v1" "sit" {
   }
 
   depends_on = [
-    kind_cluster.local,
+    terraform_data.kind_cluster,
     null_resource.ensure_kind_kubeconfig,
   ]
 }
@@ -292,7 +292,7 @@ resource "kubernetes_namespace_v1" "review" {
   }
 
   depends_on = [
-    kind_cluster.local,
+    terraform_data.kind_cluster,
     null_resource.ensure_kind_kubeconfig,
   ]
 }
@@ -318,7 +318,7 @@ resource "kubernetes_namespace_v1" "apim" {
   }
 
   depends_on = [
-    kind_cluster.local,
+    terraform_data.kind_cluster,
     null_resource.ensure_kind_kubeconfig,
   ]
 }

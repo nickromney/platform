@@ -29,7 +29,7 @@ resource "kubectl_manifest" "gateway_bootstrap_crds" {
   server_side_apply = true
 
   depends_on = [
-    kind_cluster.local,
+    terraform_data.kind_cluster,
     null_resource.ensure_kind_kubeconfig,
   ]
 }
@@ -75,7 +75,7 @@ __YAML__
   server_side_apply = true
 
   depends_on = [
-    kind_cluster.local,
+    terraform_data.kind_cluster,
     null_resource.ensure_kind_kubeconfig,
   ]
 }
