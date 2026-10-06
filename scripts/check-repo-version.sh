@@ -419,7 +419,7 @@ check_vendored_assets() {
   section "Vendored Frontend Assets"
 
   local output status=0
-  if output="$(
+  if output=$(
     run_inline_python \
       "${REPO_ROOT}" \
       "${CHECK_VERSION_VENDORED_ASSETS_MANIFEST}" \
@@ -579,7 +579,7 @@ for asset in assets:
 
 raise SystemExit(1 if failures else 0)
 PY
-  )"; then
+  ); then
     status=0
   else
     status=$?
