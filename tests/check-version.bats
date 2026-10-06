@@ -534,3 +534,8 @@ run_vendored_asset_check() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"demo-lib@1.2.3 is off the demo-lib stable line; dist-tag latest is 4.0.0"* ]]
 }
+
+@test "check-version parses with the system Bash heredoc parser" {
+  run /bin/bash -n "${SCRIPT}"
+  [ "$status" -eq 0 ]
+}
