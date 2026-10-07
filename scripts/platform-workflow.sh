@@ -993,6 +993,26 @@ case "${SUBCOMMAND}" in
     ;;
 esac
 
+validate_requested_output() {
+  local format="${OUTPUT_FORMAT}"
+  while [[ $# -gt 0 ]]; do
+    if [[ "$1" = "--output" ]]; then
+      require_value "$1" "${2-}"
+      format="$2"
+      shift
+    fi
+    shift
+  done
+  case "${format}" in
+    text|json) ;;
+    *) die_usage "Invalid --output '${format}'. Expected text or json" ;;
+  esac
+}
+
+# App/preset argument parsing needs the options cache, so validate the requested
+# output before creating it or writing a profile/tfvars file.
+validate_requested_output "$@"
+
 render_workflow_options
 
 shell_cli_init_standard_flags

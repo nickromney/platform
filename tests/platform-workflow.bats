@@ -6,6 +6,23 @@ setup() {
   export SCRIPT="${REPO_ROOT}/scripts/platform-workflow.sh"
 }
 
+@test "invalid output cannot overwrite an existing saved profile" {
+  profiles_dir="${BATS_TEST_TMPDIR}/profiles"
+  options_file="${BATS_TEST_TMPDIR}/options.json"
+  mkdir -p "${profiles_dir}"
+  profile="${profiles_dir}/review.tfvars"
+  printf 'reviewed content\n' > "${profile}"
+
+  run env PLATFORM_WORKFLOW_OPTIONS_FILE="${options_file}" "${SCRIPT}" save-profile --execute \
+    --variant kind --stage 700 --app sentiment=off \
+    --profile-name review --profiles-dir "${profiles_dir}" --output invalid
+
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"Invalid --output"* ]]
+  [ "$(cat "${profile}")" = "reviewed content" ]
+  [ ! -e "${options_file}" ]
+}
+
 @test "platform workflow options exposes stable json choices" {
   run "${SCRIPT}" options --execute --output json
 
