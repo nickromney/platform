@@ -74,7 +74,7 @@ run_inline_python() {
     exit 1
   }
 
-  uv run --isolated python - "$@"
+  uv run --locked --project "${REPO_ROOT}" python - "$@"
 }
 
 parse_expected_uv_version() {

@@ -1,80 +1,66 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-func fail(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "FAIL "+format+"\n", args...)
-	os.Exit(1)
+// One explicitly supplied schema owns this invocation. Internal definitions and
+// built-in metaschemas work; external file/network references never load.
+type closedLoader struct{}
+
+func (closedLoader) Load(_ string) (any, error) {
+	return nil, fmt.Errorf("external_refs_disabled: supply a self-contained schema")
 }
 
-func loadJSON(path string) any {
-	data, err := os.ReadFile(path)
+func loadJSON(path string) (any, error) {
+	file, err := os.Open(path)
 	if err != nil {
-		fail("could not read JSON %s: %v", path, err)
+		return nil, err
 	}
-	var value any
-	if err := json.Unmarshal(data, &value); err != nil {
-		fail("could not read JSON %s: %v", path, err)
-	}
-	return value
+	defer file.Close()
+	return jsonschema.UnmarshalJSON(file)
 }
 
-func requireKeys(schema map[string]any, payload any, path string) {
-	object, ok := payload.(map[string]any)
-	if !ok {
-		fail("%s is not an object", path)
+func validate(schema, payload any) error {
+	compiler := jsonschema.NewCompiler()
+	compiler.UseLoader(closedLoader{})
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	const identity = "https://platform.invalid/validation/schema.json"
+	if err := compiler.AddResource(identity, schema); err != nil {
+		return fmt.Errorf("invalid_schema: %w", err)
 	}
-
-	if required, ok := schema["required"].([]any); ok {
-		for _, keyValue := range required {
-			key, ok := keyValue.(string)
-			if !ok {
-				continue
-			}
-			if _, exists := object[key]; !exists {
-				fail("%s.%s is required", path, key)
-			}
-		}
+	compiled, err := compiler.Compile(identity)
+	if err != nil {
+		return fmt.Errorf("invalid_schema: %w", err)
 	}
-
-	properties, ok := schema["properties"].(map[string]any)
-	if !ok {
-		return
+	if err := compiled.Validate(payload); err != nil {
+		return fmt.Errorf("invalid_payload: %w", err)
 	}
-	for key, rawPropertySchema := range properties {
-		propertySchema, ok := rawPropertySchema.(map[string]any)
-		if !ok {
-			continue
-		}
-		expected, hasConst := propertySchema["const"]
-		actual, exists := object[key]
-		if exists && hasConst && !jsonEqual(actual, expected) {
-			fail("%s.%s must equal %q", path, key, expected)
-		}
-	}
+	return nil
 }
 
-func jsonEqual(a, b any) bool {
-	encodedA, errA := json.Marshal(a)
-	encodedB, errB := json.Marshal(b)
-	return errA == nil && errB == nil && string(encodedA) == string(encodedB)
+func run(args []string) error {
+	if len(args) != 2 {
+		return fmt.Errorf("usage: validate-json-schema SCHEMA.json PAYLOAD.json")
+	}
+	schema, err := loadJSON(args[0])
+	if err != nil {
+		return fmt.Errorf("invalid_schema_json: %w", err)
+	}
+	payload, err := loadJSON(args[1])
+	if err != nil {
+		return fmt.Errorf("invalid_payload_json: %w", err)
+	}
+	return validate(schema, payload)
 }
 
 func main() {
-	if len(os.Args) != 3 {
-		fmt.Fprintln(os.Stderr, "Usage: validate-json-schema SCHEMA.json PAYLOAD.json")
-		os.Exit(2)
+	if err := run(os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, "FAIL", err)
+		os.Exit(1)
 	}
-
-	schema, ok := loadJSON(os.Args[1]).(map[string]any)
-	if !ok {
-		fail("schema must be a JSON object")
-	}
-	payload := loadJSON(os.Args[2])
-	requireKeys(schema, payload, "$")
 	fmt.Printf("OK   %s validates against %s\n", os.Args[2], os.Args[1])
 }

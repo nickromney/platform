@@ -161,7 +161,7 @@ EOF
   printf '240\n' >"${FIXTURE_ROOT}/apps/demo/frontend-react/.package-count"
   printf '124\n' >"${FIXTURE_ROOT}/apps/demo/frontend-typescript-vite/.package-count"
 
-  uv run --isolated python - <<'PY' "${FIXTURE_ROOT}"
+  uv run --locked --project "${REPO_ROOT}" python - <<'PY' "${FIXTURE_ROOT}"
 from pathlib import Path
 import sys
 
@@ -282,7 +282,7 @@ EOF
   [ "${status}" -eq 0 ]
   workflow_scan_count="$(
     awk -F '\t' -v root="${FIXTURE_ROOT}" '
-      $1 == "run" && $2 == "--isolated" && $3 == "python" && $4 == "-" && index($5, root "/") == 1 && $5 ~ /\.(yml|yaml)$/ {
+      $1 == "run" && $2 == "--locked" && $3 == "--project" && $5 == "python" && $6 == "-" && index($7, root "/") == 1 && $7 ~ /\.(yml|yaml)$/ {
         count += 1
       }
       END { print count + 0 }

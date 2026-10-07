@@ -10,7 +10,7 @@ setup() {
   # enable_app_of_apps picks which Application deploys Prometheus, and the two
   # had drifted to different memory limits and retention windows. Selecting a
   # profile should not silently select a different Prometheus.
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 import os
 import re
 from pathlib import Path
@@ -50,7 +50,7 @@ PY
   # The Cilium allow rules for Gitea arrive through Argo CD, which reads them
   # from Gitea. Without a Terraform-owned allow beside the generated
   # default-deny, an interrupted apply leaves that loop unrecoverable.
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 import os
 from pathlib import Path
 

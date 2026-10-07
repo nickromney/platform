@@ -19,7 +19,7 @@ setup() {
 }
 
 @test "sentiment image catalog builds only Go sentiment images" {
-  run uv run --isolated python - <<PY
+  run uv run --locked --project "${REPO_ROOT}" python - <<PY
 import json
 from pathlib import Path
 

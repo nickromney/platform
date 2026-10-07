@@ -6,7 +6,7 @@ setup() {
 }
 
 @test "platform catalog projects application surfaces into Backstage, launchpad, and observability metrics" {
-  run uv run --project "${REPO_ROOT}/apps/idp-core" --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 import os
 from pathlib import Path
 

@@ -857,7 +857,7 @@ EOF
   run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=true ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=false ENABLE_SUBNETCALC_APIM_GATEWAY=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${render_dir}' >/dev/null"
   [ "${status}" -eq 0 ]
 
-  run uv run --isolated --with pyyaml python - "${render_dir}/repo/cluster-policies" <<'PYEOF'
+  run uv run --locked --project "${REPO_ROOT}" python - "${render_dir}/repo/cluster-policies" <<'PYEOF'
 import sys
 from pathlib import Path
 

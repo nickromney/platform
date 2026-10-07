@@ -6,15 +6,21 @@ fi
 
 hook_name="$(basename "$0")"
 
-if [ "${LEFTHOOK:-}" = "0" ]; then
-  exit 0
-fi
-
 warn_skip() {
+  if [ "${hook_name}" = "pre-push" ]; then
+    echo "FAIL lefthook pre-push: $*; verification did not execute" >&2
+    echo "Repair the named prerequisite and run the complete local gate before retrying." >&2
+    exit 1
+  fi
   echo "WARN lefthook ${hook_name}: $*" >&2
   echo "WARN lefthook ${hook_name}: skipping hook so Git worktree operations are not blocked" >&2
   echo "WARN lefthook ${hook_name}: retry from the main checkout after repairing Git config, or use make hooks" >&2
 }
+
+if [ "${LEFTHOOK:-}" = "0" ]; then
+  warn_skip "skip requested"
+  exit 0
+fi
 
 if ! command -v lefthook >/dev/null 2>&1; then
   warn_skip "lefthook not found in PATH"

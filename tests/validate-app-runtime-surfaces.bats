@@ -84,7 +84,7 @@ seed_explicit_compose_expectations() {
 }
 
 @test "app runtime tests share compose service discovery helpers" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -180,7 +180,7 @@ PY
 }
 
 @test "app runtime tests share compose hardening helpers" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -210,7 +210,7 @@ PY
 }
 
 @test "app runtime tests share Go compose healthcheck helpers" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -241,7 +241,7 @@ PY
 }
 
 @test "app runtime tests share browser SSO static allowlist helpers" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -272,7 +272,7 @@ PY
 }
 
 @test "app runtime tests share Dockerfile runtime user helpers" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -302,7 +302,7 @@ PY
 }
 
 @test "app runtime tests share sentiment compose diagnostics helpers" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -333,7 +333,7 @@ PY
 }
 
 @test "app runtime tests share subnetcalc compose topology helpers" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -364,7 +364,7 @@ PY
 }
 
 @test "app runtime tests share subnetcalc runtime config helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -395,7 +395,7 @@ PY
 }
 
 @test "app runtime tests share sign-out landing page helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -426,7 +426,7 @@ PY
 }
 
 @test "app runtime tests share Kubernetes workload runtime user helpers" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -457,7 +457,7 @@ PY
 }
 
 @test "app runtime tests share browser router auth and API routing helpers" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -489,7 +489,7 @@ PY
 }
 
 @test "app runtime tests share sentiment Kubernetes frontend and APIM helpers" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -523,7 +523,7 @@ PY
 }
 
 @test "app runtime tests share sentiment API Kubernetes runtime helpers" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -556,7 +556,7 @@ PY
 }
 
 @test "app runtime tests share ChatGPT Sim compose LLM and Langfuse helpers" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -589,7 +589,7 @@ PY
 }
 
 @test "app runtime tests share Gitea workflow Go image build helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -622,7 +622,7 @@ PY
 }
 
 @test "app runtime tests share subnetcalc runtime-config response helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -655,7 +655,7 @@ PY
 }
 
 @test "app runtime tests share oauth2-proxy token refresh helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -686,7 +686,7 @@ PY
 }
 
 @test "app runtime tests share image prebuild hook helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -717,7 +717,7 @@ PY
 }
 
 @test "app runtime tests share oauth2-proxy backend logout helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -752,7 +752,7 @@ PY
   write_go_app_fixture "${BATS_TEST_TMPDIR}/bad" zz-dockerfile-runtime "USER root"
 
   run env GOOD_ROOT="${BATS_TEST_TMPDIR}/good" BAD_ROOT="${BATS_TEST_TMPDIR}/bad" \
-    uv run --isolated --with pyyaml python - <<'PY'
+    uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -805,7 +805,7 @@ PY
   seed_explicit_compose_expectations "${BATS_TEST_TMPDIR}/bad"
 
   run env GOOD_ROOT="${BATS_TEST_TMPDIR}/good" BAD_ROOT="${BATS_TEST_TMPDIR}/bad" \
-    uv run --isolated --with pyyaml python - <<'PY'
+    uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -836,7 +836,7 @@ PY
 }
 
 @test "Go sentiment workload has a bounded laptop runtime profile and health probes" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -856,7 +856,7 @@ PY
 }
 
 @test "chatgpt-sim compose can target external OpenAI-compatible LLMs and Langfuse" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -888,7 +888,7 @@ PY
     '^/(app-shell\.css|favicon\.svg|favicon\.ico)$'
 
   run env GOOD_ROOT="${BATS_TEST_TMPDIR}/good" BAD_ROOT="${BATS_TEST_TMPDIR}/bad" \
-    uv run --isolated --with pyyaml python - <<'PY'
+    uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -933,7 +933,7 @@ PY
       test: ["CMD-SHELL", "/bin/sh -c /zz-test healthcheck"]'
 
   run env GOOD_ROOT="${BATS_TEST_TMPDIR}/good" BAD_ROOT="${BATS_TEST_TMPDIR}/bad" \
-    uv run --isolated --with pyyaml python - <<'PY'
+    uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -965,7 +965,7 @@ PY
 }
 
 @test "sentiment compose frontend exposes API proxy diagnostics" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -985,7 +985,7 @@ PY
 }
 
 @test "subnetcalc compose keeps default runtime Go-only and SSO profile services toggleable" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -1005,7 +1005,7 @@ PY
 }
 
 @test "subnetcalc Go frontend exposes OIDC runtime config without generated files" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -1025,7 +1025,7 @@ PY
 }
 
 @test "subnetcalc Go frontend uses shared sign-out landing page" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -1048,7 +1048,7 @@ PY
   local hashes_file="${BATS_TEST_TMPDIR}/dex-hashes.txt"
   local htpasswd_file="${BATS_TEST_TMPDIR}/dex.htpasswd"
 
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -1089,7 +1089,7 @@ PY
 }
 
 @test "kubernetes app workloads pin numeric runtime users for hardened deployments" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -1113,7 +1113,7 @@ PY
 }
 
 @test "subnetcalc router protects the frontend and sends API calls through APIM" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -1133,7 +1133,7 @@ PY
 }
 
 @test "sentiment router protects the frontend and sends API calls through APIM" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -1159,7 +1159,7 @@ PY
 }
 
 @test "app oauth2 proxies refresh forwarded access tokens before API use" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -1180,7 +1180,7 @@ PY
 }
 
 @test "local workload image builders run app prebuild hooks" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -1201,7 +1201,7 @@ PY
 }
 
 @test "app oauth2 proxies call Keycloak backend logout with the session ID token" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -1221,7 +1221,7 @@ PY
 }
 
 @test "app Gitea workflows build the default Go runtime images" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from pathlib import Path
 import os
 
@@ -1250,7 +1250,7 @@ PY
 }
 
 @test "subnetcalc Go frontend serves runtime config directly from the binary" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -1270,7 +1270,7 @@ PY
 }
 
 @test "external runtime image refs stay aligned across dockerfiles, compose, and kubernetes manifests" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -1293,7 +1293,7 @@ PY
 }
 
 @test "app runtime tests share external image ref helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -1329,7 +1329,7 @@ PY
 }
 
 @test "subnetcalc frontend stays single-replica for local laptop clusters" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -1349,7 +1349,7 @@ PY
 }
 
 @test "app runtime tests share subnetcalc frontend replica helpers" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -1384,7 +1384,7 @@ PY
 }
 
 @test "preload image artifacts track the current external runtime bump set" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -1408,7 +1408,7 @@ PY
 }
 
 @test "app runtime tests share preload image artifact helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os

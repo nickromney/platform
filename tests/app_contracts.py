@@ -295,9 +295,9 @@ def non_go_app_exception_contract_violations(repo_root: Path) -> tuple[str, ...]
     backstage = apps_root / "backstage"
     if (backstage / "package.json").exists():
         package = json.loads((backstage / "package.json").read_text(encoding="utf-8"))
-        if package.get("packageManager") != "yarn@4.4.1":
-            violations.append("backstage should pin yarn@4.4.1")
-        for required in (".yarn/releases/yarn-4.4.1.cjs", "yarn.lock"):
+        if package.get("packageManager") != "yarn@4.18.1":
+            violations.append("backstage should pin yarn@4.18.1")
+        for required in (".yarn/releases/yarn-4.18.1.cjs", "yarn.lock"):
             if not (backstage / required).exists():
                 violations.append(f"backstage missing {required}")
 

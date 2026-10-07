@@ -6,13 +6,14 @@ Use the repo-local `use-platform` skill at `skills/use-platform/SKILL.md` first 
 
 ## The gate is local. Run it yourself before you push
 
-**GitHub CI does not run on pull requests** (ADR 0011). It runs on `main` and on
-`workflow_dispatch` only. Nothing remote will catch your branch for you.
+**Verification is local through Lefthook.** GitHub retains release publishing
+only; no remote verification catches a branch. Run `uv sync --locked` once to
+prepare the declared PyYAML/Ruff tooling under the seven-day dependency cooldown.
 
 Run this before pushing:
 
 ```bash
-make lint && make test-ci
+uv run --locked make lint && uv run --locked make test-ci
 ```
 
 `make test-ci` stamps `.run/ci-receipt.json` with a fingerprint of the exact
@@ -63,12 +64,6 @@ Also note `make lint`'s shell audit only sees **tracked** files, so `git add`
 new scripts before trusting a clean run. New `*.bats` and `go.mod` files are
 picked up automatically once tracked — both are discovered with `git ls-files`.
 
-When remote confirmation genuinely matters, dispatch it:
-
-```bash
-gh workflow run ci.yml --ref <branch>
-```
-
 ## Cursor Cloud specific instructions
 
 For cloud agents on the ephemeral Cursor Cloud VM (Ubuntu 24.04, Firecracker guest
@@ -93,8 +88,8 @@ in the root `README.md`, `make help`, and the focused subtree Makefiles.
 
 ### Toolchain and pins
 
-- Go 1.26 is required by every `go.mod` and by CI (`.github/workflows/ci.yml`
-  `setup-go: "1.26"`); the update script installs it.
+- Go 1.26 is required by the owning `go.mod` files; the existing
+  cooldown-governed update script owns toolchain selection.
 - `shellcheck` must be the pinned `v0.11.0`. Ubuntu's apt build is `0.9.0`, which
   emits hundreds of false `SC2317` findings and fails `make lint`
   (see the note in `.devcontainer/toolchain-versions.sh`).
@@ -121,3 +116,23 @@ cluster (the repo is runtime-agnostic and also accepts podman/nerdctl via
   Also raise `fs.inotify.max_user_instances` and `kernel.keys.maxkeys` for kubeadm.
 - Stages >= 600 additionally require `docker login dhi.io` (Docker Hardened Images)
   credentials.
+
+The source-owned `.agent/contract.json` declares existing local verification actions,
+their effects and acceptance scope, and lessons bound to exact source/test bytes.
+Run the full local gate with `lefthook run pre-push --force`; a plain manual run
+can select no files. Remote workflows publish allowed artifacts only. Local
+fixture acceptance does not establish a live cloud, device or deployment state.
+
+For a kind version decision, use the declared `observe-kind` action or
+`CHECK_VERSION_FORMAT=json terraform/kubernetes/scripts/check-component-version.sh --kind-only --execute`.
+It reads the installed CLI, configured node image and public upstream metadata;
+it makes no cluster or Docker probes. Full verification runs before pushing:
+`PLATFORM_LOCAL_CI_FULL=1 lefthook run pre-push --force`; pre-push reuses its
+exact-tree receipt to avoid holding a remote SSH connection during a long suite.
+
+Catalog JSON schema validation belongs to `tools/platform-helpers/cmd/validate-json-schema`.
+The shell caller uses a mature Draft 2020-12 validator for nested types, required
+fields and internal references. All external references refuse without file or
+network access. `bats tests/json-schema-validation.bats tests/local-idp-contracts.bats`
+and the helper Go tests cover this boundary. The schema library is confined to
+this local verification tool; product workflow/CLI modules keep their own seams.

@@ -48,7 +48,7 @@ generate_secret() {
   fi
 
   if command -v uv >/dev/null 2>&1; then
-    uv run --isolated python -c \
+    uv run --locked --project "${REPO_ROOT}" python -c \
       'import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())'
     return 0
   fi

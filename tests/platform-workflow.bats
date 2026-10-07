@@ -506,7 +506,7 @@ EOF
 }
 
 @test "every preset overlay key is a declared terraform variable" {
-  run uv run --isolated python - <<'PYEOF'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PYEOF'
 from __future__ import annotations
 
 import json
@@ -590,7 +590,7 @@ PYEOF
   # enable_victoria_logs_requires_argocd). Reductions and sizings are safe at any
   # stage; affirmations are not. Capabilities this profile keeps come from the stage
   # tfvars, or from an effective-value OR such as enable_otel_gateway_effective.
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 import json
 import os
 from pathlib import Path

@@ -17,6 +17,7 @@ source "${REPO_ROOT}/scripts/lib/semver.sh"
 
 CHECK_VERSION_FORMAT="${CHECK_VERSION_FORMAT:-text}"
 CHECK_VERSION_CI_MODE="${CHECK_VERSION_CI_MODE:-0}"
+CHECK_VERSION_KIND_ONLY=0
 CHECK_VERSION_STRICT="${CHECK_VERSION_STRICT:-0}"
 CHECK_VERSION_ALLOW_LOOKUP_FAILURES="${CHECK_VERSION_ALLOW_LOOKUP_FAILURES:-0}"
 CHECK_VERSION_DEPLOYED_REASON="${CHECK_VERSION_DEPLOYED_REASON:-cluster unreachable}"
@@ -70,6 +71,7 @@ the live cluster when reachable.
 
 Options:
   --ci                           Skip live cluster inspection and Docker manifest probes
+  --kind-only                    Report installed, configured and latest kind identities only; never inspect a cluster
 
 Environment:
   CHECK_VERSION_INCLUDE_CANARY=1      Include canary releases in latest-version checks
@@ -103,6 +105,10 @@ if [ "${CHECK_VERSION_LIB_ONLY:-0}" != "1" ]; then
     fi
 
     case "$1" in
+      --kind-only)
+        CHECK_VERSION_KIND_ONLY=1
+        shift
+        ;;
       --ci)
         CHECK_VERSION_CI_MODE=1
         shift
@@ -389,7 +395,7 @@ check_platform_manifest_api_version_pins() {
 
 run_inline_python() {
   require uv
-  uv run --isolated python - "$@"
+  uv run --locked --project "${REPO_ROOT}" python - "$@"
 }
 
 cluster_reachable() {
@@ -3878,7 +3884,43 @@ emit_json_report() {
     '
 }
 
+report_kind_versions() {
+  require curl
+  require jq
+  ensure_check_version_cache_dir
+  export HTTP_FETCH_CACHE_DIR CHECK_VERSION_CACHE_DIR
+  local node_image node_tag installed release latest_node minimum
+  node_image="$(tfvar_get_any_stage_or_default "node_image" "$(tf_default_from_variables "node_image")")"
+  node_tag="$(image_tag_from_ref "${node_image}")"
+  installed="$(normalize_semver_like_tag "$(kind_installed_version)")"
+  release="$(github_latest_release_tag "kubernetes-sigs/kind")"
+  latest_node="$(kindest_node_latest_tag)"
+  minimum="$(kind_load_minimum_version_for_node_tag "${node_tag}")"
+  if [ "${CHECK_VERSION_FORMAT}" = "json" ]; then
+    jq -n --arg installed "${installed}" --arg configured_node "${node_image}" \
+      --arg latest_release "${release}" --arg latest_node "${latest_node}" --arg minimum "${minimum}" \
+      '{schema_version:"kind-version-observation/v1", installed:$installed, configured_node:$configured_node,
+        latest_release:$latest_release, latest_node:$latest_node, required_kind:$minimum,
+        scope:"installed CLI, configured node reference and public upstream metadata; no cluster observation"}'
+  else
+    section "Kind versions"
+    print_observed_latest_row "kind release tag" "${installed}" "${release}" "installed cli" "release tag"
+    print_observed_latest_row "kind node tag" "${node_tag}" "${latest_node}" "codebase" "node tag"
+    if [ -n "${minimum}" ]; then
+      print_observed_latest_row "kind load minimum for node tag" "${installed}" "${minimum}" "installed cli" "minimum for ${node_tag} node image"
+    fi
+  fi
+  if [ "${CHECK_VERSION_STRICT}" = "1" ] && [ "${CHECK_VERSION_ALLOW_LOOKUP_FAILURES}" != "1" ] && { [ -z "${release}" ] || [ -z "${latest_node}" ]; }; then
+    warn "kind version observation incomplete: upstream release or node lookup unavailable"
+    return 1
+  fi
+}
+
 main() {
+  if [ "${CHECK_VERSION_KIND_ONLY}" = "1" ]; then
+    report_kind_versions
+    return
+  fi
   require curl
   require helm
   require jq

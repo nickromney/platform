@@ -19,7 +19,7 @@ setup() {
   #
   # Covers every workflow, not just version-audit.yml. A supply-chain rule that
   # only holds in the file that audits supply chains is the wrong shape.
-  run uv run --isolated python "${REPO_ROOT}/tests/lib/workflow-pin-check.py" \
+  run uv run --locked --project "${REPO_ROOT}" python "${REPO_ROOT}/tests/lib/workflow-pin-check.py" \
     "${REPO_ROOT}/.github/workflows"
 
   [ "${status}" -eq 0 ]
@@ -32,42 +32,29 @@ setup() {
   mkdir -p "${dir}"
 
   printf 'jobs:\n  a:\n    steps:\n      - uses: actions/checkout@v4\n' >"${dir}/tag.yml"
-  run uv run --isolated python "${REPO_ROOT}/tests/lib/workflow-pin-check.py" "${dir}"
+  run uv run --locked --project "${REPO_ROOT}" python "${REPO_ROOT}/tests/lib/workflow-pin-check.py" "${dir}"
   [ "${status}" -ne 0 ]
 
   rm -f "${dir}/tag.yml"
   printf 'jobs:\n  a:\n    steps:\n      - uses: actions/checkout@3d3c42e  # v7.0.1\n' >"${dir}/short.yml"
-  run uv run --isolated python "${REPO_ROOT}/tests/lib/workflow-pin-check.py" "${dir}"
+  run uv run --locked --project "${REPO_ROOT}" python "${REPO_ROOT}/tests/lib/workflow-pin-check.py" "${dir}"
   [ "${status}" -ne 0 ]
 
   rm -f "${dir}/short.yml"
   printf 'jobs:\n  a:\n    steps:\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n' >"${dir}/nocomment.yml"
-  run uv run --isolated python "${REPO_ROOT}/tests/lib/workflow-pin-check.py" "${dir}"
+  run uv run --locked --project "${REPO_ROOT}" python "${REPO_ROOT}/tests/lib/workflow-pin-check.py" "${dir}"
   [ "${status}" -ne 0 ]
 
   rm -f "${dir}/nocomment.yml"
   printf 'jobs:\n  a:\n    steps:\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1\n' >"${dir}/good.yml"
-  run uv run --isolated python "${REPO_ROOT}/tests/lib/workflow-pin-check.py" "${dir}"
+  run uv run --locked --project "${REPO_ROOT}" python "${REPO_ROOT}/tests/lib/workflow-pin-check.py" "${dir}"
   [ "${status}" -eq 0 ]
 }
 
-@test "version audit workflow installs its tools and runs the lightweight audits" {
-  # Behaviour, kept separate from the pinning rule above: these assertions are
-  # about what the workflow does, and have no reason to churn when a version
-  # bumps. Installing neither tool is why every scheduled run failed in 8-17s.
-  run uv run --isolated python - "${REPO_ROOT}/.github/workflows/version-audit.yml" <<'PY'
-import sys
-from pathlib import Path
-
-text = Path(sys.argv[1]).read_text(encoding="utf-8")
-
-assert "astral-sh/uv:([^ ]+)" in text
-assert "DEVCONTAINER_ARKADE_TOOLS" in text
-assert "cron: '0 9 * * 1'" in text
-assert "run: make check-version" in text
-assert "run: ./terraform/kubernetes/scripts/check-provider-version.sh --execute" in text
-assert "run: ./terraform/kubernetes/scripts/check-component-version.sh --execute --ci" in text
-PY
-
-  [ "${status}" -eq 0 ]
+@test "version audits are explicit local commands rather than hosted verification" {
+  [ ! -e "${REPO_ROOT}/.github/workflows/version-audit.yml" ]
+  [ -x "${REPO_ROOT}/scripts/check-repo-version.sh" ]
+  [ -x "${REPO_ROOT}/terraform/kubernetes/scripts/check-provider-version.sh" ]
+  [ -x "${REPO_ROOT}/terraform/kubernetes/scripts/check-component-version.sh" ]
+  grep -Fq 'check-version:' "${REPO_ROOT}/Makefile"
 }

@@ -64,7 +64,7 @@ run_inline_python() {
   fi
 
   if command -v uv >/dev/null 2>&1; then
-    uv run --isolated python - "$@"
+    uv run --locked --project "${REPO_ROOT}" python - "$@"
     return 0
   fi
 

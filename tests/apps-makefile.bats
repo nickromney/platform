@@ -53,7 +53,7 @@ teardown() {
 
   [ "${status}" -eq 0 ]
   local make_output="${output}"
-  run env MAKE_OUTPUT="${make_output}" uv run --isolated python - <<PY
+  run env MAKE_OUTPUT="${make_output}" uv run --locked --project "${REPO_ROOT}" python - <<PY
 import os
 
 from tests.app_contracts import apps_makefile_help_contract_violations
@@ -93,7 +93,7 @@ EOF
 
   [ "${status}" -eq 0 ]
   local make_output="${output}"
-  run env MAKE_OUTPUT="${make_output}" uv run --isolated python - <<PY
+  run env MAKE_OUTPUT="${make_output}" uv run --locked --project "${REPO_ROOT}" python - <<PY
 import os
 
 from tests.app_contracts import apps_prereqs_contract_violations
@@ -108,7 +108,7 @@ PY
 }
 
 @test "apps Makefile tests share workflow surface helpers" {
-  run uv run --isolated python - <<PY
+  run uv run --locked --project "${REPO_ROOT}" python - <<PY
 from pathlib import Path
 
 from tests.app_contracts import apps_makefile_help_contract_violations, apps_prereqs_contract_violations
@@ -152,7 +152,7 @@ PY
 
   [ "${status}" -eq 0 ]
   local make_output="${output}"
-  run env MAKE_OUTPUT="${make_output}" uv run --isolated python - <<PY
+  run env MAKE_OUTPUT="${make_output}" uv run --locked --project "${REPO_ROOT}" python - <<PY
 from pathlib import Path
 import os
 
@@ -192,7 +192,7 @@ PY
 
   [ "${status}" -eq 0 ]
   local make_output="${output}"
-  run env MAKE_OUTPUT="${make_output}" uv run --isolated python - <<PY
+  run env MAKE_OUTPUT="${make_output}" uv run --locked --project "${REPO_ROOT}" python - <<PY
 from pathlib import Path
 import os
 
@@ -216,7 +216,7 @@ PY
 }
 
 @test "apps Makefile tests share wrapper delegation helpers" {
-  run uv run --isolated python - <<PY
+  run uv run --locked --project "${REPO_ROOT}" python - <<PY
 from pathlib import Path
 
 from tests.app_contracts import app_wrapper_names_with_target, apps_makefile_delegation_contract_violations, apps_makefile_wrapper_dir_function_contract_violations
@@ -249,7 +249,7 @@ PY
 }
 
 @test "apps Makefile shares wrapper target discovery" {
-  run uv run --isolated python - <<PY
+  run uv run --locked --project "${REPO_ROOT}" python - <<PY
 from pathlib import Path
 
 from tests.app_contracts import apps_makefile_wrapper_dir_function_contract_violations
@@ -264,7 +264,7 @@ PY
 }
 
 @test "apps Makefile exposes canonical shared app module targets" {
-  run uv run --isolated python - <<PY
+  run uv run --locked --project "${REPO_ROOT}" python - <<PY
 from pathlib import Path
 
 from tests.app_contracts import apps_makefile_shared_module_target_contract_violations
@@ -279,7 +279,7 @@ PY
 }
 
 @test "apps Makefile tests share canonical shared module target helpers" {
-  run uv run --isolated python - <<PY
+  run uv run --locked --project "${REPO_ROOT}" python - <<PY
 from pathlib import Path
 
 from tests.app_contracts import (
@@ -330,7 +330,7 @@ PY
 
   [ "${status}" -eq 0 ]
   local make_output="${output}"
-  run env MAKE_OUTPUT="${make_output}" uv run --isolated python - <<PY
+  run env MAKE_OUTPUT="${make_output}" uv run --locked --project "${REPO_ROOT}" python - <<PY
 from pathlib import Path
 import os
 
@@ -374,7 +374,7 @@ PY
 }
 
 @test "apps per-app test targets delegate to app wrapper unit checks" {
-  run uv run --isolated python - <<PY
+  run uv run --locked --project "${REPO_ROOT}" python - <<PY
 from pathlib import Path
 import subprocess
 
@@ -427,7 +427,7 @@ PY
 
   [ "${status}" -eq 0 ]
   local make_output="${output}"
-  run env MAKE_OUTPUT="${make_output}" uv run --isolated python - <<PY
+  run env MAKE_OUTPUT="${make_output}" uv run --locked --project "${REPO_ROOT}" python - <<PY
 from pathlib import Path
 import os
 
@@ -504,7 +504,7 @@ PY
     '	@echo app test wrapper' \
     >"${temp_app}/Makefile"
 
-  run uv run --isolated python - <<PY
+  run uv run --locked --project "${REPO_ROOT}" python - <<PY
 from pathlib import Path
 
 from tests.app_contracts import app_wrapper_names_with_target

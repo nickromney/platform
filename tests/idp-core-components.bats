@@ -9,7 +9,7 @@ setup() {
 @test "IDP catalog declares app ownership environments RBAC secrets and deployment evidence" {
   [ -f "${CATALOG}" ]
 
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 import os
 from pathlib import Path
 
@@ -25,7 +25,7 @@ PY
 }
 
 @test "IDP component tests share app catalog contract helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import idp_catalog_app_contract_violations
@@ -188,7 +188,7 @@ JSON
 }
 
 @test "chatgpt-sim is deployed in dev with the chatgpt.dev route" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 import os
 from pathlib import Path
 
@@ -205,7 +205,7 @@ PY
 }
 
 @test "IDP component tests share ChatGPT Sim runtime contract helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import chatgpt_sim_kubernetes_runtime_contract_violations
@@ -276,7 +276,7 @@ PY
 }
 
 @test "SSO auth proxies may reach developer portal and API upstreams" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -340,7 +340,7 @@ PY
 }
 
 @test "SSO auth proxies may reach application gateway upstreams" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -385,7 +385,7 @@ PY
 }
 
 @test "developer portal and API proxies use scoped browser SSO cookies" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 import os
 from pathlib import Path
 
@@ -403,7 +403,7 @@ PY
 }
 
 @test "IDP component tests share portal API cookie helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import idp_proxy_cookie_contract_violations
@@ -434,7 +434,7 @@ PY
 }
 
 @test "app and environment authorization uses Keycloak groups instead of email-domain shortcuts" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 import os
 from pathlib import Path
 
@@ -450,7 +450,7 @@ PY
 }
 
 @test "IDP component tests share Keycloak group authorization helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import keycloak_group_authorization_contract_violations
@@ -481,7 +481,7 @@ PY
 }
 
 @test "HTTP services expose named appProtocol and target ports" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 import os
 from pathlib import Path
 
@@ -498,7 +498,7 @@ PY
 }
 
 @test "IDP component tests share HTTP service metadata helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import kubernetes_http_service_metadata_contract_violations
@@ -555,7 +555,7 @@ PY
 }
 
 @test "launchpad and IDP catalog use portal public FQDNs" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 import os
 from pathlib import Path
 
@@ -571,7 +571,7 @@ PY
 }
 
 @test "IDP component tests share Portal public FQDN helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import portal_public_fqdn_contract_violations
@@ -602,7 +602,7 @@ PY
 }
 
 @test "APIM uses a dedicated stage-900 resource audience without owning subnetcalc or compose auth" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 import os
 from pathlib import Path
 
@@ -618,7 +618,7 @@ PY
 }
 
 @test "IDP component tests share APIM audience helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import apim_resource_audience_contract_violations
@@ -675,7 +675,7 @@ PY
   run rg -n 'reconcile_client_scope_attachments|detach_client_scope_attachment' "${reconcile_script}"
   [ "${status}" -eq 0 ]
 
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -713,7 +713,7 @@ PY
   run rg -n 'MaxRAMPercentage=40' "${realm_tf}"
   [ "${status}" -eq 0 ]
 
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -743,7 +743,7 @@ PY
 }
 
 @test "Keycloak local targets use an optimized single-pod container image" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 import os
 from pathlib import Path
 
@@ -760,7 +760,7 @@ PY
 }
 
 @test "IDP component tests share optimized Keycloak image helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import keycloak_optimized_image_contract_violations
@@ -791,7 +791,7 @@ PY
 }
 
 @test "Headlamp local chart is patched for CPU-bound laptop rollouts" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -859,7 +859,7 @@ PY
 }
 
 @test "oauth2-proxy session store image uses the approved preloaded Redis source" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os

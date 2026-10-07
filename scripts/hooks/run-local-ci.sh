@@ -22,12 +22,13 @@ shell_cli_handle_standard_no_args usage \
   "$@"
 
 if hook_skip_requested; then
-  hook_print_skip_and_exit
+  hook_fail "skip_requested: verification did not execute"
+  exit 1
 fi
 
 if [[ "${PLATFORM_LOCAL_CI_IN_PROGRESS:-}" == "1" ]]; then
-  hook_warn "PLATFORM_LOCAL_CI_IN_PROGRESS=1; skipping run-local-ci.sh to avoid recursive local CI"
-  exit 0
+  hook_fail "recursive_gate: verification did not execute"
+  exit 1
 fi
 
 cd "${HOOKS_REPO_ROOT}"
@@ -38,8 +39,8 @@ cd "${HOOKS_REPO_ROOT}"
 # with "Connection to github.com closed by remote host". A gate that prevents
 # the operation it guards is not a gate.
 #
-# GitHub CI no longer runs on pull_request either -- it is main and
-# workflow_dispatch only -- so "it will be caught remotely" is not a fallback.
+# GitHub verification is removed; the release publisher does not verify source.
+# The complete local gate is the required acceptance owner.
 # The full suite has to run locally, just not inside the push.
 #
 # So: `make test-ci` stamps a receipt naming the exact tree it verified, and
@@ -65,23 +66,20 @@ Running:
 Run the full suite inside the push instead:
   PLATFORM_LOCAL_CI_FULL=1 git push
 
-Skip only when you have a reason:
-  LEFTHOOK=0 git push
-  PLATFORM_SKIP_HOOKS=1 git push
-  git push --no-verify
+Required checks refuse skip and recursion requests.
 EOF
 
 export PLATFORM_LOCAL_CI_IN_PROGRESS=1
 failed_gate=""
 
-if ! make lint; then
+if ! uv run --locked --project "${HOOKS_REPO_ROOT}" make lint; then
   failed_gate="make lint"
 elif [[ "${LOCAL_CI_FULL}" == "1" ]]; then
-  if ! make test-ci; then
+  if ! uv run --locked --project "${HOOKS_REPO_ROOT}" make test-ci; then
     failed_gate="make test-ci"
   fi
 elif ! "${HOOKS_REPO_ROOT}/scripts/ci-receipt.sh" --execute --action verify; then
-  failed_gate="the make test-ci receipt"
+  failed_gate="the make test-ci receipt; run PLATFORM_LOCAL_CI_FULL=1 lefthook run pre-push --force before pushing"
 fi
 
 if [[ -n "${failed_gate}" ]]; then
