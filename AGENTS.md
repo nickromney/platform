@@ -1,3 +1,7 @@
+For system ownership, action effects, verification scope or a new agent task,
+read [the operating model](docs/agent-system.md). Detailed product plans
+remain at the linked owners; historical observations retain their dates.
+
 Use the repo-local `use-platform` skill at `skills/use-platform/SKILL.md` first if your agent supports installable skills. Then run `make` at the root; it is informational and points to focused Makefiles. Choose a subtree with `make -C apps help`, `make -C docker/compose help`, `make -C kubernetes/kind help`, or `make -C kubernetes/lima help`, then read the nearest subtree `README.md`.
 
 ## The gate is local. Run it yourself before you push
