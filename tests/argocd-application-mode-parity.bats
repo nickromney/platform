@@ -6,7 +6,7 @@ setup() {
 }
 
 @test "Argo CD Applications defined for both GitOps modes agree on sync policy" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import glob

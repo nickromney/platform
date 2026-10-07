@@ -11,7 +11,7 @@ setup() {
 }
 
 @test "gitea valkey resources land on the chart's primary key rather than the inert master key" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -58,7 +58,7 @@ PY
 }
 
 @test "platform-mcp reserves for its measured footprint while the inspector beside it is untouched" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -105,7 +105,7 @@ PY
 }
 
 @test "memory request tunables default to the measured local-cluster reservations" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -145,7 +145,7 @@ PY
 }
 
 @test "the local-8gb overlay does not restate request tunables that already match the default" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import json

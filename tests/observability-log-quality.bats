@@ -8,7 +8,7 @@ setup() {
 }
 
 @test "SSO oauth2-proxy cookie names are app-scoped and versioned" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -43,7 +43,7 @@ PY
 }
 
 @test "Gitea policy sync preserves VictoriaLogs GitOps inputs" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -86,7 +86,7 @@ PY
     sleep 0.25
   done
 
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import datetime as dt
@@ -179,7 +179,7 @@ PY
     sleep 0.25
   done
 
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import json

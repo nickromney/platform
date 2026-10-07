@@ -106,7 +106,7 @@ EOF
 
   run yq eval '.pre-push.commands.local-ci.run' "${REPO_ROOT}/lefthook.yml"
   [ "${status}" -eq 0 ]
-  [ "${output}" = "scripts/hooks/run-local-ci.sh --execute" ]
+  [ "${output}" = "uv run --locked scripts/hooks/run-local-ci.sh --execute" ]
 }
 
 @test "make hooks invokes lefthook install" {
@@ -217,7 +217,7 @@ EOF
   [ "$(git --git-dir="${test_repo}/.git" config --local --get core.bare)" = "true" ]
 }
 
-@test "installed pre-push hook skips lefthook worktree metadata crash without blocking linked push" {
+@test "installed pre-push hook refuses a metadata crash without publishing or changing Git config" {
   local remote_repo="${BATS_TEST_TMPDIR}/remote.git"
   local main_repo="${BATS_TEST_TMPDIR}/main-repo"
   local linked_repo="${BATS_TEST_TMPDIR}/linked-repo"
@@ -267,15 +267,16 @@ EOF
 
   run env PATH="${TEST_BIN}:/usr/bin:/bin" git -C "${linked_repo}" push origin HEAD
 
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"WARN lefthook pre-push: lefthook failed while resolving Git worktree metadata"* ]]
-  [[ "${output}" == *"skipping hook so Git worktree operations are not blocked"* ]]
-  [[ "${output}" == *"HEAD ->"* ]]
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"FAIL lefthook pre-push: lefthook failed while resolving Git worktree metadata"* ]]
+  [[ "${output}" != *"HEAD ->"* ]]
+  [ "$(git --git-dir="${remote_repo}" rev-parse HEAD)" = "$(git -C "${main_repo}" rev-parse HEAD)" ]
+  [ "$(git --git-dir="${remote_repo}" for-each-ref --format='%(refname)' refs/heads | wc -l | tr -d ' ')" = "1" ]
   [ "$(git -C "${main_repo}" config --local --get core.bare)" = "false" ]
   [ "$(git -C "${main_repo}" config --local --list | LC_ALL=C sort)" = "${before_config}" ]
 }
 
-@test "pre-push local CI wrapper respects PLATFORM_SKIP_HOOKS=1 without running make" {
+@test "pre-push local CI wrapper refuses skip without running make" {
   cat >"${TEST_BIN}/make" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -286,8 +287,14 @@ EOF
 
   run env PATH="${TEST_BIN}:/usr/bin:/bin" PLATFORM_SKIP_HOOKS=1 "${TEST_REPO}/scripts/hooks/run-local-ci.sh" --execute
 
-  [ "${status}" -eq 0 ]
-  [ "${output}" = "WARN PLATFORM_SKIP_HOOKS=1; skipping run-local-ci.sh" ]
+  [ "${status}" -ne 0 ]
+  [ "${output}" = "FAIL skip_requested: verification did not execute" ]
+}
+
+@test "pre-push local CI wrapper refuses recursion before running make" {
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" PLATFORM_LOCAL_CI_IN_PROGRESS=1 "${TEST_REPO}/scripts/hooks/run-local-ci.sh" --execute
+  [ "${status}" -ne 0 ]
+  [ "${output}" = "FAIL recursive_gate: verification did not execute" ]
 }
 
 @test "pre-push local CI audit probe previews without running make" {
@@ -306,4 +313,16 @@ EOF
   [[ "${output}" == *"--dry-run"* ]]
   [[ "${output}" == *"--execute"* ]]
   [ ! -e "${log_file}" ]
+}
+
+@test "installed push shim refuses missing Lefthook and explicit skips" {
+  local wrapper="${BATS_TEST_TMPDIR}/pre-push"
+  cp "${REPO_ROOT}/scripts/hooks/lefthook-git-hook.sh" "$wrapper"
+  chmod +x "$wrapper"
+  run env PATH=/usr/bin:/bin "$wrapper"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"lefthook not found"* ]]
+  run env PATH=/usr/bin:/bin LEFTHOOK=0 "$wrapper"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"skip requested"* ]]
 }

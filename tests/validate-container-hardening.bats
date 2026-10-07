@@ -6,7 +6,7 @@ setup() {
 }
 
 @test "repo-owned app workloads apply the hardened container baseline" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 import os
 from pathlib import Path
 
@@ -23,7 +23,7 @@ PY
 }
 
 @test "container hardening tests share repo-owned workload baseline helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import kubernetes_workload_container_hardening_contract_violations
@@ -55,7 +55,7 @@ PY
 }
 
 @test "rendered UAT workloads explicitly satisfy the privileged-container policy" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 import os
 from pathlib import Path
 
@@ -72,7 +72,7 @@ PY
 }
 
 @test "container hardening tests share rendered UAT privileged helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import rendered_uat_privileged_container_contract_violations

@@ -8,7 +8,7 @@ setup() {
 }
 
 @test "Grafana namespace health dashboard does not rely on empty pod scrape series" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -53,7 +53,7 @@ PY
     sleep 0.25
   done
 
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import json
@@ -120,7 +120,7 @@ PY
 }
 
 @test "Grafana app overview dashboard has explicit zero fallbacks for sparse app signals" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -169,7 +169,7 @@ PY
     sleep 0.25
   done
 
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import json

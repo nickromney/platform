@@ -103,29 +103,32 @@ EOF
 }
 
 @test "check-version reports kind release and node tag status" {
-  if ! command -v kind >/dev/null 2>&1; then
-    skip "kind is required"
-  fi
-
-  # Same guard the two tests above already carry. macOS ships no coreutils
-  # `timeout`, so without this the test does not fail on its subject -- it fails
-  # on `env: timeout: No such file or directory` and reports a status mismatch,
-  # which reads as a check-version bug. kubernetes/scripts/k3s-bootstrap-lib.sh
-  # has the portable timeout/gtimeout wrapper if this ever needs to run rather
-  # than skip.
-  if ! command -v timeout >/dev/null 2>&1; then
-    skip "timeout is required"
-  fi
-
-  # This test only verifies the kind rows. CI has no live cluster, and the
-  # script's --ci mode avoids unrelated cluster and Docker probes that can
-  # consume the whole test timeout on a slow runner.
-  run env KUBECONFIG="${KIND_KUBECONFIG}" timeout 300 "${SCRIPT}" --ci --execute
-
+  fake_bin="${BATS_TEST_TMPDIR}/kind-version-tools"
+  mkdir -p "$fake_bin"
+  export KIND_VERSION_CALLS="${BATS_TEST_TMPDIR}/calls"
+  cat >"$fake_bin/kind" <<'EOF'
+#!/usr/bin/env bash
+printf 'kind %s\n' "$*" >>"$KIND_VERSION_CALLS"
+[[ "$*" == "version -q" ]] || exit 72
+printf 'v0.33.0\n'
+EOF
+  cat >"$fake_bin/curl" <<'EOF'
+#!/usr/bin/env bash
+printf 'curl %s\n' "$*" >>"$KIND_VERSION_CALLS"
+case "$*" in
+  *api.github.com/repos/kubernetes-sigs/kind/releases/latest*) printf '{"tag_name":"v0.33.0"}\n' ;;
+  *hub.docker.com/v2/namespaces/kindest/repositories/node/tags*) printf '{"results":[{"name":"v1.37.1"}],"next":null}\n' ;;
+  *) exit 72 ;;
+esac
+EOF
+  chmod +x "$fake_bin/kind" "$fake_bin/curl"
+  run env PATH="$fake_bin:$PATH" "$SCRIPT" --kind-only --execute
   [ "${status}" -eq 0 ]
   [[ "${output}" =~ Kind\ versions ]]
   [[ "${output}" =~ kind\ release\ tag[[:space:]]+v?[0-9]+\.[0-9]+\.[0-9]+ ]]
   [[ "${output}" =~ kind\ node\ tag[[:space:]]+v[0-9]+\.[0-9]+\.[0-9]+ ]]
+  [ "$(grep -c '^curl ' "$KIND_VERSION_CALLS")" -eq 2 ]
+  [ "$(grep -c '^kind ' "$KIND_VERSION_CALLS")" -eq 1 ]
 }
 
 @test "check-version reports kind-load minimum for Kubernetes 1.36 node images" {

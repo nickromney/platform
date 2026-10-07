@@ -6,7 +6,7 @@ setup() {
 }
 
 @test "Backstage is the deployed developer portal behind the portal route" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -85,7 +85,7 @@ PY
 }
 
 @test "portal SSO proxy and catalog point at Backstage" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import json
@@ -112,7 +112,7 @@ PY
 }
 
 @test "Backstage is governed by a local resource gate instead of being unconditional" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -143,7 +143,9 @@ assert "oauth2-proxy-backstage" in sync_script
 assert re.search(r"^KIND_ENABLE_BACKSTAGE \?= (off|on|auto)$", kind_makefile, re.M)
 assert "KIND_BACKSTAGE_MIN_DOCKER_MEMORY_BYTES ?= 10737418240" in kind_makefile
 assert "ENABLE_BACKSTAGE" in build_script
-assert "SKIP backstage (ENABLE_BACKSTAGE=false)" in build_script
+assert 'source "${REPO_ROOT}/kubernetes/workflow/image-selection-lib.sh"' in build_script
+assert 'image_selection_enabled platform "${image_id}"' in build_script
+assert 'SKIP ${image_id} (disabled)' in build_script
 assert "SSO_E2E_ENABLE_BACKSTAGE" in sso_run
 assert "INCLUDE_BACKSTAGE" in sso_spec
 
@@ -155,7 +157,7 @@ PY
 }
 
 @test "Backstage app is configured for lightweight local-cluster production runtime" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -177,7 +179,7 @@ org = list(yaml.safe_load_all((app_dir / "catalog/org.yaml").read_text(encoding=
 dockerfile = (app_dir / "Dockerfile").read_text(encoding="utf-8")
 backend_package = (app_dir / "packages/backend/package.json").read_text(encoding="utf-8")
 
-assert (app_dir / ".yarn/releases/yarn-4.4.1.cjs").is_file()
+assert (app_dir / ".yarn/releases/yarn-4.18.1.cjs").is_file()
 assert "apps/backstage/.yarn/releases/* linguist-generated=true" in gitattributes
 assert "apps/backstage/yarn.lock linguist-generated=true" in gitattributes
 assert not (app_dir / "packages/backend/Dockerfile").exists()
@@ -269,7 +271,7 @@ PY
 }
 
 @test "Backstage catalog carries source, Kubernetes, and API relationship metadata" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -357,7 +359,7 @@ PY
 }
 
 @test "Backstage bundled app catalogs mirror app-owned catalog facts" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -381,7 +383,7 @@ PY
 }
 
 @test "Backstage portal tests share app-owned catalog mirror helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import (
@@ -425,7 +427,7 @@ PY
 }
 
 @test "IDP application inventory includes platform MCP surfaces" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 import os
 from pathlib import Path
 
@@ -442,7 +444,7 @@ PY
 }
 
 @test "Backstage portal tests share platform MCP inventory helpers" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import platform_mcp_inventory_contract_violations
@@ -472,7 +474,7 @@ PY
 }
 
 @test "local platform image flow builds Backstage instead of the old React portal" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -486,7 +488,10 @@ variables_tf = (repo_root / "terraform/kubernetes/variables.tf").read_text(encod
 gitops_tf = (repo_root / "terraform/kubernetes/gitops.tf").read_text(encoding="utf-8")
 policies_script = (repo_root / "terraform/kubernetes/scripts/sync-gitea-policies.sh").read_text(encoding="utf-8")
 
-assert "backstage_source_tag=" in build_script
+assert 'source "${REPO_ROOT}/kubernetes/workflow/image-build-lib.sh"' in build_script
+assert 'image_build_catalog_build_and_push platform "${image_id}" "${image_id}"' in build_script
+image_build_lib = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_text(encoding="utf-8")
+assert 'image_catalog_source_tag "${category}" "${image_id}"' in image_build_lib
 assert '"id": "backstage"' in image_catalog
 assert '"context": "generated-backstage"' in image_catalog
 assert '"dockerfile": "Dockerfile"' in image_catalog
@@ -516,7 +521,7 @@ PY
 }
 
 @test "Backstage template is a real self-service app factory" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -653,7 +658,7 @@ PY
 }
 
 @test "Backstage publishes app templates to Gitea with in-cluster credentials" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -708,7 +713,7 @@ PY
 }
 
 @test "Backstage workload is visible in Grafana, Victoria Logs, and OTEL metadata" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os

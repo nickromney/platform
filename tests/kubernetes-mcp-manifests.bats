@@ -6,7 +6,7 @@ setup() {
 }
 
 @test "MCP GitOps manifests expose machine and SSO console lanes" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import json
@@ -137,7 +137,7 @@ PY
 }
 
 @test "MCP Cilium policies bridge only APIM, SSO and observability to MCP workloads" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -268,7 +268,7 @@ PY
 }
 
 @test "MCP Argo and SSO registration is wired for direct and app-of-apps modes" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -307,7 +307,7 @@ PY
 }
 
 @test "MCP observability is wired for Prometheus, Victoria Logs, and Grafana" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -407,7 +407,7 @@ PY
 }
 
 @test "MCP browser E2E contracts cover SSO console, D2 render export, and observability dashboards" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os

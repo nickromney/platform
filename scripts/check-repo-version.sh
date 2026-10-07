@@ -119,7 +119,7 @@ require() {
 }
 
 run_inline_python() {
-  uv run --isolated python - "$@"
+  uv run --locked --project "${REPO_ROOT}" python - "$@"
 }
 
 require uv

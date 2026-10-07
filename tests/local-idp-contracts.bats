@@ -116,10 +116,10 @@ setup() {
   run rg -n '^min-release-age=7$' "${REPO_ROOT}/apps/idp-sdk/.npmrc"
   [ "${status}" -eq 0 ]
 
-  run jq -e '.packageManager == "yarn@4.4.1"' "${REPO_ROOT}/apps/backstage/package.json"
+  run jq -e '.packageManager == "yarn@4.18.1"' "${REPO_ROOT}/apps/backstage/package.json"
   [ "${status}" -eq 0 ]
 
-  [ -f "${REPO_ROOT}/apps/backstage/.yarn/releases/yarn-4.4.1.cjs" ]
+  [ -f "${REPO_ROOT}/apps/backstage/.yarn/releases/yarn-4.18.1.cjs" ]
   [ -f "${REPO_ROOT}/apps/backstage/yarn.lock" ]
 
   run jq -e '.packageManager == "npm@11.12.1"' "${REPO_ROOT}/apps/idp-sdk/package.json"

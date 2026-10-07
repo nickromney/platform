@@ -14,4 +14,4 @@ pre-commit:
 pre-push:
   commands:
     local-ci:
-      run: scripts/hooks/run-local-ci.sh --execute
+      run: uv run --locked scripts/hooks/run-local-ci.sh --execute

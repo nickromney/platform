@@ -6,7 +6,7 @@ setup() {
 }
 
 @test "IDP Cilium policy explicitly supports Backstage Kubernetes and OTel flows" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -44,7 +44,7 @@ PY
 }
 
 @test "MCP Cilium policy keeps tool egress to named platform dependencies" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -81,7 +81,7 @@ PY
 }
 
 @test "Argo Rollouts policy does not allow GitHub plugin download egress" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -116,7 +116,7 @@ PY
 }
 
 @test "Sentiment backend policy allows MCP classify-only endpoint" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -160,7 +160,7 @@ PY
 }
 
 @test "Kyverno audits shared namespace runtime hardening and discovery labels" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -208,7 +208,7 @@ PY
 }
 
 @test "Cilium gateway ingress policy only selects endpoints another policy already restricts" {
-  run uv run --isolated --with pyyaml python - <<'XPY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'XPY'
 from __future__ import annotations
 
 import os
@@ -241,7 +241,7 @@ XPY
 }
 
 @test "Cilium gateway ingress policy admits the Envoy identity rather than host" {
-  run uv run --isolated --with pyyaml python - <<'XPY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'XPY'
 from __future__ import annotations
 
 import os

@@ -18,7 +18,7 @@ setup() {
 }
 
 @test "every Bats file writing to the real tree is contained in SERIAL_ONLY_FILES" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -63,7 +63,7 @@ PY
 }
 
 @test "SERIAL_ONLY_FILES names only files that exist" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -86,7 +86,7 @@ PY
 @test "exemptions name files that exist and still write to the tree" {
   # A stale exemption is worse than none, because it silently permits a future
   # write. Both halves have to hold for the entry to still be honest.
-  run uv run --isolated python - <<'PYEOF'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PYEOF'
 from __future__ import annotations
 
 import os
@@ -152,7 +152,7 @@ EOF
 }
 EOF
 
-  run env PROBE_DIR="${sandbox}" uv run --isolated python - <<'PY'
+  run env PROBE_DIR="${sandbox}" uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os

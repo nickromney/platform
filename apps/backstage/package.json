@@ -20,7 +20,8 @@
     "lint": "backstage-cli repo lint --since origin/main",
     "lint:all": "backstage-cli repo lint",
     "prettier:check": "prettier --check .",
-    "new": "backstage-cli new"
+    "new": "backstage-cli new",
+    "verify:local": "yarn install --immutable && yarn workspace backend test --watchAll=false --runInBand && yarn workspace app test --watchAll=false --runInBand && yarn build:all"
   },
   "backstage": {
     "cli": {
@@ -62,5 +63,5 @@
       "prettier --write"
     ]
   },
-  "packageManager": "yarn@4.4.1"
+  "packageManager": "yarn@4.18.1"
 }

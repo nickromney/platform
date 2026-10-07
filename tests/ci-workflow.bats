@@ -5,104 +5,40 @@ setup() {
   setup_repo_root
 }
 
-@test "CI workflow pins GitHub Actions and runs lint plus hermetic Bats" {
-  run uv run --isolated python - "${REPO_ROOT}/.github/workflows/ci.yml" <<'PY'
-import re
-import sys
+@test "local Lefthook gate owns all verification and GitHub retains only release publishing" {
+  run uv run --locked --project "${REPO_ROOT}" python - "${REPO_ROOT}" <<'PYTEST'
 from pathlib import Path
-
-path = Path(sys.argv[1])
-text = path.read_text(encoding="utf-8")
-
-expected = {
-    "actions/checkout": ("3d3c42e5aac5ba805825da76410c181273ba90b1", "v7.0.1"),
-    "actions/setup-go": ("b7ad1dad31e06c5925ef5d2fc7ad053ef454303e", "v7.0.0"),
-    "actions/setup-node": ("820762786026740c76f36085b0efc47a31fe5020", "v7.0.0"),
-}
-
-# The push-to-main trigger is the load-bearing one and must not be removed. A
-# dispatch-only workflow is what let failing tests survive on main unnoticed;
-# see docs/plans/omarchy-portability-followups.md.
-#
-# pull_request was dropped deliberately (ADR 0011): the full gate now runs
-# locally, gated by the make test-ci receipt that pre-push verifies. That is a
-# compensating control, not an absence of one -- the companion test below
-# asserts the hook still enforces it, so this cannot decay back into
-# dispatch-only with nothing watching.
-assert re.search(
-    r"^on:\n"
-    r"  workflow_dispatch:\n"
-    r"  push:\n"
-    r"    branches:\n"
-    r"      - main\n"
-    r"\npermissions:\n",
-    text,
-    re.MULTILINE,
-)
-assert "pull_request:" not in text, "re-adding pull_request needs a deliberate decision; see ADR 0011"
-assert re.search(r"^permissions:\n  contents: read\n", text, re.MULTILINE)
-assert "runs-on: ubuntu-latest" in text
-assert "run: make lint" in text
-assert "run: make test-ci" in text
-assert "scripts/ci/install-ci-toolchain.sh --execute" in text
-assert "uv tool install" not in text
-assert "npm install --global" not in text
-assert "docker run" not in text.lower()
-assert "docker compose" not in text.lower()
-assert "kind create" not in text
-
-uses = re.findall(r"uses:\s*([^\s#]+)(?:\s*#\s*(v[^\s]+))?", text)
-assert uses, "workflow must use pinned first-party actions"
-
-seen = set()
-for full_ref, selector in uses:
-    repo, _, sha = full_ref.partition("@")
-    assert repo in expected, repo
-    expected_sha, expected_selector = expected[repo]
-    assert re.fullmatch(r"[0-9a-f]{40}", sha), (repo, sha)
-    assert sha == expected_sha, (repo, sha, expected_sha)
-    assert selector == expected_selector, (repo, selector, expected_selector)
-    seen.add(repo)
-
-assert seen == set(expected), seen
-PY
-
+import sys
+import yaml
+root = Path(sys.argv[1])
+workflows = sorted(path.name for path in (root / ".github/workflows").glob("*.y*ml"))
+assert workflows == ["release.yml"], workflows
+hook = yaml.safe_load((root / "lefthook.yml").read_text())
+assert hook["pre-push"]["commands"]["local-ci"]["run"] == "uv run --locked scripts/hooks/run-local-ci.sh --execute"
+runner = (root / "scripts/hooks/run-local-ci.sh").read_text()
+assert 'uv run --locked --project "${HOOKS_REPO_ROOT}" make lint' in runner
+assert 'uv run --locked --project "${HOOKS_REPO_ROOT}" make test-ci' in runner
+assert '--action verify' in runner
+assert 'PLATFORM_LOCAL_CI_FULL' in runner
+PYTEST
   [ "${status}" -eq 0 ]
 }
 
-@test "CI Go version matches the go directive every module declares" {
-  # tests/go-tests.bats runs all 17 module suites in CI, so CI's toolchain has
-  # to be the one the modules ask for. Deriving the expectation from go.mod
-  # rather than restating "1.26" here keeps a Go bump from needing two edits and
-  # silently passing with one.
-  run uv run --isolated python - "${REPO_ROOT}" <<'PY'
+@test "local Go toolchain pin matches every nested module directive" {
+  run uv run --locked --project "${REPO_ROOT}" python - "${REPO_ROOT}" <<'PYTEST'
+from pathlib import Path
 import re
 import subprocess
 import sys
-from pathlib import Path
-
-root = Path(sys.argv[1])
-gomods = subprocess.run(
-    ["git", "ls-files", "*go.mod"], cwd=root, capture_output=True, text=True, check=True
-).stdout.split()
-assert gomods, "no go.mod files tracked"
-
-directives = set()
-for rel in gomods:
-    for line in (root / rel).read_text(encoding="utf-8").splitlines():
-        m = re.fullmatch(r"go\s+(\d+\.\d+(?:\.\d+)?)", line.strip())
-        if m:
-            directives.add(m.group(1))
-
-assert len(directives) == 1, f"modules disagree on the go directive: {sorted(directives)}"
-declared = directives.pop()
-
-ci = (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-m = re.search(r"uses:\s*actions/setup-go@[0-9a-f]{40}[^\n]*\n\s*with:\s*\n\s*go-version:\s*\"?([0-9.]+)\"?", ci)
-assert m, "ci.yml does not pin a go-version for actions/setup-go"
-assert m.group(1) == declared, (m.group(1), declared)
-PY
-
+root=Path(sys.argv[1])
+modules=subprocess.check_output(["git","ls-files","*go.mod"],cwd=root,text=True).split()
+assert modules
+versions={re.search(r"^go\s+(\d+\.\d+)(?:\.\d+)?",(root/path).read_text(),re.M).group(1) for path in modules}
+assert len(versions)==1,versions
+pins=(root/".devcontainer/toolchain-versions.sh").read_text()
+version=versions.pop()
+assert re.search(r'GO_VERSION="\$\{GO_VERSION:-'+re.escape(version)+r'(?:\.\d+)?\}"',pins),version
+PYTEST
   [ "${status}" -eq 0 ]
 }
 
@@ -171,22 +107,10 @@ PY
   grep -Fq 'could not parse uv version from .devcontainer/Dockerfile' "${installer}"
 }
 
-@test "CI Go setup points the cache at the nested go.mod files" {
-  # Every go.mod lives under apps/ or tools/; setup-go looks in the workspace
-  # root and, finding none, logs "Dependencies file is not found" and disables
-  # the module and build caches entirely. The symptom is silent -- a warning,
-  # not a failure -- so this asserts the fix rather than the absence of a log.
-  run grep -cE '^\s+cache-dependency-path: "\*\*/go\.mod"' "${REPO_ROOT}/.github/workflows/ci.yml"
-
-  [ "${status}" -eq 0 ]
-  [ "${output}" -ge 1 ]
-
-  # The setting is worthless if a go.mod ever lands in the root, because
-  # setup-go would find that one and cache only it.
-  run bash -lc "cd '${REPO_ROOT}' && git ls-files 'go.mod'"
-
-  [ "${status}" -eq 0 ]
-  [ -z "${output}" ]
+@test "local Go gate discovers every nested module instead of depending on a root module" {
+  [ ! -f "${REPO_ROOT}/go.mod" ]
+  grep -Fq "go.mod" "${REPO_ROOT}/tests/go-tests.bats"
+  grep -Fq "go test" "${REPO_ROOT}/tests/go-tests.bats"
 }
 
 @test "CI installs base tools only when the runner image lacks them" {
@@ -210,7 +134,7 @@ PY
   [ "${output}" -eq 1 ]
 
   # The workflow must not grow its own apt path now the installer owns it.
-  run bash -lc "grep -nF 'apt-get' '${REPO_ROOT}/.github/workflows/ci.yml' || true"
+  run bash -lc "grep -nF 'apt-get' '${REPO_ROOT}/scripts/hooks/run-local-ci.sh' || true"
 
   [ "${status}" -eq 0 ]
   [ -z "${output}" ]
@@ -314,24 +238,9 @@ PY
   [ "$(git -C "${REPO_ROOT}" status --porcelain -unormal)" = "${before}" ]
 }
 
-@test "the macOS job does not fight the runner's Homebrew taps" {
-  # The runner image ships untrusted third-party taps and Homebrew prints a
-  # trust notice for each one. It is cosmetic -- bats-core, jq and yq are all
-  # homebrew/core.
-  #
-  # Untapping them was tried and reverted: Homebrew refuses to untap a tap
-  # holding installed formulae (bicep, packer) and writes that refusal to
-  # stderr, which Actions renders as a red ##[error] on an otherwise passing
-  # job. This pins the revert so the notice does not invite the same fix twice.
-  run grep -Fn 'brew untap' "${REPO_ROOT}/.github/workflows/ci.yml"
-
-  [ "${status}" -ne 0 ]
-
-  # Nor silenced with the variable Homebrew documents as deprecated. Matches it
-  # being set, not the comment naming it.
-  run grep -nE 'HOMEBREW_NO_REQUIRE_TAP_TRUST[[:space:]]*[:=]' "${REPO_ROOT}/.github/workflows/ci.yml"
-
-  [ "${status}" -ne 0 ]
+@test "local verification does not modify the developer Homebrew taps" {
+  run grep -En 'brew untap|HOMEBREW_NO_REQUIRE_TAP_TRUST[[:space:]]*[:=]' "${REPO_ROOT}/scripts/hooks/run-local-ci.sh"
+  [ "${status}" -eq 1 ]
 }
 
 @test "ripgrep is pinned and installed from its release, not from apt" {

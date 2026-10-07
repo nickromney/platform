@@ -23,7 +23,7 @@ setup() {
 }
 
 @test "platform gateway certificate covers every declared gateway route hostname" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from pathlib import Path
 import os
 
@@ -67,7 +67,7 @@ PY
 }
 
 @test "subnetcalc frontend canary route exposes stable and canary backends with dev ReferenceGrant" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from pathlib import Path
 import os
 

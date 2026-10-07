@@ -9,7 +9,7 @@ setup() {
 }
 
 @test "subnetcalc Cilium policy sends router API traffic through APIM" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -119,7 +119,7 @@ PY
 }
 
 @test "sentiment Cilium policy sends router API traffic through APIM" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -217,7 +217,7 @@ PY
 }
 
 @test "metrics-server Cilium policy allows apiserver and kubelet convergence flows" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -307,7 +307,7 @@ PY
 }
 
 @test "external-secrets Cilium policy allows webhook, apiserver, and DNS flows" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os

@@ -6,7 +6,7 @@ setup() {
 }
 
 @test "docker compose has a Backstage portal profile with hardened local runtime" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -46,7 +46,7 @@ PY
 }
 
 @test "docker compose routes Backstage through Dex and oauth2-proxy" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -93,7 +93,7 @@ PY
 }
 
 @test "docker compose make targets expose a Backstage-first red green proof" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os

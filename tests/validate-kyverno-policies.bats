@@ -155,7 +155,7 @@ EOF
 }
 
 @test "default-deny protection allows namespace-controller cleanup" {
-  run uv run --isolated python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from pathlib import Path
 import os
 

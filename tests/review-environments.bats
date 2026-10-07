@@ -6,7 +6,7 @@ setup() {
 }
 
 @test "review environment substrate is provisioned by the platform" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -48,7 +48,7 @@ PY
 }
 
 @test "gitea actions runner has scoped review-environment kubernetes access" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -100,7 +100,7 @@ PY
 }
 
 @test "scaffolded review workflow uses the managed substrate" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+  run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
 import os

@@ -8,7 +8,7 @@ setup() {
 @test "sentiment-api image serves local-only sentiment inference" {
   image_tag="platform-test/sentiment-api:bats"
   data_dir="$(mktemp -d)"
-  port="$(uv run --isolated python - <<'PY'
+  port="$(uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 import socket
 
 sock = socket.socket()
