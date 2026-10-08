@@ -155,7 +155,7 @@ with `gh workflow run ci.yml --ref <branch>`.
 
 - [scripts/ci-receipt.sh](../../scripts/ci-receipt.sh)
 - [scripts/hooks/run-local-ci.sh](../../scripts/hooks/run-local-ci.sh)
-- [.github/workflows/ci.yml](../../.github/workflows/ci.yml)
+- `.github/workflows/ci.yml` (removed; see the note above)
 - [tests/ci-workflow.bats](../../tests/ci-workflow.bats)
 - [docs/plans/HANDOFF-20260819.md](../plans/HANDOFF-20260819.md)
 - Related: [ADR 0010](./0010-share-variant-lifecycle-and-workflow-core.md), whose
