@@ -108,15 +108,14 @@ Notes:
 
 - `make` is a guide, not a mutating entrypoint.
 - `make hooks` installs the lefthook-managed pre-commit and pre-push checks.
-  Skip a native lefthook run with `LEFTHOOK=0`; the underlying scripts also
-  honor `PLATFORM_SKIP_HOOKS=1`.
+  Skip one non-push git hook with `LEFTHOOK=0 git <command>` (or `--no-verify`).
+  The pre-push hook refuses both `LEFTHOOK=0` and `PLATFORM_SKIP_HOOKS=1`.
 - `make prereqs` and `make test` at the root are also informational. They tell
   you which focused subtree command to run next.
 - `make lint` is the repo-wide reporting pass.
 - `make test-ci` runs the PR-safe hermetic Bats subset. Local hooks plus
-  `make lint` and `make test-ci` are the primary gate; GitHub CI is an
-  on-demand Linux confirmation surface, triggered with
-  `gh workflow run ci.yml` or from the Actions tab.
+  `make lint` and `make test-ci` are the primary gate, run locally. No
+  GitHub CI workflow runs them; `release.yml` is the only active workflow.
 - `make fmt` applies the tracked markdown formatting pass.
 - `make mutation SCRIPT=<path>` plans bash mutation testing for one script,
   and `make mutation-execute SCRIPT=<path>` runs the cycle and exits non-zero

@@ -44,6 +44,10 @@ Run the full gate locally, and prove it ran with a receipt.
 - `PLATFORM_LOCAL_CI_FULL=1` still runs the whole suite inside the push, for
   anyone who wants it and accepts the timeout risk.
 
+Note: `ci.yml` and `version-audit.yml` have been removed. Their checks run
+locally: Bash 3.2 via `make lint-bash32` (part of `make lint`) and the version
+guards via `make check-version`.
+
 The fingerprint is a **git tree hash of the working tree's content**, built by
 staging into a throwaway index (`GIT_INDEX_FILE`) so the real index is untouched.
 Two requirements pull against each other and only a content hash satisfies both:

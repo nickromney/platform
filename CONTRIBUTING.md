@@ -37,11 +37,10 @@ it.
 `make test-ci` stamps a receipt for the tree it verified, and the pre-push hook
 refuses a push whose tree does not match — so run the gate before pushing.
 
-GitHub CI does **not** run on pull requests. It runs automatically on `main`,
-and on demand for a branch with `gh workflow run ci.yml --ref <branch>` or from
-the Actions tab. A PR showing no checks means the evidence is local, not that
-the change is untested; dispatch a run when remote confirmation matters, and
-note the macOS job is the only thing covering Bash 3.2 and BSD awk.
+No GitHub CI workflow runs on pull requests, and `ci.yml` and `version-audit.yml`
+are gone. `release.yml` is the only active workflow. Bash 3.2 compatibility runs
+in `make lint` (`make lint-bash32`), and the version guards run with
+`make check-version`; both are local.
 
 ## Commit Messages and Releases
 
