@@ -6,5 +6,8 @@
   "packageManager": "npm@11.12.1",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "engines": {
+    "npm": ">=11"
   }
 }
