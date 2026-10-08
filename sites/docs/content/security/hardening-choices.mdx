@@ -69,10 +69,8 @@ Current examples:
 
 | Workflow | Action | Pin | Release comment |
 | --- | --- | --- | --- |
-| `release.yml` | `actions/checkout` | `de0fac2e4500dabe0009e67214ff5f5447ce83dd` | `v6.0.2` |
-| `release.yml` | `actions/setup-node` | `48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e` | `v6.4.0` |
-| `version-audit.yml` | `actions/checkout` | `de0fac2e4500dabe0009e67214ff5f5447ce83dd` | `v6.0.2` |
-| `version-audit.yml` | `actions/setup-node` | `48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e` | `v6.4.0` |
+| `release.yml` | `actions/checkout` | `3d3c42e5aac5ba805825da76410c181273ba90b1` | `v7.0.1` |
+| `release.yml` | `actions/setup-node` | `820762786026740c76f36085b0efc47a31fe5020` | `v7.0.0` |
 
 That gives two useful properties:
 
@@ -81,8 +79,7 @@ That gives two useful properties:
   selected
 
 The release workflow also requires `main` for publish mode and uses explicit
-permissions. The version audit workflow is read-only and runs the repo version
-guard, Terraform provider guard, and Kubernetes stack version guard.
+permissions. The version guards no longer run in GitHub; run `make check-version` locally.
 
 For the full bump path, including Kubernetes, Helm charts, providers, package
 cooldowns, and prerelease gates, see [version management](../concepts/version-management).

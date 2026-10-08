@@ -254,7 +254,7 @@ docker-safe-clean:
 hooks:
 	@"$(INSTALL_GIT_HOOKS_SCRIPT)" --execute
 	@echo "Installed lefthook hooks from lefthook.yml"
-	@echo "Skip one git command with: LEFTHOOK=0 git <command> or --no-verify"
+	@echo "Skip one non-push git hook with: LEFTHOOK=0 git <command> (or --no-verify). The pre-push hook refuses LEFTHOOK=0."
 
 lint:
 	@$(foreach linter,$(LINTERS),$(MAKE) --no-print-directory lint-$(linter) &&) :
