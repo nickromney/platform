@@ -2,6 +2,6 @@ module github.com/nickromney/platform/tools/platform-helpers
 
 go 1.26
 
-require github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
+require github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 
 require golang.org/x/text v0.14.0 // indirect
