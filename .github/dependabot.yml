@@ -9,108 +9,324 @@ updates:
       timezone: Europe/London
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: gomod
     directory: /tools/platform-workflow-core
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: gomod
     directory: /tools/platform-workflow-ui
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: gomod
     directory: /tools/platform-helpers
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: gomod
     directory: /tools/platform-tui
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: gomod
     directory: /apps/subnetcalc/app
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: gomod
     directory: /apps/idp-mcp
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: gomod
     directory: /apps/idp-core/app
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: gomod
     directory: /apps/shared/appshell
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: gomod
     directory: /apps/shared/appconfig
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: gomod
     directory: /apps/shared/idpauth
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: gomod
     directory: /apps/shared/apphttp
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: gomod
     directory: /apps/shared/apphealth
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: gomod
     directory: /apps/auth-chat/app
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: gomod
     directory: /apps/platform-mcp/app
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: gomod
     directory: /apps/chatgpt-sim/app
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: gomod
     directory: /apps/sentiment/app
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: gomod
     directory: /apps/apim-simulator/app
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
   - package-ecosystem: terraform
     directories:
       - /terraform/kubernetes
@@ -118,3 +334,15 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+      major:
+        patterns:
+          - '*'
+        update-types:
+          - major
