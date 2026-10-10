@@ -53,6 +53,9 @@ KEYCLOAK_REALM_CONFIG_KEY="${KEYCLOAK_REALM_CONFIG_KEY:-platform-realm.json}"
 KEYCLOAK_BOOTSTRAP_ADMIN_SECRET="${KEYCLOAK_BOOTSTRAP_ADMIN_SECRET:-keycloak-bootstrap-admin}"
 KEYCLOAK_PERMANENT_ADMIN_SECRET="${KEYCLOAK_PERMANENT_ADMIN_SECRET:-keycloak-admin}"
 KEYCLOAK_ADMIN_SERVER="${KEYCLOAK_ADMIN_SERVER:-http://127.0.0.1:8080}"
+# The short-lived admin JVM shares the server pod's memory limit. Do not let
+# its automatic heap sizing or compiler threads compete with the server.
+KEYCLOAK_ADMIN_CLI_JAVA_OPTS="${KEYCLOAK_ADMIN_CLI_JAVA_OPTS:--Xms16m -Xmx128m -XX:ActiveProcessorCount=1}"
 
 require_cmd kubectl
 require_cmd jq
@@ -104,7 +107,7 @@ kcadm() {
       set +e
       ;;
   esac
-  kubectl -n "${KEYCLOAK_NAMESPACE}" exec "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@" >"${stdout_file}" 2>"${stderr_file}"
+  kubectl -n "${KEYCLOAK_NAMESPACE}" exec "${keycloak_pod}" -- env "KC_OPTS=${KEYCLOAK_ADMIN_CLI_JAVA_OPTS}" /opt/keycloak/bin/kcadm.sh "$@" >"${stdout_file}" 2>"${stderr_file}"
   status=$?
   if [[ "${restore_errexit}" -eq 1 ]]; then
     set -e
@@ -127,7 +130,7 @@ kcadm() {
           set +e
           ;;
       esac
-      kubectl -n "${KEYCLOAK_NAMESPACE}" exec "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@" >"${retry_stdout_file}" 2>"${retry_stderr_file}"
+      kubectl -n "${KEYCLOAK_NAMESPACE}" exec "${keycloak_pod}" -- env "KC_OPTS=${KEYCLOAK_ADMIN_CLI_JAVA_OPTS}" /opt/keycloak/bin/kcadm.sh "$@" >"${retry_stdout_file}" 2>"${retry_stderr_file}"
       retry_status=$?
       if [[ "${restore_errexit}" -eq 1 ]]; then
         set -e
@@ -163,7 +166,7 @@ kcadm_stdin() {
       set +e
       ;;
   esac
-  kubectl -n "${KEYCLOAK_NAMESPACE}" exec -i "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@" <"${stdin_file}" >"${stdout_file}" 2>"${stderr_file}"
+  kubectl -n "${KEYCLOAK_NAMESPACE}" exec -i "${keycloak_pod}" -- env "KC_OPTS=${KEYCLOAK_ADMIN_CLI_JAVA_OPTS}" /opt/keycloak/bin/kcadm.sh "$@" <"${stdin_file}" >"${stdout_file}" 2>"${stderr_file}"
   status=$?
   if [[ "${restore_errexit}" -eq 1 ]]; then
     set -e
@@ -186,7 +189,7 @@ kcadm_stdin() {
           set +e
           ;;
       esac
-      kubectl -n "${KEYCLOAK_NAMESPACE}" exec -i "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@" <"${stdin_file}" >"${retry_stdout_file}" 2>"${retry_stderr_file}"
+      kubectl -n "${KEYCLOAK_NAMESPACE}" exec -i "${keycloak_pod}" -- env "KC_OPTS=${KEYCLOAK_ADMIN_CLI_JAVA_OPTS}" /opt/keycloak/bin/kcadm.sh "$@" <"${stdin_file}" >"${retry_stdout_file}" 2>"${retry_stderr_file}"
       retry_status=$?
       if [[ "${restore_errexit}" -eq 1 ]]; then
         set -e

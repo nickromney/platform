@@ -669,7 +669,7 @@ vendor_chart() {
   local chart="$2"
   local version="$3"
   local vendor_root="$4"
-  local archive_path
+  local archive_path crd_file
 
   fetch_chart_archive "${repo_url}" "${chart}" "${version}"
   archive_path="$(chart_cache_archive_path "${repo_url}" "${chart}" "${version}")"
@@ -677,6 +677,15 @@ vendor_chart() {
   mkdir -p "${vendor_root}"
   rm -rf "${vendor_root:?}/${chart}"
   tar -xzf "${archive_path}" -C "${vendor_root}"
+
+  if [[ "${chart}" == "agentgateway-crds" ]]; then
+    # The duration regex already allows at most four (five digits + two unit
+    # characters) groups. Make that bound explicit for Kubernetes CEL cost
+    # estimation, including durations nested in backend/provider lists.
+    for crd_file in "${vendor_root}/${chart}/templates/"*.yaml; do
+      yq -i '(.. | select(tag == "!!map") | select(.type == "string") | select(.maxLength == null) | select(."x-kubernetes-validations"[]?.rule | contains("^([0-9]{1,5}(h|m|s|ms)){1,4}$"))).maxLength = 28' "${crd_file}"
+    done
+  fi
 }
 
 chart_cache_archive_path() {
