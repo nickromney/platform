@@ -1,5 +1,5 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help prereqs check-docker-prerequisites check-mkcert-prerequisites check-host-ports check-https-443-available certs config build up up-dev up-uat up-portal up-all down logs ps urls check-backstage test test-backstage
+MAKE_KNOWN_GOALS := help prereqs check-docker-prerequisites check-mkcert-prerequisites check-host-ports check-https-443-available certs config binaries build up up-dev up-uat up-portal up-all down logs ps urls check-backstage test test-backstage
 MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 
 include ../../mk/common.mk
@@ -14,9 +14,13 @@ ifneq ($(strip $(wildcard $(PLATFORM_ENV_FILE))),)
 include $(PLATFORM_ENV_FILE)
 endif
 
-.PHONY: help prereqs check-docker-prerequisites check-mkcert-prerequisites check-host-ports check-https-443-available certs config build up up-dev up-uat up-portal up-all down logs ps urls check-backstage test test-backstage
+.PHONY: help prereqs check-docker-prerequisites check-mkcert-prerequisites check-host-ports check-https-443-available certs config binaries build up up-dev up-uat up-portal up-all down logs ps urls check-backstage test test-backstage
 
 COMPOSE = $(COMPOSE_CMD) -f compose.yml
+# Must match the platform: pins in compose.yml. The app Dockerfiles COPY prebuilt
+# Linux binaries, so those binaries are built for this platform's GOARCH.
+COMPOSE_IMAGE_PLATFORM := linux/amd64
+COMPOSE_IMAGE_GOARCH := $(notdir $(COMPOSE_IMAGE_PLATFORM))
 COMPOSE_ENV := OAUTH2_PROXY_CLIENT_SECRET=compose-oauth2-proxy-secret
 COMPOSE_TEST_COOKIE_SECRET := 0123456789abcdef0123456789abcdef
 COMPOSE_TEST_ENV := $(COMPOSE_ENV) OAUTH2_PROXY_COOKIE_SECRET=$${OAUTH2_PROXY_COOKIE_SECRET:-$(COMPOSE_TEST_COOKIE_SECRET)}
@@ -66,16 +70,20 @@ certs: check-mkcert-prerequisites ## Generate or refresh the mkcert TLS certs fo
 config: check-docker-prerequisites ## Validate the full compose graph
 	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile dev --profile uat --profile portal config -q
 
-build: check-docker-prerequisites ## Build the shared compose app images
+binaries: ## Build the Linux binaries the compose app images COPY, for the compose platform
+	@GOARCH=$(COMPOSE_IMAGE_GOARCH) $(MAKE) --no-print-directory -C ../../apps/apim-simulator/app build-linux
+	@GOARCH=$(COMPOSE_IMAGE_GOARCH) $(MAKE) --no-print-directory -C ../../apps/subnetcalc/app build-linux
+
+build: check-docker-prerequisites binaries ## Build the shared compose app images
 	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile dev --profile uat --profile portal build apim-simulator subnetcalc-api-dev subnetcalc-api-uat subnetcalc-frontend-dev subnetcalc-frontend-uat backstage
 
 up: up-all ## Start the full dev + uat compose platform
 
-up-dev: check-docker-prerequisites check-host-ports certs ## Start the shared services plus subnetcalc dev
+up-dev: check-docker-prerequisites check-host-ports certs binaries ## Start the shared services plus subnetcalc dev
 	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile dev up -d --build
 	@$(MAKE) --no-print-directory urls
 
-up-uat: check-docker-prerequisites check-host-ports certs ## Start the shared services plus subnetcalc uat
+up-uat: check-docker-prerequisites check-host-ports certs binaries ## Start the shared services plus subnetcalc uat
 	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile uat up -d --build
 	@$(MAKE) --no-print-directory urls
 
@@ -83,7 +91,7 @@ up-portal: check-docker-prerequisites check-host-ports certs ## Start the shared
 	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile portal up -d --build edge dex backstage oauth2-proxy-backstage
 	@$(MAKE) --no-print-directory urls
 
-up-all: check-docker-prerequisites check-host-ports certs ## Start the shared services plus subnetcalc dev and uat
+up-all: check-docker-prerequisites check-host-ports certs binaries ## Start the shared services plus subnetcalc dev and uat
 	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile dev --profile uat --profile portal up -d --build
 	@$(MAKE) --no-print-directory urls
 
@@ -123,7 +131,7 @@ check-backstage: check-docker-prerequisites check-host-ports certs ## Start and 
 	@OAUTH2_PROXY_CLIENT_SECRET=compose-oauth2-proxy-secret OAUTH2_PROXY_COOKIE_SECRET=$${OAUTH2_PROXY_COOKIE_SECRET:-$(COMPOSE_TEST_COOKIE_SECRET)} COMPOSE_COMMAND="$(COMPOSE) --profile portal" $(CHECK_BACKSTAGE) --execute
 
 test: check-docker-prerequisites ## Validate the compose topology renders cleanly
-	@bats ../../tests/backstage-compose.bats
+	@bats ../../tests/backstage-compose.bats ../../tests/compose-binaries.bats
 	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile dev --profile uat --profile portal config -q
 
 test-backstage: check-backstage ## Run the live Backstage compose red/green smoke proof
