@@ -1,4 +1,4 @@
-Use the repo-local `use-platform` skill at `skills/use-platform/SKILL.md` first if your agent supports installable skills. Then run `make` at the root; it is informational and points to focused Makefiles. Choose a subtree with `make -C apps help`, `make -C docker/compose help`, `make -C kubernetes/kind help`, or `make -C kubernetes/lima help`, then read the nearest subtree `README.md`.
+Use the repo-local `use-platform` skill at `skills/use-platform/SKILL.md` first if your agent supports installable skills. To prove an edge, SSO or APIM-hop change on the running Docker Compose dev stack, use `skills/verify-platform/SKILL.md` (`make verify` runs its full cycle). Then run `make` at the root; it is informational and points to focused Makefiles. Choose a subtree with `make -C apps help`, `make -C docker/compose help`, `make -C kubernetes/kind help`, or `make -C kubernetes/lima help`, then read the nearest subtree `README.md`.
 
 ## The gate is local. Run it yourself before you push
 
