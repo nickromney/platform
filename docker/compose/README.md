@@ -77,6 +77,12 @@ make -C docker/compose urls
 It also runs the host-port preflight first, so collisions fail before Docker
 tries to bind them.
 
+The `apim-simulator` and `subnetcalc` images copy prebuilt Linux binaries from
+their app `.run/` directories. `up`, `up-dev`, `up-uat`, `up-all`, and `build`
+build those first with the Go toolchain, for `linux/amd64` to match the compose
+platform. Run `make -C docker/compose binaries` to build them on their own.
+`up-portal` does not need them.
+
 You can also start one environment at a time:
 
 ```bash

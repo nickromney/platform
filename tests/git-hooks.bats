@@ -115,6 +115,9 @@ EOF
   mkdir -p "${test_repo}/mk" "${test_repo}/scripts/lib" "${test_repo}/scripts/hooks"
   cp "${REPO_ROOT}/Makefile" "${test_repo}/Makefile"
   cp "${REPO_ROOT}/mk/common.mk" "${test_repo}/mk/common.mk"
+  # The root Makefile includes the verification skill's verify.mk.
+  mkdir -p "${test_repo}/skills/verify-platform"
+  cp "${REPO_ROOT}/skills/verify-platform/verify.mk" "${test_repo}/skills/verify-platform/verify.mk"
   cp "${REPO_ROOT}/scripts/lib/shell-cli.sh" "${test_repo}/scripts/lib/shell-cli.sh"
   cp "${REPO_ROOT}/scripts/hooks/install-lefthook-hooks.sh" "${test_repo}/scripts/hooks/install-lefthook-hooks.sh"
   cp "${REPO_ROOT}/scripts/hooks/lefthook-git-hook.sh" "${test_repo}/scripts/hooks/lefthook-git-hook.sh"
@@ -153,6 +156,9 @@ EOF
   mkdir -p "${main_repo}/mk" "${main_repo}/scripts/lib" "${main_repo}/scripts/hooks"
   cp "${REPO_ROOT}/Makefile" "${main_repo}/Makefile"
   cp "${REPO_ROOT}/mk/common.mk" "${main_repo}/mk/common.mk"
+  # The root Makefile includes the verification skill's verify.mk.
+  mkdir -p "${main_repo}/skills/verify-platform"
+  cp "${REPO_ROOT}/skills/verify-platform/verify.mk" "${main_repo}/skills/verify-platform/verify.mk"
   cp "${REPO_ROOT}/scripts/lib/shell-cli.sh" "${main_repo}/scripts/lib/shell-cli.sh"
   cp "${REPO_ROOT}/scripts/hooks/install-lefthook-hooks.sh" "${main_repo}/scripts/hooks/install-lefthook-hooks.sh"
   cp "${REPO_ROOT}/scripts/hooks/lefthook-git-hook.sh" "${main_repo}/scripts/hooks/lefthook-git-hook.sh"
@@ -192,6 +198,9 @@ EOF
   mkdir -p "${test_repo}/mk" "${test_repo}/scripts/lib" "${test_repo}/scripts/hooks"
   cp "${REPO_ROOT}/Makefile" "${test_repo}/Makefile"
   cp "${REPO_ROOT}/mk/common.mk" "${test_repo}/mk/common.mk"
+  # The root Makefile includes the verification skill's verify.mk.
+  mkdir -p "${test_repo}/skills/verify-platform"
+  cp "${REPO_ROOT}/skills/verify-platform/verify.mk" "${test_repo}/skills/verify-platform/verify.mk"
   cp "${REPO_ROOT}/scripts/lib/shell-cli.sh" "${test_repo}/scripts/lib/shell-cli.sh"
   cp "${REPO_ROOT}/scripts/hooks/install-lefthook-hooks.sh" "${test_repo}/scripts/hooks/install-lefthook-hooks.sh"
   cp "${REPO_ROOT}/scripts/hooks/lefthook-git-hook.sh" "${test_repo}/scripts/hooks/lefthook-git-hook.sh"
@@ -226,6 +235,9 @@ EOF
   mkdir -p "${main_repo}/mk" "${main_repo}/scripts/lib" "${main_repo}/scripts/hooks"
   cp "${REPO_ROOT}/Makefile" "${main_repo}/Makefile"
   cp "${REPO_ROOT}/mk/common.mk" "${main_repo}/mk/common.mk"
+  # The root Makefile includes the verification skill's verify.mk.
+  mkdir -p "${main_repo}/skills/verify-platform"
+  cp "${REPO_ROOT}/skills/verify-platform/verify.mk" "${main_repo}/skills/verify-platform/verify.mk"
   cp "${REPO_ROOT}/scripts/lib/shell-cli.sh" "${main_repo}/scripts/lib/shell-cli.sh"
   cp "${REPO_ROOT}/scripts/hooks/install-lefthook-hooks.sh" "${main_repo}/scripts/hooks/install-lefthook-hooks.sh"
   cp "${REPO_ROOT}/scripts/hooks/lefthook-git-hook.sh" "${main_repo}/scripts/hooks/lefthook-git-hook.sh"

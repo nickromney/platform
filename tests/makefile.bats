@@ -443,7 +443,7 @@ EOF
   run cat "${log_file}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = $'backend --print --execute\nbackend --print --execute\nbats ../../tests/backstage-compose.bats\ncompose -f compose.yml --profile dev --profile uat --profile portal config -q' ]
+  [ "${output}" = $'backend --print --execute\nbackend --print --execute\nbats ../../tests/backstage-compose.bats ../../tests/compose-binaries.bats\ncompose -f compose.yml --profile dev --profile uat --profile portal config -q' ]
 }
 
 @test "docker compose help does not resolve the backend helper" {

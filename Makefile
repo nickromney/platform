@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-MAKE_KNOWN_GOALS := help prereqs init-env test test-ci test-ci-linux test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-python lint-bash32 lint-shell lint-shellcheck lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run mutation mutation-execute makefiles apps kubernetes docker sonar-scan
+MAKE_KNOWN_GOALS := help prereqs init-env test test-ci test-ci-linux test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-python lint-bash32 lint-shell lint-shellcheck lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run mutation mutation-execute makefiles apps kubernetes docker sonar-scan verify verify-dry-run verify-test
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
 APP_ENTRYPOINT_DIRS_CMD := { printf '%s\n' apps; find apps -mindepth 2 -maxdepth 2 -name Makefile -print | xargs -n 1 dirname; } | LC_ALL=C sort
@@ -97,7 +97,7 @@ CI_BATS_TESTS := $(shell "$(LIST_CI_BATS_TESTS)" --execute)
 
 include mk/common.mk
 
-.PHONY: default help prereqs init-env test test-ci test-ci-linux test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-python lint-bash32 lint-shell lint-shellcheck lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run mutation mutation-execute makefiles apps kubernetes docker sonar-scan
+.PHONY: default help prereqs init-env test test-ci test-ci-linux test-host-portable status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-python lint-bash32 lint-shell lint-shellcheck lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run mutation mutation-execute makefiles apps kubernetes docker sonar-scan verify verify-dry-run verify-test
 
 default:
 	@$(MAKE) --no-print-directory help
@@ -141,6 +141,9 @@ help:
 		'make test\tShow the focused test entrypoints' \
 		'make test-ci\tRun the PR-safe hermetic Bats subset' \
 		'make tui\tOpen the Bubble Tea local runtime chooser' \
+		'make verify\tProve the compose dev platform end to end via skills/verify-platform (launch, drive, cleanup)' \
+		'make verify-dry-run\tShow what make verify would do, without doing it' \
+		'make verify-test\tRun the verify-platform BATS contract tests under /bin/bash' \
 		'make workflow-ui [WORKFLOW_UI_HTTP=h2|http1]\tServe the browser workflow chooser on local HTTPS' \
 	| while IFS=$$'\t' read -r command description; do \
 		printf '  %-60s %s\n' "$$command" "$$description"; \
@@ -339,3 +342,8 @@ release-tag:
 release-tag-dry-run:
 	@[ -n "$(VERSION)" ] || { echo "VERSION is required, e.g. make release-tag-dry-run VERSION=0.3.0"; exit 1; }
 	@"$(RELEASE_TAG_SCRIPT)" --dry-run "$(VERSION)"
+
+# Verification skill (skills/verify-platform): drives the compose dev stack through Dex SSO and APIM.
+# Targets come from verify-kit: verify, verify-dry-run, verify-test.
+VERIFY_SKILL := skills/verify-platform
+include $(VERIFY_SKILL)/verify.mk
