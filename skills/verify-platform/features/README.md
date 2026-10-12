@@ -10,7 +10,7 @@ This directory is the maintained source for verifying the user-facing behaviour 
 
 ## Driving conventions
 
-- Every browser action goes through Dex via `control.sh --execute drive …`.
+- Every browser action goes through Dex via `control.sh --execute drive …`, in each of chromium, firefox and webkit (`VERIFY_BROWSERS` narrows it; evidence is per browser).
 - Use the documented demo users only.
 - Collect service logs with `control.sh --execute logs` after a drive that claims a backend effect.
 

@@ -117,6 +117,16 @@ assert_no_stub_calls() {
   [[ "$output" == *"$VERIFY_EVIDENCE_ROOT/platform-run/evidence"* ]]
 }
 
+@test "verify and drive plans name the browsers and the per-browser evidence path" {
+  run_control --dry-run verify
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"in each of: chromium firefox webkit"* ]]
+  VERIFY_BROWSER=webkit run_control --dry-run drive lookup 10.0.0.0/24
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"headless webkit"* ]]
+  [[ "$output" == *"-lookup-webkit"* ]]
+}
+
 @test "the default evidence root is the repo's .run/verify" {
   unset VERIFY_EVIDENCE_ROOT VERIFY_BASE_DIR
   run_control --dry-run verify
@@ -166,6 +176,16 @@ harness_control() {
   [[ "$output" == *"OK services=apim-simulator,"* ]]
   [[ "$output" == *"(now $(git -C "$BATS_TEST_DIRNAME" rev-parse HEAD))"* ]]
   [[ "$output" == *"revision recorded-revision"* ]]
+}
+
+@test "doctor fails naming a listed browser that is not installed, with the install command" {
+  use_stubs
+  mark_launched
+  healthy_stack
+  printf '#!/bin/sh\nexit 1\n' > "$STUBS/node"
+  VERIFY_BROWSERS=firefox run_control --execute doctor
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL: Playwright firefox is not installed; run: cd tests/kubernetes/sso && bunx playwright install firefox"* ]]
 }
 
 @test "doctor fails when :8443 is published by a container other than compose-edge-1" {

@@ -13,6 +13,7 @@ PLATFORM_ROOT="$(git -C "$SKILL_SCRIPTS" rev-parse --show-toplevel)"
 cd "$PLATFORM_ROOT"
 
 VK_APP="platform"
+VK_BROWSER_SKILL=1
 VK_DESCRIPTION="Verification harness for the platform compose dev stack (edge, Dex SSO, APIM simulator, subnetcalc dev)."
 VK_DEFAULT_BASE_DIR="$PLATFORM_ROOT/.run/verify"
 VK_DEFAULT_EVIDENCE_ROOT="$PLATFORM_ROOT/.run/verify"
@@ -38,7 +39,7 @@ vk_commands_help() {
   cat <<'HELP'
   launch                 refuse if compose project 'compose' or :8443 exists; build Go binaries, install e2e deps, make -C docker/compose up-dev
   doctor                 read-only: our stack is up, edge owns 8443, SSO redirects, APIM healthy
-  drive <cmd> ...        headless Chrome through Dex SSO: login | lookup <address>
+  drive <cmd> ...        headless $VERIFY_BROWSER (chromium|firefox|webkit) through Dex SSO: login | lookup <address>
   logs                   save apim-simulator, router, api and oauth2-proxy logs into the evidence directory
   cleanup                make -C docker/compose down (only if this run launched it); evidence kept
 HELP
@@ -55,10 +56,13 @@ vk_paths() {
 
 vk_plan() {
   case "$1" in
-    verify) vk_plan_line "launch, doctor, drive lookup 10.0.0.0/24 (expect 'Usable Addresses' and 251), logs (expect path=/api/v1/ipv4/subnet-info status=200), cleanup; evidence in $EVIDENCE" ;;
+    verify)
+      local bs
+      bs="$(vk_browsers | tr '\n' ' ')"
+      vk_plan_line "launch, doctor, drive lookup 10.0.0.0/24 in each of: $bs (expect 'Usable Addresses' and 251), logs (expect path=/api/v1/ipv4/subnet-info status=200), cleanup; evidence in $EVIDENCE" ;;
     launch) vk_plan_line "refuse if compose project 'compose' or a :8443 listener exists; bun install --frozen-lockfile in tests/kubernetes/sso; make -C docker/compose up-dev; write $STATE/launched and $EVIDENCE" ;;
     doctor) vk_plan_line "read-only: check $STATE/launched, compose project 'compose', compose-edge-1 on :8443, Dex redirect and APIM health" ;;
-    drive) shift; vk_plan_line "node $VK_SCRIPT_DIR/drive.mjs ${*:-<command>} with headless Chrome; evidence in $EVIDENCE/<stamp>-${1:-drive}" ;;
+    drive) shift; vk_plan_line "node $VK_SCRIPT_DIR/drive.mjs ${*:-<command>} with headless ${VERIFY_BROWSER:-chromium}; evidence in $EVIDENCE/<stamp>-${1:-drive}-${VERIFY_BROWSER:-chromium}" ;;
     logs) vk_plan_line "docker logs for apim-simulator, subnetcalc-router-dev, subnetcalc-api-dev, oauth2-proxy-subnetcalc-dev into $EVIDENCE/<stamp>-logs" ;;
     cleanup) vk_plan_line "make -C docker/compose down only if $STATE/launched exists; remove that marker and $STATE if empty; clear current only if it names this run; keep evidence in $EVIDENCE" ;;
     *) vk_unknown_command ;;
@@ -99,14 +103,20 @@ cmd_doctor() {
   [ "$owner" = compose-edge-1 ] || { vk_fail ":8443 published by '${owner:-nothing}', not compose-edge-1"; return 1; }
   redirect_to_dex || { vk_fail "$APP_URL does not redirect to Dex"; return 1; }
   curl -fsS -o /dev/null "$APIM_HEALTH" || { vk_fail "APIM health"; return 1; }
+  local b
+  for b in $(vk_browsers); do
+    (cd tests/kubernetes/sso && node -e 'const pw=require("playwright-core"); process.exit(require("fs").existsSync(pw[process.argv[1]].executablePath())?0:1)' "$b") >/dev/null 2>&1 \
+      || { vk_fail "Playwright $b is not installed; run: cd tests/kubernetes/sso && bunx playwright install $b"; return 1; }
+  done
   vk_say "revision $(head -1 "$EVIDENCE/revision.txt") (now $(git rev-parse HEAD))"
   vk_say "OK services=$(docker compose -p compose ps --services --status running | tr '\n' ',')"
 }
 
 cmd_drive() {
   [ -f "$STATE/launched" ] || { vk_fail "no stack launched by run $VK_RUN_ID"; return 1; }
-  DRIVE_OUT="$EVIDENCE/$(vk_stamp)-${1:-drive}"
-  VERIFY_REPO_ROOT="$PLATFORM_ROOT" VERIFY_APP_URL="$APP_URL" VERIFY_EVIDENCE_DIR="$DRIVE_OUT" \
+  local browser="${VERIFY_BROWSER:-chromium}"
+  DRIVE_OUT="$EVIDENCE/$(vk_stamp)-${1:-drive}-$browser"
+  VERIFY_BROWSER="$browser" VERIFY_REPO_ROOT="$PLATFORM_ROOT" VERIFY_APP_URL="$APP_URL" VERIFY_EVIDENCE_DIR="$DRIVE_OUT" \
     node "$VK_SCRIPT_DIR/drive.mjs" ${@+"$@"}
   vk_say "evidence: $DRIVE_OUT"
 }
@@ -137,12 +147,17 @@ cmd_cleanup() {
 }
 
 vk_verify_recipes() {
-  cmd_drive lookup 10.0.0.0/24
-  vk_expect_contains "$DRIVE_OUT/steps.jsonl" '"result":"PASS"'
-  vk_expect_contains "$DRIVE_OUT/03-lookup-results.txt" 'Usable Addresses'
-  vk_expect_contains "$DRIVE_OUT/03-lookup-results.txt" '251'
-  cmd_logs
-  vk_expect_contains "$LOGS_OUT/apim-simulator.log" 'path=/api/v1/ipv4/subnet-info status=200'
+  local browsers b
+  browsers="$(vk_browsers)"
+  for b in $browsers; do
+    VERIFY_BROWSER="$b"; export VERIFY_BROWSER
+    cmd_drive lookup 10.0.0.0/24
+    vk_expect_contains "$DRIVE_OUT/steps.jsonl" '"result":"PASS"'
+    vk_expect_contains "$DRIVE_OUT/03-lookup-results.txt" 'Usable Addresses'
+    vk_expect_contains "$DRIVE_OUT/03-lookup-results.txt" '251'
+    cmd_logs
+    vk_expect_contains "$LOGS_OUT/apim-simulator.log" 'path=/api/v1/ipv4/subnet-info status=200'
+  done
 }
 
 vk_dispatch() {

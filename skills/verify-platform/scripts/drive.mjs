@@ -1,8 +1,8 @@
-// Headless Chrome driver for the compose dev platform started by control.sh.
+// Headless Playwright driver (VERIFY_BROWSER=chromium|firefox|webkit, default chromium) for the compose dev platform started by control.sh.
 // Usage (via control.sh):
 //   control.sh drive login                 open subnetcalc dev, complete Dex SSO, capture the app
 //   control.sh drive lookup <address>      login, then submit #lookup-form and capture #results
-// Uses playwright-core from tests/kubernetes/sso (installed by control.sh launch) with installed Chrome.
+// Uses playwright-core from tests/kubernetes/sso (installed by control.sh launch) and its own browser builds.
 // Writes NN-<step>.png, NN-<step>.txt (visible text of #results or the page) and steps.jsonl.
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -10,7 +10,11 @@ import { join } from 'node:path'
 
 const root = process.env.VERIFY_REPO_ROOT
 const require = createRequire(join(root, 'tests/kubernetes/sso/package.json'))
-const { chromium } = require('playwright-core')
+const playwright = require('playwright-core')
+const browserName = process.env.VERIFY_BROWSER || 'chromium'
+if (!['chromium', 'firefox', 'webkit'].includes(browserName)) {
+  throw new Error(`unknown VERIFY_BROWSER ${browserName}; use chromium, firefox or webkit`)
+}
 
 const appUrl = process.env.VERIFY_APP_URL
 const out = process.env.VERIFY_EVIDENCE_DIR
@@ -25,7 +29,7 @@ const log = (record) => {
   appendFileSync(join(out, 'steps.jsonl'), `${line}\n`)
 }
 
-const browser = await chromium.launch({ headless: true, channel: 'chrome' })
+const browser = await playwright[browserName].launch({ headless: true })
 const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } })
 const consoleErrors = []
 page.on('pageerror', (e) => consoleErrors.push(String(e)))
@@ -65,7 +69,7 @@ const signIn = async () => {
 const [cmd, ...args] = process.argv.slice(2)
 let failed = false
 try {
-  log({ command: cmd, args, appUrl, login })
+  log({ command: cmd, args, appUrl, login, browser: browserName, browserVersion: browser.version() })
   await signIn()
   if (cmd === 'lookup') {
     const address = args[0]

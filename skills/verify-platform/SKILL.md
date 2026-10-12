@@ -1,6 +1,6 @@
 ---
 name: verify-platform
-description: Bring up the platform Docker Compose dev stack (TLS edge on :8443, Dex + oauth2-proxy SSO, APIM simulator, subnetcalc dev), sign in through Dex in headless Chrome, run a subnet lookup that crosses router → APIM → API, and capture screenshots, result text and service logs. Use when you need to prove an edge, SSO, APIM-hop or subnetcalc change on the running compose platform; not for kind/Lima clusters.
+description: Bring up the platform Docker Compose dev stack (TLS edge on :8443, Dex + oauth2-proxy SSO, APIM simulator, subnetcalc dev), sign in through Dex in headless Chromium, Firefox and WebKit, run a subnet lookup that crosses router → APIM → API, and capture screenshots, result text and service logs. Use when you need to prove an edge, SSO, APIM-hop or subnetcalc change on the running compose platform; not for kind/Lima clusters.
 ---
 
 # Verify the platform (compose dev stack)
@@ -46,7 +46,9 @@ The steps, in order:
    already exists. The project name and ports are fixed, so a second instance
    is impossible, and someone else's stack must not be adopted.
 2. Run `bun install --frozen-lockfile` in `tests/kubernetes/sso`. That
-   provides `playwright-core`, and the driver uses installed Google Chrome.
+   provides `playwright-core`, and the driver uses Playwright's own Chromium, Firefox and WebKit builds
+   (`VERIFY_BROWSER`, default `chromium`; install with
+   `cd tests/kubernetes/sso && bunx playwright install chromium firefox webkit`).
 3. Run `make -C docker/compose up-dev`. This needs the repo-root `.env` with
    `OAUTH2_PROXY_COOKIE_SECRET` (see `docker/compose/README.md`) and mkcert.
    Since 2026-10-10, `up-dev` builds the linux/amd64 Go binaries the images
@@ -93,7 +95,7 @@ Everything goes under `.run/verify/<run>/evidence/`, which is git-ignored
 by `**/.run/`:
 
 - `revision.txt`, `launch.log` and `down.log`.
-- One `<HHMMSS-NNN>-<cmd>/` per drive, holding `NN-<step>.png`,
+- One `<HHMMSS-NNN>-<cmd>-<browser>/` per drive (`steps.jsonl` logs the browser name and version), holding `NN-<step>.png`,
   `NN-<step>.txt` and `steps.jsonl`.
 - One `<HHMMSS-NNN>-logs/` per `logs` call.
 
@@ -109,8 +111,10 @@ Proof standards:
 
 ## Verify
 
-`C verify` (or `make verify`) runs launch, doctor and `drive lookup 10.0.0.0/24`,
-then checks four things and fails on any miss:
+`C verify` (or `make verify`) runs launch, doctor and `drive lookup 10.0.0.0/24`
+once in each browser of `VERIFY_BROWSERS` (space or comma separated; default
+`chromium firefox webkit`; unknown names exit 2; doctor fails if one is not
+installed), then checks four things and fails on any miss:
 
 - `steps.jsonl` of the drive contains `"result":"PASS"`.
 - `03-lookup-results.txt` contains `Usable Addresses` and `251`.
