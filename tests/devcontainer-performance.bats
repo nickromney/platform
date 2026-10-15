@@ -27,10 +27,15 @@ EOF
   chmod +x "${TEST_BIN}/git"
 }
 
-@test "devcontainer install-toolchain only bakes Playwright runtime deps" {
-  run grep -n 'playwright install-deps chromium' "${REPO_ROOT}/.devcontainer/install-toolchain.sh"
+@test "devcontainer install-toolchain pins Playwright runtime deps to 1.63.0" {
+  run grep -Fn 'bun x playwright@1.63.0 install-deps chromium' "${REPO_ROOT}/.devcontainer/install-toolchain.sh"
 
   [ "${status}" -eq 0 ]
+
+  run grep -nE 'bun x playwright install-deps chromium|bun x playwright@latest install-deps chromium' \
+    "${REPO_ROOT}/.devcontainer/install-toolchain.sh"
+
+  [ "${status}" -eq 1 ]
 
   run grep -n 'playwright install --with-deps chromium' "${REPO_ROOT}/.devcontainer/install-toolchain.sh"
 
