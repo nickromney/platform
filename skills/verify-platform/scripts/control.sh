@@ -77,7 +77,7 @@ cmd_launch() {
   mkdir -p "$STATE" "$EVIDENCE" || { vk_fail "cannot create $STATE or $EVIDENCE"; return 1; }
   vk_mark_current
   vk_record_revision "$EVIDENCE/revision.txt"
-  "$SKILL_SCRIPTS/runtime-snapshot.sh" capture "$EVIDENCE/unrelated-containers.before.txt" || return 1
+  "$SKILL_SCRIPTS/runtime-snapshot.sh" --execute capture "$EVIDENCE/unrelated-containers.before.txt" || return 1
   (cd tests/kubernetes/sso && bun install --frozen-lockfile) >> "$EVIDENCE/launch.log" 2>&1 \
     || { vk_fail "bun install failed; see $EVIDENCE/launch.log"; return 1; }
   # up-dev builds the linux/amd64 app binaries itself (docker/compose `binaries` prerequisite).
@@ -141,7 +141,7 @@ cmd_cleanup() {
       vk_fail "compose cleanup failed; ownership marker and evidence retained for retry"
       return 1
     }
-    "$SKILL_SCRIPTS/runtime-snapshot.sh" assert "$EVIDENCE/unrelated-containers.before.txt" \
+    "$SKILL_SCRIPTS/runtime-snapshot.sh" --execute assert "$EVIDENCE/unrelated-containers.before.txt" \
       > "$EVIDENCE/unrelated-containers.after.txt" 2>&1 || {
       vk_fail "unrelated runtime changed; see $EVIDENCE/unrelated-containers.after.txt"
       return 1

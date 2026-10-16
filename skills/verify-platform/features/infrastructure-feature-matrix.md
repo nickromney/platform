@@ -21,11 +21,11 @@ This recipe uses its own executable helper, not the Compose controller:
 skills/verify-platform/scripts/render-feature-matrix.sh --execute .run/verify-infrastructure/matrix-$(date +%Y%m%d-%H%M%S)
 ```
 
-Requires local `kubectl`, `jq`, `perl`, Python 3 and PyYAML (already a locked repo tooling dependency). Do not install or download dependencies as part of rendering. The helper copies actual application source, reads the current stage booleans and invokes production `render_gateway_routes_for_cilium`, `prune_argocd_app_manifests` and `prune_gateway_routes_manifests` from `sync-gitea-policies.sh`. It runs local `kubectl kustomize`, then independently parses the resulting YAML. It never calls the full renderer, chart vendoring, Git push, cluster APIs, or Make apply.
+Requires local `kubectl`, `jq`, `perl` and `uv`, with the locked repo Python/PyYAML environment prepared. Do not install or download dependencies as part of rendering. The helper copies actual application source, reads the current stage booleans and invokes production `render_gateway_routes_for_cilium`, `prune_argocd_app_manifests` and `prune_gateway_routes_manifests` from `sync-gitea-policies.sh`. It runs local `kubectl kustomize`, then independently parses the resulting YAML. It never calls the full renderer, chart vendoring, Git push, cluster APIs, or Make apply.
 
 Evidence retains eight input records, render logs, copied/pruned application trees, sixteen Kustomize outputs and `matrix-result.json`. A failed assertion exits nonzero and keeps its inputs. A successful matrix must contain sixteen entries; zero cases cannot pass.
 
-To check the assertion itself, append a `ReferenceGrant` with metadata namespace `headlamp` to a disabled case's rendered YAML and run `scripts/check-feature-matrix.py MATRIX_DIRECTORY`; it must fail. Restore the original output before reporting the positive matrix. Retain the negative result separately.
+To check the assertion itself, append a `ReferenceGrant` with metadata namespace `headlamp` to a disabled case's rendered YAML and run `PYTHONOPTIMIZE=0 uv run --locked --project . python skills/verify-platform/scripts/check-feature-matrix.py MATRIX_DIRECTORY` from the repository root; it must fail. Restore the original output before reporting the positive matrix. Retain the negative result separately.
 
 ## Gotchas
 

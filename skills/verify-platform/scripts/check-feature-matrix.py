@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Check actual Kustomize output for optional feature references."""
 
 import json

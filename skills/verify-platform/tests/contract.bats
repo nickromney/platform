@@ -229,3 +229,38 @@ web_skill() { [ -n "$("$BASH32" "$SCRIPT" --list-browsers)" ]; }
   run shellcheck -x -P "$SKILL_DIR/scripts" "$SCRIPT" "$LIB" "$SKILL_DIR"/tests/*.bats
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
 }
+
+@test "source digest tolerates an unavailable caller locale without changing it" {
+  local fixture clean bad
+  fixture="$BATS_TEST_TMPDIR/source-repo"
+  clean="$BATS_TEST_TMPDIR/clean.digest"
+  bad="$BATS_TEST_TMPDIR/bad.digest"
+  git init -q "$fixture"
+  git -C "$fixture" -c user.name=Fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false commit -q --allow-empty -m fixture
+  printf 'untracked source content\n' > "$fixture/untracked.txt"
+  # shellcheck disable=SC2016 # expanded by the Bash 3.2 child
+  run env LC_ALL=C "$BASH32" -c '
+    set -euo pipefail
+    source "$1"
+    VK_ROOT="$2"
+    vk_capture_source
+    printf "%s\n" "$VK_SOURCE_DIGEST" > "$3"
+  ' _ "$LIB" "$fixture" "$clean"
+  [ "$status" -eq 0 ] || return 1
+  # shellcheck disable=SC2016 # expanded by the Bash 3.2 child
+  run env LC_ALL=verify_kit_unavailable.UTF-8 "$BASH32" -c '
+    set -euo pipefail
+    source "$1"
+    VK_ROOT="$2"
+    vk_capture_source
+    [ "$LC_ALL" = verify_kit_unavailable.UTF-8 ] || exit 1
+    printf "%s\n" "$VK_SOURCE_DIGEST" > "$3"
+  ' _ "$LIB" "$fixture" "$bad"
+  [ "$status" -eq 0 ] || return 1
+  if [[ "$output" == *"perl: warning:"* ]]; then
+    printf "%s\n" "$output"
+    return 1
+  fi
+  [[ "$(cat "$clean")" =~ ^[0-9a-f]{64}$ ]] || return 1
+  cmp "$clean" "$bad"
+}

@@ -29,7 +29,7 @@ A later authorized full run uses the established supported lifecycle:
 ```bash
 make -C kubernetes/kind prereqs
 make -C kubernetes/kind check-lima-stopped
-skills/verify-platform/scripts/runtime-snapshot.sh capture .run/kind-unrelated.before.txt
+skills/verify-platform/scripts/runtime-snapshot.sh --execute capture .run/kind-unrelated.before.txt
 make -C kubernetes/kind 900 apply AUTO_APPROVE=1
 make -C kubernetes/kind check-health
 make -C kubernetes/kind check-gateway-urls
@@ -42,7 +42,7 @@ For a distinct, authorized reset proof after capturing live acceptance:
 
 ```bash
 make -C kubernetes/kind reset AUTO_APPROVE=1
-skills/verify-platform/scripts/runtime-snapshot.sh assert .run/kind-unrelated.before.txt
+skills/verify-platform/scripts/runtime-snapshot.sh --execute assert .run/kind-unrelated.before.txt
 ```
 
 The baseline must be captured before the run creates its kind node, otherwise that owned node will be incorrectly classified as unrelated. Independently confirm the owned kind node ID is absent, preserve the unrelated-container assertion output, and keep evidence through cleanup. A failed reset or isolation check is a failed proof, even if some workloads disappeared.

@@ -16,7 +16,7 @@ Run the Compose verification lifecycle while an unrelated workload is already ru
 
 `control.sh --execute launch` records `unrelated-containers.before.txt` in the run evidence. `control.sh --execute cleanup` performs teardown and writes `unrelated-containers.after.txt`; success requires every baseline entry to match Docker's independent inspect response.
 
-For a bounded boundary check, use executable `scripts/runtime-snapshot.sh capture SNAPSHOT`, remove only a disposable workload started after capture, then `scripts/runtime-snapshot.sh assert SNAPSHOT`. A separate owned sentinel included in the baseline must cause assert to fail when stopped. Retain both positive and negative output alongside the snapshot. Use cached images, explicit resource limits and no network; never stop a preexisting workload for the negative case.
+For a bounded boundary check, use executable `scripts/runtime-snapshot.sh --execute capture SNAPSHOT`, remove only a disposable workload started after capture, then `scripts/runtime-snapshot.sh --execute assert SNAPSHOT`. A separate owned sentinel included in the baseline must cause assert to fail when stopped. Retain both positive and negative output alongside the snapshot. Use cached images, explicit resource limits and no network; never stop a preexisting workload for the negative case.
 
 ## Gotchas
 

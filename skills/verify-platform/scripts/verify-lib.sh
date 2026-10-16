@@ -37,7 +37,7 @@
 # Variables such as EVIDENCE are assigned by the skill's vk_paths hook, not here.
 # shellcheck disable=SC2154
 
-VK_KIT_VERSION="1.3.0"
+VK_KIT_VERSION="1.3.1"
 VK_SCRIPT_NAME="control.sh"
 VK_VERIFY_ACTIVE=0
 VK_CLEANUP_ATTEMPTED=0
@@ -281,10 +281,10 @@ vk_capture_source() {
         while IFS= read -r -d '' path; do
           printf '%s\0' "$path"
           if [ -L "$VK_ROOT/$path" ]; then readlink "$VK_ROOT/$path"
-          elif [ -f "$VK_ROOT/$path" ]; then shasum -a 256 "$VK_ROOT/$path"
+          elif [ -f "$VK_ROOT/$path" ]; then LC_ALL=C shasum -a 256 "$VK_ROOT/$path"
           fi
         done < <(git -C "$VK_ROOT" ls-files --others --exclude-standard -z)
-      } | shasum -a 256 | awk '{print $1}'
+      } | LC_ALL=C shasum -a 256 | awk '{print $1}'
     )"
   fi
 }

@@ -1,10 +1,22 @@
 #!/usr/bin/env bash
 # Render current production route/application pruning without vendoring or pushing.
 set -euo pipefail
-[ "$#" = 2 ] && [ "$1" = --execute ] || { echo 'render-feature-matrix.sh --execute EVIDENCE_DIR' >&2; exit 2; }
+export LC_ALL=C
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=/dev/null
+source "$script_dir/../../../scripts/lib/shell-cli.sh"
+usage() {
+  shell_cli_usage_line ' [--dry-run] [--execute] EVIDENCE_DIR'
+  echo 'Render stage and optional-feature combinations into a fresh evidence directory.'
+  shell_cli_standard_options
+}
+shell_cli_parse_standard_only usage "$@" || exit 2
+shell_cli_maybe_execute_or_preview_summary usage 'would render the infrastructure feature matrix into EVIDENCE_DIR'
+[ "$SHELL_CLI_ARG_COUNT" = 1 ] || { usage >&2; exit 2; }
+set -- "${SHELL_CLI_ARGS[0]}"
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
-mkdir -p "$2"
-out=$(cd "$2" && pwd)
+mkdir -p "$1"
+out=$(cd "$1" && pwd)
 git -C "$root" rev-parse HEAD > "$out/revision.txt"
 shasum -a 256 "$root/terraform/kubernetes/scripts/sync-gitea-policies.sh" \
   "$root/terraform/kubernetes/scripts/rewrite-gateway-route-filters.pl" \
@@ -45,4 +57,4 @@ for stage in 800 900; do
     done
   done
 done
-PYTHONOPTIMIZE=0 python3 "$(dirname "$0")/check-feature-matrix.py" "$out"
+PYTHONOPTIMIZE=0 uv run --locked --project "$root" python "$script_dir/check-feature-matrix.py" "$out"

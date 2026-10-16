@@ -350,3 +350,53 @@ harness_control() {
   [[ "$output" == *"unrelated runtime changed"* ]]
   [ -f "$VERIFY_EVIDENCE_ROOT/platform-run/evidence/unrelated-containers.after.txt" ]
 }
+
+@test "standalone verification helpers preview and help without Docker or output writes" {
+  use_stubs
+  local helper target
+  target="$BATS_TEST_TMPDIR/not-created"
+  cd "$BATS_TEST_TMPDIR"
+  for helper in runtime-snapshot render-feature-matrix; do
+    run "$BASH32" "$BATS_TEST_DIRNAME/../scripts/$helper.sh" --help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Usage:"* ]]
+    run "$BASH32" "$BATS_TEST_DIRNAME/../scripts/$helper.sh" --execute --help
+    [ "$status" -eq 0 ]
+    run "$BASH32" "$BATS_TEST_DIRNAME/../scripts/$helper.sh" --dry-run --execute capture "$target"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"INFO dry-run:"* ]]
+    [ ! -e "$target" ]
+  done
+  assert_no_stub_calls
+}
+
+@test "runtime snapshot requires execute and checks actual captured identities" {
+  use_stubs
+  cat > "$STUBS/docker" <<'STUB'
+#!/bin/sh
+echo "docker $*" >> "$STUB_CALLS"
+case "$1" in
+  ps) echo fixture-container ;;
+  inspect) printf 'fixture-container true %s\n' "${FIXTURE_STARTED_AT:-original-start}" ;;
+  *) exit 2 ;;
+esac
+STUB
+  chmod +x "$STUBS/docker"
+  local helper snapshot
+  helper="$BATS_TEST_DIRNAME/../scripts/runtime-snapshot.sh"
+  snapshot="$BATS_TEST_TMPDIR/snapshot.txt"
+  cd "$BATS_TEST_TMPDIR"
+  run "$BASH32" "$helper" capture "$snapshot"
+  [ "$status" -eq 0 ]
+  [ ! -e "$snapshot" ]
+  assert_no_stub_calls
+  run "$BASH32" "$helper" --execute capture "$snapshot"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$snapshot")" = 'fixture-container true original-start' ]
+  run "$BASH32" "$helper" --execute assert "$snapshot"
+  [ "$status" -eq 0 ]
+  export FIXTURE_STARTED_AT=restarted
+  run "$BASH32" "$helper" --execute assert "$snapshot"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"restarted"* ]]
+}
