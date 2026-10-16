@@ -37,7 +37,7 @@
 # Variables such as EVIDENCE are assigned by the skill's vk_paths hook, not here.
 # shellcheck disable=SC2154
 
-VK_KIT_VERSION="1.3.1"
+VK_KIT_VERSION="1.3.3"
 VK_SCRIPT_NAME="control.sh"
 VK_VERIFY_ACTIVE=0
 VK_CLEANUP_ATTEMPTED=0
@@ -275,17 +275,41 @@ vk_capture_source() {
   VK_SOURCE_DIGEST=unavailable
   if git -C "$VK_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
     VK_SOURCE_DIGEST="$(
+      set -o pipefail
+      trap - EXIT
+      local source_root source_temporary_base source_temporary
+      source_root="$(cd "$VK_ROOT" && pwd -P)" || exit 1
+      source_temporary_base="$(cd "${TMPDIR:-/tmp}" && pwd -P)" || exit 1
+      if [[ "$source_temporary_base/" = "${source_root%/}/"* ]]; then
+        vk_err "source capture requires TMPDIR outside the source repository"; exit 1
+      fi
+      source_temporary="$(mktemp -d "$source_temporary_base/verify-kit-source.XXXXXXXX")" || exit 1
+      trap 'rm -rf "$source_temporary"' EXIT
       {
-        git -C "$VK_ROOT" diff --binary HEAD
+        git -C "$VK_ROOT" diff --binary HEAD 2>"$source_temporary/git.stderr" || {
+          cat "$source_temporary/git.stderr" >&2; exit 1;
+        }
+        if [ -s "$source_temporary/git.stderr" ]; then
+          vk_err "cannot capture source: git diff reported diagnostics"
+          cat "$source_temporary/git.stderr" >&2; exit 1
+        fi
+        git -C "$VK_ROOT" ls-files --others --exclude-standard -z >"$source_temporary/paths" 2>"$source_temporary/git.stderr" || {
+          cat "$source_temporary/git.stderr" >&2; exit 1;
+        }
+        if [ -s "$source_temporary/git.stderr" ]; then
+          vk_err "cannot capture source: git ls-files reported diagnostics"
+          cat "$source_temporary/git.stderr" >&2; exit 1
+        fi
         local path
         while IFS= read -r -d '' path; do
           printf '%s\0' "$path"
-          if [ -L "$VK_ROOT/$path" ]; then readlink "$VK_ROOT/$path"
-          elif [ -f "$VK_ROOT/$path" ]; then LC_ALL=C shasum -a 256 "$VK_ROOT/$path"
+          if [ -L "$VK_ROOT/$path" ]; then readlink "$VK_ROOT/$path" || exit 1
+          elif [ -f "$VK_ROOT/$path" ]; then LC_ALL=C shasum -a 256 "$VK_ROOT/$path" || exit 1
+          else vk_err "cannot capture source file: $path"; exit 1
           fi
-        done < <(git -C "$VK_ROOT" ls-files --others --exclude-standard -z)
+        done < "$source_temporary/paths"
       } | LC_ALL=C shasum -a 256 | awk '{print $1}'
-    )"
+    )" || { VK_SOURCE_DIGEST=unavailable; return 1; }
   fi
 }
 vk_write_result() {   # <result> <exit code>
