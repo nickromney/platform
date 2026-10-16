@@ -37,9 +37,11 @@
 # Variables such as EVIDENCE are assigned by the skill's vk_paths hook, not here.
 # shellcheck disable=SC2154
 
-VK_KIT_VERSION="1.2.1"
+VK_KIT_VERSION="1.3.0"
 VK_SCRIPT_NAME="control.sh"
 VK_VERIFY_ACTIVE=0
+VK_CLEANUP_ATTEMPTED=0
+VK_CLEANUP_RESULT=not_attempted
 
 vk_say() { printf '%s\n' "$*"; }
 vk_err() { printf '%s: %s\n' "$VK_SCRIPT_NAME" "$*" >&2; }
@@ -90,7 +92,7 @@ vk_resolve() {
   if [ -n "${VERIFY_RUN_ID:-}" ]; then
     VK_RUN_ID="$VERIFY_RUN_ID"
   elif [ "$VK_CMD" = launch ] || [ "$VK_CMD" = verify ] || [ ! -f "$VK_BASE_DIR/current" ]; then
-    VK_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+    VK_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$-$RANDOM-$RANDOM"
   else
     VK_RUN_ID="$(cat "$VK_BASE_DIR/current")"
   fi
@@ -145,15 +147,23 @@ vk_expect_contains() {   # <file> <fixed text>
   else vk_fail "$(basename "$1") lacks '$2'"; fi
 }
 vk_expect_not_contains() {   # <file> <fixed text>
-  if [ -f "$1" ] && ! grep -F -q -- "$2" "$1"; then vk_pass "$(basename "$1") has no '$2'"
-  else vk_fail "$(basename "$1") contains '$2' (or is missing)"; fi
+  local rc=0
+  [ -f "$1" ] && [ -r "$1" ] || { vk_fail "cannot read evidence $1"; return 1; }
+  grep -F -q -- "$2" "$1" || rc=$?
+  case "$rc" in
+    1) vk_pass "$(basename "$1") has no '$2'" ;;
+    0) vk_fail "$(basename "$1") contains '$2'" ;;
+    *) vk_fail "cannot read evidence $1 (grep exit $rc)" ;;
+  esac
 }
 vk_expect_equals() {   # <label> <actual> <expected>
   if [ "$2" = "$3" ]; then vk_pass "$1 = '$3'"; else vk_fail "$1 = '$2', expected '$3'"; fi
 }
 vk_expect_count() {   # <file> <fixed text> <expected line count>
-  local n=0
-  if [ -f "$1" ]; then n="$(grep -F -c -- "$2" "$1" || true)"; fi
+  local n rc=0
+  [ -f "$1" ] && [ -r "$1" ] || { vk_fail "cannot read evidence $1"; return 1; }
+  n="$(grep -F -c -- "$2" "$1")" || rc=$?
+  [ "$rc" -le 1 ] || { vk_fail "cannot read evidence $1 (grep exit $rc)"; return 1; }
   vk_expect_equals "$(basename "$1") lines containing '$2'" "$n" "$3"
 }
 vk_expect_line() {   # <file> <line prefix> <fixed text>: the first line starting with prefix contains text
@@ -164,6 +174,32 @@ vk_expect_line() {   # <file> <line prefix> <fixed text>: the first line startin
 }
 vk_expect_file() {   # <path>
   if [ -e "$1" ]; then vk_pass "$1 exists"; else vk_fail "$1 is missing"; fi
+}
+
+# Hash names, types, contents and symlink targets without following links or writing files.
+vk_tree_digest() {   # <directory>
+  [ -d "$1" ] || { vk_err "not a directory: $1"; return 1; }
+  perl -MFile::Find -MDigest::SHA -e '
+    use strict; use warnings;
+    local $SIG{__WARN__} = sub { die @_ };
+    my $root = shift; chdir $root or die "chdir: $!";
+    my @paths;
+    find({ no_chdir => 1, wanted => sub { push @paths, $File::Find::name } }, ".");
+    my $sha = Digest::SHA->new(256);
+    for my $path (sort @paths) {
+      my $kind = -l $path ? "link" : -f $path ? "file" : -d $path ? "dir" : "other";
+      $sha->add(length($path), ":", $path, $kind, "\0");
+      if ($kind eq "file") {
+        open my $fh, "<", $path or die "read $path: $!"; binmode $fh;
+        my $file = Digest::SHA->new(256); $file->addfile($fh); close $fh or die "close: $!";
+        $sha->add($file->hexdigest);
+      } elsif ($kind eq "link") {
+        my $target = readlink $path; defined $target or die "readlink: $!";
+        $sha->add(length($target), ":", $target);
+      } elsif ($kind eq "other") { die "unsupported file type: $path"; }
+    }
+    print $sha->hexdigest, "\n";
+  ' "$1"
 }
 
 # ---- processes and ports ---------------------------------------------------------------------
@@ -219,28 +255,113 @@ vk_wait_for_alive() {   # <pidfile> <seconds> <command...>
 }
 
 # ---- the verify cycle ------------------------------------------------------------------------
+# Claims live outside project scratch state, which cleanup hooks may remove.
+vk_claim_run() {
+  VK_OWNER_DIR="$VK_BASE_DIR/.verify-kit-owners/$VK_RUN_ID"
+  mkdir -p "$VK_BASE_DIR/.verify-kit-owners" "$VK_EVIDENCE_ROOT" 2>/dev/null || { vk_fail "cannot write $VK_BASE_DIR or $VK_EVIDENCE_ROOT"; return 1; }
+  if ! mkdir "$VK_OWNER_DIR" 2>/dev/null; then
+    vk_fail "run $VK_RUN_ID is already owned; cleanup that run before reuse"
+    return 1
+  fi
+  if [ -e "$VK_BASE_DIR/$VK_RUN_ID" ] || [ -L "$VK_BASE_DIR/$VK_RUN_ID" ] || [ -e "$EVIDENCE" ] || [ -L "$EVIDENCE" ]; then
+    rmdir "$VK_OWNER_DIR"
+    vk_fail "run $VK_RUN_ID already has state or evidence; use a new run id"
+    return 1
+  fi
+}
+vk_release_run() { rmdir "$VK_BASE_DIR/.verify-kit-owners/$VK_RUN_ID" 2>/dev/null || true; }
+vk_capture_source() {
+  VK_SOURCE_REVISION="$(git -C "$VK_ROOT" rev-parse HEAD 2>/dev/null || printf 'not-a-git-checkout')"
+  VK_SOURCE_DIGEST=unavailable
+  if git -C "$VK_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+    VK_SOURCE_DIGEST="$(
+      {
+        git -C "$VK_ROOT" diff --binary HEAD
+        local path
+        while IFS= read -r -d '' path; do
+          printf '%s\0' "$path"
+          if [ -L "$VK_ROOT/$path" ]; then readlink "$VK_ROOT/$path"
+          elif [ -f "$VK_ROOT/$path" ]; then shasum -a 256 "$VK_ROOT/$path"
+          fi
+        done < <(git -C "$VK_ROOT" ls-files --others --exclude-standard -z)
+      } | shasum -a 256 | awk '{print $1}'
+    )"
+  fi
+}
+vk_write_result() {   # <result> <exit code>
+  [ -d "${EVIDENCE:-}" ] || return 0
+  # The browser scope is requested scope. Project drivers own completed-feature proof.
+  perl -MJSON::PP -e '
+    my ($file, $version, $app, $run, $revision, $digest, $browsers, $result, $exit, $cleanup) = @ARGV;
+    open my $out, ">", $file or die "write result: $!";
+    print {$out} JSON::PP->new->canonical->pretty->encode({
+      schemaVersion => 1, kitVersion => $version, app => $app, runId => $run,
+      revision => $revision, sourceDigest => $digest, requestedBrowsers => $browsers,
+      result => $result, exitCode => 0 + $exit, cleanup => $cleanup,
+      completedFeatures => undef,
+      featureEvidence => "See project driver artifacts for completed actions and browser versions"
+    });
+    close $out or die "close result: $!";
+  ' "$EVIDENCE/run-result.json" "$VK_KIT_VERSION" "$VK_APP" "$VK_RUN_ID" \
+    "${VK_SOURCE_REVISION:-unavailable}" "${VK_SOURCE_DIGEST:-unavailable}" \
+    "${VK_REQUESTED_BROWSERS:-not-applicable}" "$1" "$2" "$VK_CLEANUP_RESULT"
+}
+vk_cleanup_owned() {
+  # Keep project cleanup output visible and retain the claim on a failed hook.
+  local rc=0 restore_errexit=0
+  case $- in *e*) restore_errexit=1 ;; esac
+  VK_CLEANUP_ATTEMPTED=1
+  set +e
+  ( set -e; trap - EXIT; cmd_cleanup )
+  rc=$?
+  if [ "$restore_errexit" -eq 1 ]; then set -e; fi
+  if [ "$rc" -ne 0 ]; then
+    VK_CLEANUP_RESULT=failed
+    vk_err "cleanup failed run=$VK_RUN_ID exit=$rc; retry --execute cleanup with VERIFY_RUN_ID=$VK_RUN_ID"
+    return "$rc"
+  fi
+  VK_CLEANUP_RESULT=passed
+  vk_release_run
+}
 vk_on_verify_exit() {
   local rc=$?
   trap - EXIT
-  # Bash can leave $? as zero when nounset terminates during parameter expansion.
-  # The active marker distinguishes an interrupted verify cycle from a completed one.
   if [ "$VK_VERIFY_ACTIVE" -eq 1 ] && [ "$rc" -eq 0 ]; then rc=1; fi
-  cmd_cleanup >/dev/null 2>&1 || true
-  if [ "$rc" -ne 0 ]; then vk_say "VERIFY FAIL run=$VK_RUN_ID exit=$rc evidence=${EVIDENCE:-unknown}" >&2; fi
+  if [ "$VK_CLEANUP_ATTEMPTED" -eq 0 ]; then
+    set +e
+    vk_cleanup_owned
+  fi
+  vk_write_result FAIL "$rc" || vk_err "could not retain run-result.json"
+  vk_say "VERIFY FAIL run=$VK_RUN_ID exit=$rc evidence=${EVIDENCE:-unknown}" >&2
   exit "$rc"
 }
 vk_run_verify() {
-  # Fail fast, before any build or start, when the run cannot record state or evidence.
-  if ! mkdir -p "$VK_BASE_DIR/$VK_RUN_ID" "$VK_EVIDENCE_ROOT" 2>/dev/null; then
-    vk_fail "cannot write $VK_BASE_DIR/$VK_RUN_ID or $VK_EVIDENCE_ROOT"
-    return 1
-  fi
+  vk_claim_run
   VK_VERIFY_ACTIVE=1
   trap vk_on_verify_exit EXIT
+  vk_capture_source
   cmd_launch
+  vk_write_result RUNNING 0
   cmd_doctor
   vk_verify_recipes
-  cmd_cleanup
+  local artifact
+  local artifacts=()
+  [ -d "$EVIDENCE" ] || { vk_fail "missing evidence directory $EVIDENCE"; return 1; }
+  # The default evidence root can contain the hook's scratch STATE directory.
+  # Inventory proof files while allowing cleanup to remove that scratch subtree.
+  while IFS= read -r -d '' artifact; do artifacts[${#artifacts[@]}]="$artifact"; done < <(
+    if [ -n "${STATE:-}" ] && [ "$STATE" != "$EVIDENCE" ]; then
+      find "$EVIDENCE" -path "$STATE" -prune -o -type f -print0
+    else
+      find "$EVIDENCE" -type f -print0
+    fi
+  )
+  vk_cleanup_owned
+  for artifact in "${artifacts[@]+"${artifacts[@]}"}"; do
+    [ -f "$artifact" ] || { vk_fail "evidence removed by cleanup: $artifact"; return 1; }
+  done
+  [ -d "$EVIDENCE" ] || { vk_fail "evidence removed by cleanup: $EVIDENCE"; return 1; }
+  vk_write_result PASS 0
   VK_VERIFY_ACTIVE=0
   trap - EXIT
   vk_say "VERIFY PASS run=$VK_RUN_ID evidence=$EVIDENCE"
@@ -267,7 +388,7 @@ vk_main() {
   if [ $# -gt 0 ]; then shift; fi
   vk_resolve
   if [ "${VK_BROWSER_SKILL:-0}" = 1 ]; then
-    if vk_browsers >/dev/null; then :; else return $?; fi
+    if VK_REQUESTED_BROWSERS="$(vk_browsers)"; then :; else return $?; fi
   fi
   vk_paths
 
@@ -289,6 +410,18 @@ vk_main() {
     verify)
       if [ $# -gt 0 ]; then vk_err "verify takes no arguments"; return 2; fi
       vk_run_verify
+      ;;
+    launch)
+      vk_claim_run
+      VK_VERIFY_ACTIVE=1
+      trap vk_on_verify_exit EXIT
+      vk_dispatch "$VK_CMD" ${@+"$@"}
+      VK_VERIFY_ACTIVE=0
+      trap - EXIT
+      ;;
+    cleanup)
+      vk_dispatch "$VK_CMD" ${@+"$@"}
+      vk_release_run
       ;;
     *)
       vk_dispatch "$VK_CMD" ${@+"$@"}

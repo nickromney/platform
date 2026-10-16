@@ -215,6 +215,15 @@ web_skill() { [ -n "$("$BASH32" "$SCRIPT" --list-browsers)" ]; }
   assert_no_writes
 }
 
+@test "a web skill rejects invalid execute scope before starting any application" {
+  if ! web_skill; then skip "not a web skill"; fi
+  VERIFY_BROWSERS=opera run_control --execute verify
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unknown browser 'opera'"* ]]
+  [[ "$output" != *"VERIFY PASS"* ]]
+  assert_no_writes
+}
+
 @test "shellcheck is clean for control.sh, the library and every BATS file" {
   if ! command -v shellcheck >/dev/null; then skip "shellcheck not installed"; fi
   run shellcheck -x -P "$SKILL_DIR/scripts" "$SCRIPT" "$LIB" "$SKILL_DIR"/tests/*.bats
