@@ -504,7 +504,7 @@ install_vim_sensible_source() {
 
 install_playwright_runtime_deps() {
   # Bake the Linux runtime packages only; tests still install the browser binary on demand.
-  HOME="/home/${username}" XDG_CACHE_HOME="/home/${username}/.cache" bun x playwright install-deps chromium
+  HOME="/home/${username}" XDG_CACHE_HOME="/home/${username}/.cache" bun x playwright@1.63.0 install-deps chromium
 }
 
 cleanup_toolchain_caches() {

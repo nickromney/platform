@@ -45,6 +45,8 @@ The steps, in order:
 1. Refuse if a compose project named `compose` or a listener on :8443
    already exists. The project name and ports are fixed, so a second instance
    is impossible, and someone else's stack must not be adopted.
+   Capture every existing running Docker container's full identity, running
+   state and start time before creating the verification stack.
 2. Run `bun install --frozen-lockfile` in `tests/kubernetes/sso`. That
    provides `playwright-core`, and the driver uses Playwright's own Chromium, Firefox and WebKit builds
    (`VERIFY_BROWSER`, default `chromium`; install with
@@ -129,11 +131,26 @@ C cleanup
 ```
 
 Runs `make -C docker/compose down`, but only if this run launched the stack.
+Then compare the unrelated container snapshot against Docker again. A removed,
+stopped or restarted unrelated container fails cleanup. Failed teardown or
+isolation checks retain the ownership marker and logs for diagnosis and retry.
 It deletes `<run>/state` and keeps the evidence. The built `app/.run/`
 binaries and the `tests/kubernetes/sso/node_modules` stay. Both are
 git-ignored build outputs.
 
 ## Gotchas
+
+- Infrastructure checks have separate recipes: run
+  `scripts/render-feature-matrix.sh --execute EVIDENCE_DIR` from this skill's
+  directory for the [offline optional-feature matrix](features/infrastructure-feature-matrix.md).
+  Read [staged kind acceptance](features/staged-kind.md) for the current
+  `--variant kind` workflow preview and read-only memory preflight. These
+  checks do not start a cluster and are not part of the Compose default.
+
+- [Runtime isolation](features/runtime-isolation.md) covers the Compose
+  lifecycle boundary. It does not prove kind/Lima reset isolation, stage-900
+  deployment, or disabled optional-feature route/grant removal. Those require
+  separate supported-stack recipes and remain unverified by `make verify`.
 
 - Any new or changed file, untracked ones included, invalidates the pre-push
   `.run/ci-receipt.json`. Re-run `uv run --locked make lint && uv run

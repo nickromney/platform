@@ -29,3 +29,6 @@ Each feature file has an H1, one paragraph, and then `Sub-features`, `How to get
 - [SSO sign-in](./sso-sign-in.md): oauth2-proxy → Dex → app. **Driven 2026-10-10 as the first half of `drive lookup`; `drive login` alone not separately run.**
 - [Subnet lookup through APIM](./subnet-lookup.md): the lookup form and the APIM hop. **Driven 2026-10-10.**
 - [Provider range check](./provider-check.md): `#provider-form`. Not yet driven.
+- [Runtime isolation](./runtime-isolation.md): independent Docker identity/liveness/start-time checks around Compose cleanup. Kind/Lima reset and optional-feature deployment matrices remain separate pending acceptance.
+- [Infrastructure feature matrix](./infrastructure-feature-matrix.md): separate offline production route/application rendering for current stages and optional namespace references.
+- [Staged kind and reset isolation](./staged-kind.md): resource preflight, safe workflow preview and distinct live acceptance/reset recipes; full deployment remains pending.

@@ -196,6 +196,7 @@ PY
   [[ "${output}" == *"All bunfig.toml files set minimumReleaseAge=604800"* ]]
   [[ "${output}" == *"All uv-managed pyproject.toml files set exclude-newer='7 days'"* ]]
   [[ "${output}" == *"All version checks passed."* ]]
+  [[ "${output}" != *"has no effect when used outside of a project"* ]]
 }
 
 @test "check-version fails when a dependency age gate drifts" {

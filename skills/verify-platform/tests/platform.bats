@@ -86,6 +86,15 @@ assert_no_stub_calls() {
   assert_no_stub_calls
 }
 
+assert_no_run_artifacts() {
+  # The shared claim may create roots; refusal must leave no run data or live claim.
+  [ ! -e "$VERIFY_BASE_DIR/$VERIFY_RUN_ID" ]
+  [ ! -e "$VERIFY_BASE_DIR/current" ]
+  [ ! -e "$VERIFY_BASE_DIR/.verify-kit-owners/$VERIFY_RUN_ID" ]
+  [ ! -d "$VERIFY_BASE_DIR" ] || [ -z "$(find "$VERIFY_BASE_DIR" -mindepth 1 ! -path "$VERIFY_BASE_DIR/.verify-kit-owners" -print -quit)" ]
+  [ ! -d "$VERIFY_EVIDENCE_ROOT" ] || [ -z "$(find "$VERIFY_EVIDENCE_ROOT" -mindepth 1 -print -quit)" ]
+}
+
 @test "launch refuses when a compose project named compose already exists" {
   use_stubs
   # shellcheck disable=SC2030 # stub settings are exported per test on purpose
@@ -93,7 +102,7 @@ assert_no_stub_calls() {
   run_control --execute launch
   [ "$status" -eq 1 ]
   [[ "$output" == *"it is not ours"* ]]
-  [ ! -e "$VERIFY_BASE_DIR" ]
+  assert_no_run_artifacts
   assert_no_stub_call '^make '
   assert_no_stub_call '^bun '
 }
@@ -104,7 +113,7 @@ assert_no_stub_calls() {
   run_control --execute launch
   [ "$status" -eq 1 ]
   [[ "$output" == *"it is not ours"* ]]
-  [ ! -e "$VERIFY_BASE_DIR" ]
+  assert_no_run_artifacts
   assert_no_stub_call '^make '
 }
 
@@ -146,6 +155,7 @@ assert_no_stub_calls() {
 mark_launched() {
   mkdir -p "$VERIFY_BASE_DIR/platform-run/state" "$VERIFY_EVIDENCE_ROOT/platform-run/evidence"
   : > "$VERIFY_BASE_DIR/platform-run/state/launched"
+  : > "$VERIFY_EVIDENCE_ROOT/platform-run/evidence/unrelated-containers.before.txt"
   printf '%s\n' "recorded-revision" > "$VERIFY_EVIDENCE_ROOT/platform-run/evidence/revision.txt"
 }
 healthy_stack() {
@@ -310,14 +320,14 @@ harness_control() {
   [[ "$output" == *"cleaned run=platform-run; evidence kept at"* ]]
 }
 
-@test "cleanup still finishes and removes the marker when compose down fails" {
+@test "cleanup retains ownership and reports failure when compose down fails" {
   use_stubs
   mark_launched
   export STUB_MAKE_RC=1
   run_control --execute cleanup
-  [ "$status" -eq 0 ]
-  [ ! -e "$VERIFY_BASE_DIR/platform-run/state/launched" ]
-  [[ "$output" == *"cleaned run=platform-run"* ]]
+  [ "$status" -ne 0 ]
+  [ -e "$VERIFY_BASE_DIR/platform-run/state/launched" ]
+  [[ "$output" == *"ownership marker and evidence retained for retry"* ]]
 }
 
 @test "cleanup keeps a state directory that holds files other than the marker" {
@@ -328,4 +338,65 @@ harness_control() {
   [ "$status" -eq 0 ]
   [ ! -e "$VERIFY_BASE_DIR/platform-run/state/launched" ]
   [ -f "$VERIFY_BASE_DIR/platform-run/state/keep.txt" ]
+}
+
+@test "cleanup fails and retains ownership when an unrelated container disappears" {
+  use_stubs
+  mark_launched
+  printf '%s\n' 'unrelated-container true original-start' > "$VERIFY_EVIDENCE_ROOT/platform-run/evidence/unrelated-containers.before.txt"
+  run_control --execute cleanup
+  [ "$status" -ne 0 ]
+  [ -e "$VERIFY_BASE_DIR/platform-run/state/launched" ]
+  [[ "$output" == *"unrelated runtime changed"* ]]
+  [ -f "$VERIFY_EVIDENCE_ROOT/platform-run/evidence/unrelated-containers.after.txt" ]
+}
+
+@test "standalone verification helpers preview and help without Docker or output writes" {
+  use_stubs
+  local helper target
+  target="$BATS_TEST_TMPDIR/not-created"
+  cd "$BATS_TEST_TMPDIR"
+  for helper in runtime-snapshot render-feature-matrix; do
+    run "$BASH32" "$BATS_TEST_DIRNAME/../scripts/$helper.sh" --help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Usage:"* ]]
+    run "$BASH32" "$BATS_TEST_DIRNAME/../scripts/$helper.sh" --execute --help
+    [ "$status" -eq 0 ]
+    run "$BASH32" "$BATS_TEST_DIRNAME/../scripts/$helper.sh" --dry-run --execute capture "$target"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"INFO dry-run:"* ]]
+    [ ! -e "$target" ]
+  done
+  assert_no_stub_calls
+}
+
+@test "runtime snapshot requires execute and checks actual captured identities" {
+  use_stubs
+  cat > "$STUBS/docker" <<'STUB'
+#!/bin/sh
+echo "docker $*" >> "$STUB_CALLS"
+case "$1" in
+  ps) echo fixture-container ;;
+  inspect) printf 'fixture-container true %s\n' "${FIXTURE_STARTED_AT:-original-start}" ;;
+  *) exit 2 ;;
+esac
+STUB
+  chmod +x "$STUBS/docker"
+  local helper snapshot
+  helper="$BATS_TEST_DIRNAME/../scripts/runtime-snapshot.sh"
+  snapshot="$BATS_TEST_TMPDIR/snapshot.txt"
+  cd "$BATS_TEST_TMPDIR"
+  run "$BASH32" "$helper" capture "$snapshot"
+  [ "$status" -eq 0 ]
+  [ ! -e "$snapshot" ]
+  assert_no_stub_calls
+  run "$BASH32" "$helper" --execute capture "$snapshot"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$snapshot")" = 'fixture-container true original-start' ]
+  run "$BASH32" "$helper" --execute assert "$snapshot"
+  [ "$status" -eq 0 ]
+  export FIXTURE_STARTED_AT=restarted
+  run "$BASH32" "$helper" --execute assert "$snapshot"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"restarted"* ]]
 }
