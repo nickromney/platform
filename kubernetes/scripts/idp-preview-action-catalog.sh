@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
 usage() {
   cat <<'USAGE'
 Usage:
@@ -10,6 +16,7 @@ Usage:
   idp-preview-action-catalog.sh --dry-run-message TARGET --runtime RUNTIME --idp-public-url URL --idp-api-public-url URL
   idp-preview-action-catalog.sh --run-command TARGET --runtime RUNTIME --repo-root PATH --idp-public-url URL --idp-api-public-url URL
 USAGE
+  printf '\n%s\n' "$(shell_cli_standard_options)"
 }
 
 catalog_records() {
@@ -96,7 +103,13 @@ repo_root=""
 idp_public_url=""
 idp_api_public_url=""
 
+shell_cli_init_standard_flags
 while [ "$#" -gt 0 ]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --targets|--records)
       mode="${1#--}"
@@ -134,6 +147,17 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+
+if [ -z "${mode}" ] && [ "${SHELL_CLI_DRY_RUN}" -eq 1 ]; then
+  shell_cli_print_dry_run_summary "would inspect IDP preview action catalog records"
+  exit 0
+fi
+
+if [ -z "${mode}" ] && [ "${SHELL_CLI_EXECUTE}" -ne 1 ]; then
+  usage
+  shell_cli_print_dry_run_summary "would inspect IDP preview action catalog records"
+  exit 0
+fi
 
 case "${mode}" in
   targets)

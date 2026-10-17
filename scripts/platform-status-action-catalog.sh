@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
 usage() {
   cat <<'USAGE'
 Usage:
   platform-status-action-catalog.sh --records --variant NAME --variant-path PATH --runtime-present 0|1 --apply-100-enabled 0|1 --apply-100-reason TEXT --apply-900-enabled 0|1 --apply-900-reason TEXT
 USAGE
+  printf '\n%s\n' "$(shell_cli_standard_options)"
 }
 
 bool_json() {
@@ -68,7 +75,13 @@ apply_100_reason=""
 apply_900_enabled=""
 apply_900_reason=""
 
+shell_cli_init_standard_flags
 while [ "$#" -gt 0 ]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --records)
       mode="records"
@@ -113,6 +126,17 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+
+if [ -z "${mode}" ] && [ "${SHELL_CLI_DRY_RUN}" -eq 1 ]; then
+  shell_cli_print_dry_run_summary "would render platform status action catalog records"
+  exit 0
+fi
+
+if [ -z "${mode}" ] && [ "${SHELL_CLI_EXECUTE}" -ne 1 ]; then
+  usage
+  shell_cli_print_dry_run_summary "would render platform status action catalog records"
+  exit 0
+fi
 
 [ "${mode}" = "records" ] || {
   usage >&2

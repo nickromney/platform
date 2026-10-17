@@ -1,6 +1,62 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# This script is also published in the standalone Gitea app repository.
+usage() {
+  cat <<EOF
+Usage: ${0##*/} [--dry-run] [--execute]
+
+Clones the policies repo, rewrites subnetcalc image tags, and pushes the
+manifest update.
+
+Options:
+  --dry-run  Show a summary and exit before side effects
+  --execute  Update the policies repository; otherwise print help and preview
+  --shell-entrypoint-descriptor
+             Print machine-readable entrypoint contract metadata
+  -h, --help Show this message
+EOF
+}
+
+json_string() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  printf '"%s"' "$value"
+}
+
+descriptor() {
+  printf '{"schema_version":"shell-entrypoint/v1","name":'
+  json_string "${0##*/}"
+  printf ',"path":'
+  json_string "$0"
+  printf ',"supports":["--help","--dry-run","--execute"],"default_mode":"dry-run"}\n'
+}
+
+dry_run=0
+execute=0
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    --dry-run) dry_run=1 ;;
+    --execute) execute=1 ;;
+    --shell-entrypoint-descriptor) descriptor; exit 0 ;;
+    *)
+      printf '%s: unrecognized argument: %s\n' "${0##*/}" "$1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+if [[ "$dry_run" -eq 1 || "$execute" -ne 1 ]]; then
+  [[ "$dry_run" -eq 1 ]] || usage
+  printf 'INFO dry-run: would update subnetcalc image tags in the policies repo\n'
+  exit 0
+fi
+
 : "${GITEA_HTTP_BASE:?GITEA_HTTP_BASE is required (e.g. http://gitea-http.gitea.svc.cluster.local:3000)}"
 : "${GITEA_REPO_OWNER:?GITEA_REPO_OWNER is required}"
 : "${REGISTRY_HOST:?REGISTRY_HOST is required}"

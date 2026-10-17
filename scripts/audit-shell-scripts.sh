@@ -26,29 +26,10 @@ allowed_python_execution=(
   "scripts/platform-workflow-ui.sh"
 )
 
-# Pre-existing entrypoint-interface violations grandfathered so this audit can
-# run in CI. Do not add new scripts here; burn this list down by giving each
-# script the standard --help/--dry-run/--execute interface.
+# Docker credential helpers implement an external positional protocol. All
+# repository-owned CLI entrypoints must implement the standard interface.
 entrypoint_interface_exemptions=(
-  # Implements Docker's credential-helper protocol (get/store/erase/list on
-  # argv[1]); the interface is externally fixed and cannot adopt --dry-run.
   "kubernetes/scripts/docker-credential-platform-file.sh"
-  "apps/shared/keycloak/start-with-templated-realm.sh"
-  "apps/subnetcalc/update-subnetcalc-image-tags.sh"
-  "kubernetes/kind/scripts/rewrite-devcontainer-kubeconfig.sh"
-  "kubernetes/kind/scripts/run-bats-shards.sh"
-  "kubernetes/scripts/idp-preview-action-catalog.sh"
-  "kubernetes/scripts/plan-post-apply-verification.sh"
-  "kubernetes/scripts/reconcile-kubeconfig.sh"
-  "kubernetes/scripts/run-diagnostic-check.sh"
-  "kubernetes/scripts/run-post-apply-verification.sh"
-  "kubernetes/workflow/validate-image-catalog-target-refs.sh"
-  "scripts/check-make-target-surfaces.sh"
-  "scripts/make-known-goals.sh"
-  "scripts/platform-status-action-catalog.sh"
-  "scripts/run-bats-shards.sh"
-  "scripts/validate-json-schema.sh"
-  "terraform/kubernetes/scripts/render-kind-apiserver-oidc-manifest.sh"
 )
 
 bash4_feature_patterns=(

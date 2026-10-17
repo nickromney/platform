@@ -1158,20 +1158,35 @@ func TestMCPHTTPErrorIncludesResponseDetail(t *testing.T) {
 	}
 }
 
-func TestChatReturnsJSONBeforeProxyTimeoutWhenMCPConnectorHangs(t *testing.T) {
-	mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/.well-known/oauth-protected-resource/mcp":
-			apphttp.WriteJSON(w, http.StatusOK, map[string]any{"resource": mcpResource(r), "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
-		case "/mcp":
-			time.Sleep(200 * time.Millisecond)
-			writeRPC(w, 1, map[string]any{})
-		default:
-			http.NotFound(w, r)
+type hangingMCPConnectorClient struct {
+	connectorEntered chan struct{}
+	releaseConnector <-chan struct{}
+}
+
+func (c hangingMCPConnectorClient) Do(req *http.Request) (*http.Response, error) {
+	switch {
+	case req.Method == http.MethodGet && req.URL.Path == "/.well-known/oauth-protected-resource/mcp":
+		rec := httptest.NewRecorder()
+		apphttp.WriteJSON(rec, http.StatusOK, map[string]any{"resource": "http://mcp.example/mcp", "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
+		return rec.Result(), nil
+	case req.Method == http.MethodPost && req.URL.Path == "/mcp":
+		close(c.connectorEntered)
+		select {
+		case <-c.releaseConnector:
+		case <-time.After(200 * time.Millisecond):
 		}
-	}))
-	defer mcp.Close()
-	shell := NewServer(Config{Role: "shell", MCPURL: mcp.URL + "/mcp", LLMTimeout: 5 * time.Millisecond}, mcp.Client())
+		return nil, errors.New("test released the hanging connector")
+	default:
+		return nil, errors.New("unexpected request in hanging MCP connector fixture")
+	}
+}
+
+func TestChatReturnsJSONBeforeProxyTimeoutWhenMCPConnectorHangs(t *testing.T) {
+	connectorEntered := make(chan struct{})
+	releaseConnector := make(chan struct{})
+	defer close(releaseConnector)
+	client := hangingMCPConnectorClient{connectorEntered: connectorEntered, releaseConnector: releaseConnector}
+	shell := NewServer(Config{Role: "shell", MCPURL: "http://mcp.example/mcp", LLMTimeout: 5 * time.Millisecond}, client)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"message":"call the model","tool":"model_ping"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -1179,6 +1194,12 @@ func TestChatReturnsJSONBeforeProxyTimeoutWhenMCPConnectorHangs(t *testing.T) {
 	started := time.Now()
 	shell.ServeHTTP(rec, req)
 	elapsed := time.Since(started)
+
+	select {
+	case <-connectorEntered:
+	default:
+		t.Fatal("chat did not enter the MCP connector call")
+	}
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("chat returned %d: %s", rec.Code, rec.Body.String())

@@ -19,7 +19,7 @@ clusters:
   name: kind-kind-local
 EOF
 
-  run "${HELPER}" "${kubeconfig}" host.docker.internal localhost
+  run "${HELPER}" --execute "${kubeconfig}" host.docker.internal localhost
 
   [ "${status}" -eq 0 ]
   run cat "${kubeconfig}"

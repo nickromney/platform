@@ -22,6 +22,7 @@ spec:
 EOF
 
   run "${HELPER}" \
+    --execute \
     "${source_manifest}" \
     "${rendered_manifest}" \
     "https://dex.example.test/dex" \
@@ -58,6 +59,7 @@ spec:
 EOF
 
   run "${HELPER}" \
+    --execute \
     "${source_manifest}" \
     "${rendered_manifest}" \
     "https://keycloak.example.test/realms/platform" \
@@ -97,6 +99,7 @@ spec:
 EOF
 
   run "${HELPER}" \
+    --execute \
     "${source_manifest}" \
     "${rendered_manifest}" \
     "https://keycloak.example.test/realms/platform" \
@@ -133,6 +136,7 @@ spec:
 EOF
 
   run "${HELPER}" \
+    --execute \
     "${source_manifest}" \
     "${rendered_manifest}" \
     "https://keycloak.example.test/realms/platform" \
@@ -168,6 +172,7 @@ spec:
 EOF
 
   run "${HELPER}" \
+    --execute \
     "${source_manifest}" \
     "${rendered_manifest}" \
     "https://dex.example.test/dex" \

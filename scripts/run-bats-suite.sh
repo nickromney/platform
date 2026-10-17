@@ -133,7 +133,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -n "${SHARDS}" ]]; then
-  shard_args=(--shards "${SHARDS}")
+  shard_args=(--execute --shards "${SHARDS}")
   [[ -n "${TESTS_DIR}" ]] && shard_args+=(--tests-dir "${TESTS_DIR}")
   [[ "${PLAN_ONLY}" -eq 1 ]] && shard_args+=(--plan)
   shell_cli_maybe_execute_or_preview_summary usage \

@@ -8,6 +8,12 @@ setup() {
   export PATH="${TEST_BIN}:${PATH}"
 }
 
+write_tfvars() {
+  local path="$1"
+  shift
+  printf '%s\n' "$@" >"${path}"
+}
+
 @test "kind 950-local-idp profile keeps IDP essentials and disables heavy optional components" {
   profile="${REPO_ROOT}/kubernetes/kind/profiles/950-local-idp.tfvars"
 
@@ -219,22 +225,35 @@ EOF
 }
 
 @test "kind stage 900 apply waits for cluster health before browser SSO E2E verification" {
-  run grep -Fn 'post_apply_plan="$$( "$(PLAN_POST_APPLY_VERIFICATION)" --execute --variant-json "$(VARIANT_JSON)" --stage "$(STAGE)" "$${post_apply_args[@]}" )"; \' \
-    "${REPO_ROOT}/kubernetes/kind/Makefile"
+  tfvars="${BATS_TEST_TMPDIR}/stage900-sso.tfvars"
+  write_tfvars "${tfvars}" \
+    'enable_gateway_tls = true' \
+    'enable_headlamp = true' \
+    'enable_sso = true'
+
+  run "${REPO_ROOT}/kubernetes/scripts/plan-post-apply-verification.sh" --execute \
+    --variant-json "${REPO_ROOT}/kubernetes/variants/kind/variant.json" \
+    --stage 900 \
+    --var-file "${tfvars}"
 
   [ "${status}" -eq 0 ]
-
-  run grep -Fn 'printf '"'"'%s\n'"'"' check-health check-gateway-urls' \
-    "${REPO_ROOT}/kubernetes/scripts/plan-post-apply-verification.sh"
-
-  [ "${status}" -eq 0 ]
+  [ "${output}" = $'check-health\ncheck-gateway-urls\ncheck-sso-e2e' ]
 }
 
 @test "kind gateway stages verify HTTPS entrypoints after cluster health" {
-  run grep -Fn 'run_step "post-apply-verification" "$(RUN_POST_APPLY_VERIFICATION)" --execute --variant-json "$(VARIANT_JSON)" --stage "$(STAGE)" --make-dir "$(abspath $(MAKEFILE_DIR))" <<< "$$post_apply_plan"; \' \
-    "${REPO_ROOT}/kubernetes/kind/Makefile"
+  tfvars="${BATS_TEST_TMPDIR}/stage800-gateway.tfvars"
+  write_tfvars "${tfvars}" \
+    'enable_gateway_tls = true' \
+    'enable_headlamp = false' \
+    'enable_sso = false'
+
+  run "${REPO_ROOT}/kubernetes/scripts/plan-post-apply-verification.sh" --execute \
+    --variant-json "${REPO_ROOT}/kubernetes/variants/kind/variant.json" \
+    --stage 800 \
+    --var-file "${tfvars}"
 
   [ "${status}" -eq 0 ]
+  [ "${output}" = $'check-health\ncheck-gateway-urls' ]
 }
 
 @test "kind check-gateway-urls uses the split kind kubeconfig" {
@@ -252,10 +271,11 @@ EOF
 }
 
 @test "kind stage 900 apply runs browser SSO E2E verification after a successful apply" {
-  run grep -Fn 'printf '"'"'%s\n'"'"' check-sso-e2e' \
-    "${REPO_ROOT}/kubernetes/scripts/plan-post-apply-verification.sh"
+  run sed -n '/if \[ \$\$rc -eq 0 \]; then/,/exit \$\$rc/p' "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]
+  [[ "${output}" == *'post_apply_plan="$$( "$(PLAN_POST_APPLY_VERIFICATION)" --execute --variant-json "$(VARIANT_JSON)" --stage "$(STAGE)" "$${post_apply_args[@]}" )"'* ]] || return 1
+  [[ "${output}" == *'run_step "post-apply-verification" "$(RUN_POST_APPLY_VERIFICATION)" --execute --variant-json "$(VARIANT_JSON)" --stage "$(STAGE)" --make-dir "$(abspath $(MAKEFILE_DIR))" <<< "$$post_apply_plan"'* ]] || return 1
 }
 
 @test "kind check-sso-e2e delegates SSO env projection and forwards it to Playwright" {
@@ -446,10 +466,20 @@ EOF
 }
 
 @test "kind stage 900 apply runs browser SSO E2E inside the devcontainer" {
-  run grep -Fn 'run_make_step "${post_apply_step}" "STAGE=${stage}"' \
-    "${REPO_ROOT}/kubernetes/scripts/run-post-apply-verification.sh"
+  tfvars="${BATS_TEST_TMPDIR}/devcontainer-stage900-sso.tfvars"
+  write_tfvars "${tfvars}" \
+    'enable_gateway_tls = true' \
+    'enable_headlamp = true' \
+    'enable_sso = true'
+
+  run env PLATFORM_DEVCONTAINER=1 \
+    "${REPO_ROOT}/kubernetes/scripts/plan-post-apply-verification.sh" --execute \
+      --variant-json "${REPO_ROOT}/kubernetes/variants/kind/variant.json" \
+      --stage 900 \
+      --var-file "${tfvars}"
 
   [ "${status}" -eq 0 ]
+  [ "${output}" = $'check-health\ncheck-gateway-urls\ncheck-sso-e2e' ]
 }
 
 @test "kind check-sso-e2e no longer has a devcontainer carveout" {

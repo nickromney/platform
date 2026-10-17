@@ -11,13 +11,17 @@ BATS_FLAGS="${BATS_FLAGS:---timing}"
 BATS_PROGRESS_SECONDS="${BATS_PROGRESS_SECONDS:-15}"
 PLAN_ONLY=0
 
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/shell-cli.sh"
+shell_cli_init_standard_flags
+
 usage() {
-  cat <<'EOF'
-Usage: run-bats-shards.sh [--tests-dir DIR] [--shards N] [--plan]
+  cat <<EOF
+Usage: run-bats-shards.sh [--tests-dir DIR] [--shards N] [--plan] [--dry-run] [--execute]
 
 Split Kind Bats test cases into balanced shards and run those shards in
 parallel. Each shard groups tests by file and invokes Bats with generated
-`--filter` expressions, so oversized files do not dominate one shard.
+\`--filter\` expressions, so oversized files do not dominate one shard.
 
 Environment:
   BATS          Bats binary to run (default: bats)
@@ -30,18 +34,24 @@ Options:
   --tests-dir DIR  Directory containing .bats files
   --shards N       Number of shards
   --plan           Print the shard plan without running tests
-  -h, --help       Show this help
+$(shell_cli_standard_options)
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
   case "$1" in
     --tests-dir)
-      TESTS_DIR="${2:?--tests-dir requires a value}"
+      [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--tests-dir"; exit 2; }
+      TESTS_DIR="$2"
       shift 2
       ;;
     --shards)
-      BATS_SHARDS="${2:?--shards requires a value}"
+      [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--shards"; exit 2; }
+      BATS_SHARDS="$2"
       shift 2
       ;;
     --plan)
@@ -84,9 +94,19 @@ if [[ ! -d "${TESTS_DIR}" ]]; then
   exit 2
 fi
 
-RUN_DIR="${REPO_ROOT}/.run/bats-shards/kind"
-rm -rf "${RUN_DIR}"
-mkdir -p "${RUN_DIR}"
+if [[ "${PLAN_ONLY}" -eq 0 || "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_maybe_execute_or_preview_summary usage \
+    "would shard Bats tests in ${TESTS_DIR} with ${BATS_SHARDS} shard(s)"
+fi
+
+if [[ "${PLAN_ONLY}" -eq 1 ]]; then
+  RUN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/bats-shard-plan.XXXXXX")"
+  trap 'rm -rf "${RUN_DIR}"' EXIT
+else
+  RUN_DIR="${REPO_ROOT}/.run/bats-shards/kind"
+  rm -rf "${RUN_DIR}"
+  mkdir -p "${RUN_DIR}"
+fi
 
 TESTS_FILE="${RUN_DIR}/tests.tsv"
 find "${TESTS_DIR}" -maxdepth 1 -type f -name '*.bats' -print | sort | while IFS= read -r file; do
