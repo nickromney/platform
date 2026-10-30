@@ -94,3 +94,8 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"bun run build"* ]]
 }
+
+@test "docs Next.js lockfile satisfies the advisory policy" {
+  run bash -c 'cd "$1" && bun scripts/check-next-advisories.mjs && bun test tests/next-advisories.test.mjs' _ "${DOCS_SITE}"
+  [ "${status}" -eq 0 ]
+}

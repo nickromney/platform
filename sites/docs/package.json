@@ -8,7 +8,7 @@
     "dev": "NODE_OPTIONS=\"--no-experimental-webstorage ${NODE_OPTIONS:-}\" next dev",
     "local": "bun run build && bun run serve",
     "lint:content": "node scripts/content-lint.mjs",
-    "test:docs": "bun run lint:content && bun run check:d2 && node scripts/check-docs-integrity.mjs",
+    "test:docs": "bun scripts/check-next-advisories.mjs && bun test tests/next-advisories.test.mjs && bun run lint:content && bun run check:d2 && node scripts/check-docs-integrity.mjs",
     "media:d2": "node scripts/generate-d2-diagrams.mjs",
     "media:diagrams": "bun run media:d2",
     "check:d2": "node scripts/generate-d2-diagrams.mjs --check",
@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "next": "^16.2.6",
+    "next": "^16.4.1",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
     "react": "^19.2.5",
