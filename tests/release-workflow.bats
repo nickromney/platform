@@ -24,7 +24,7 @@ from pathlib import Path
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
 expected = {
     "actions/checkout": ("3d3c42e5aac5ba805825da76410c181273ba90b1", "v7.0.1"),
-    "actions/setup-node": ("820762786026740c76f36085b0efc47a31fe5020", "v7.0.0"),
+    "actions/setup-node": ("949feb2413d6458794dcd2491c4babbbce0c15c1", "v7.1.0"),
 }
 
 for repo, (sha, selector) in expected.items():
@@ -38,6 +38,22 @@ for repo, (sha, selector) in expected.items():
 PY
 
   [ "${status}" -eq 0 ]
+}
+
+@test "release workflow rejects Node below the fixed security floor" {
+  run node "${REPO_ROOT}/scripts/ci/check-node-floor.cjs" 22.23.3
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"below the required 22.23.4 floor"* ]]
+
+  run env GITHUB_SHA=deadbeef GITHUB_JOB=semantic-release \
+    node "${REPO_ROOT}/scripts/ci/check-node-floor.cjs" 22.23.4
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'"commit":"deadbeef"'* ]]
+  [[ "${output}" == *'"job":"semantic-release"'* ]]
+  [[ "${output}" == *'"node":"22.23.4"'* ]]
+
+  grep -Fq 'node-version: 22' "${REPO_ROOT}/.github/workflows/release.yml"
+  grep -Fq 'node scripts/ci/check-node-floor.cjs' "${REPO_ROOT}/.github/workflows/release.yml"
 }
 
 @test "make release is idempotent when the version is already prepared" {
