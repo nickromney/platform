@@ -86,12 +86,12 @@ setup() {
   [ -f "${dockerfile}" ]
   [ -f "${dockerignore}" ]
 
-  run rg -n 'FROM node:22-bookworm-slim AS packages|FROM node:22-bookworm-slim AS deps|FROM node:22-bookworm-slim AS production-deps|FROM dhi\.io/node:22-debian13 AS runtime|COPY package.json yarn.lock \.yarnrc\.yml backstage\.json tsconfig\.json ./|find packages -mindepth 2 -maxdepth 2 ! -name package\.json|corepack enable|yarn install --immutable|yarn tsc|yarn build:backend|COPY --from=production-deps /usr/lib/aarch64-linux-gnu/libsqlite3\.so\.0\*|COPY --chown=1000:1000 --from=production-deps /app ./|ENV BACKSTAGE_BASE_URL=https://portal\.127\.0\.0\.1\.sslip\.io|USER 1000:1000|EXPOSE 7007' "${dockerfile}"
+  run rg -n 'FROM node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS packages|FROM node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS deps|FROM node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS production-deps|FROM dhi\.io/node:22\.23\.4-debian13@sha256:b2191eda91feb8bcc6a8c3a055651216ddfed8239bd29c8c5e9fbcf43227a1bc AS runtime|COPY package.json yarn.lock \.yarnrc\.yml backstage\.json tsconfig\.json ./|find packages -mindepth 2 -maxdepth 2 ! -name package\.json|corepack enable|yarn install --immutable|yarn tsc|yarn build:backend|COPY --from=production-deps /usr/lib/aarch64-linux-gnu/libsqlite3\.so\.0\*|COPY --chown=1000:1000 --from=production-deps /app ./|ENV BACKSTAGE_BASE_URL=https://portal\.127\.0\.0\.1\.sslip\.io|USER 1000:1000|EXPOSE 7007' "${dockerfile}"
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"FROM node:22-bookworm-slim AS packages"* ]]
-  [[ "${output}" == *"FROM node:22-bookworm-slim AS deps"* ]]
-  [[ "${output}" == *"FROM node:22-bookworm-slim AS production-deps"* ]]
-  [[ "${output}" == *"FROM dhi.io/node:22-debian13 AS runtime"* ]]
+  [[ "${output}" == *"FROM node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS packages"* ]]
+  [[ "${output}" == *"FROM node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS deps"* ]]
+  [[ "${output}" == *"FROM node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS production-deps"* ]]
+  [[ "${output}" == *"FROM dhi.io/node:22.23.4-debian13@sha256:b2191eda91feb8bcc6a8c3a055651216ddfed8239bd29c8c5e9fbcf43227a1bc AS runtime"* ]]
   [[ "${output}" == *"COPY package.json yarn.lock .yarnrc.yml backstage.json tsconfig.json ./"* ]]
   [[ "${output}" == *"find packages -mindepth 2 -maxdepth 2 ! -name package.json"* ]]
   [[ "${output}" == *"corepack enable"* ]]

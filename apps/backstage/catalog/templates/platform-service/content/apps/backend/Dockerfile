@@ -1,4 +1,4 @@
-FROM dhi.io/node:22-debian13
+FROM dhi.io/node:22.23.4-debian13@sha256:b2191eda91feb8bcc6a8c3a055651216ddfed8239bd29c8c5e9fbcf43227a1bc
 
 ENV NODE_ENV=production
 ENV HOME=/tmp

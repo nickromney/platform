@@ -243,10 +243,10 @@ assert users["demo-admin"] == "demo@admin.test"
 assert users["demo-dev"] == "demo@dev.test"
 assert users["demo-uat"] == "demo@uat.test"
 
-assert "FROM node:22-bookworm-slim AS packages" in dockerfile
-assert "FROM node:22-bookworm-slim AS deps" in dockerfile
-assert "FROM node:22-bookworm-slim AS production-deps" in dockerfile
-assert "FROM dhi.io/node:22-debian13 AS runtime" in dockerfile
+assert "FROM node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS packages" in dockerfile
+assert "FROM node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS deps" in dockerfile
+assert "FROM node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS production-deps" in dockerfile
+assert "FROM dhi.io/node:22.23.4-debian13@sha256:b2191eda91feb8bcc6a8c3a055651216ddfed8239bd29c8c5e9fbcf43227a1bc AS runtime" in dockerfile
 assert "COPY package.json yarn.lock .yarnrc.yml backstage.json tsconfig.json ./" in dockerfile
 assert "find packages -mindepth 2 -maxdepth 2 ! -name package.json" in dockerfile
 assert "yarn install --immutable" in dockerfile
@@ -256,7 +256,7 @@ assert "COPY --from=production-deps /usr/lib/aarch64-linux-gnu/libsqlite3.so.0*"
 assert "USER 1000:1000" in dockerfile
 assert "EXPOSE 7007" in dockerfile
 
-runtime_stage = dockerfile.split("FROM dhi.io/node:22-debian13 AS runtime", 1)[1]
+runtime_stage = dockerfile.split("FROM dhi.io/node:22.23.4-debian13@sha256:b2191eda91feb8bcc6a8c3a055651216ddfed8239bd29c8c5e9fbcf43227a1bc AS runtime", 1)[1]
 assert "build-essential" not in runtime_stage
 assert "libsqlite3-dev" not in runtime_stage
 assert "g++" not in runtime_stage
@@ -587,7 +587,7 @@ catalog_api = catalog_docs[1]
 
 assert "FROM dhi.io/nginx:1.29.5-debian13" in frontend
 assert "USER 65532:65532" in frontend
-assert "FROM dhi.io/node:22-debian13" in backend
+assert "FROM dhi.io/node:22.23.4-debian13@sha256:b2191eda91feb8bcc6a8c3a055651216ddfed8239bd29c8c5e9fbcf43227a1bc" in backend
 assert "USER 1000:1000" in backend
 assert "renderMetrics()" in backend_server
 assert "http_requests_total" in backend_server
