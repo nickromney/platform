@@ -355,3 +355,55 @@ PYTEST
 
   grep -Fq 'test-ci-linux:' "${REPO_ROOT}/Makefile"
 }
+
+@test "Linux gate uses a separate uv environment and stamps only on success" {
+  local work="${BATS_TEST_TMPDIR}/checkout"
+  local mocks="${BATS_TEST_TMPDIR}/bin"
+  local log="${BATS_TEST_TMPDIR}/calls.log"
+  mkdir -p "${work}/.venv/bin" "${mocks}"
+  printf 'host sentinel\n' >"${work}/.venv/bin/python"
+
+  cat >"${mocks}/docker" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  cat >"${mocks}/devcontainer" <<'SH'
+#!/usr/bin/env bash
+if [ "$1" = "up" ]; then exit 0; fi
+shift
+while [ "$1" != "bash" ]; do shift; done
+exec "$@"
+SH
+  cat >"${mocks}/git" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  cat >"${mocks}/make" <<'SH'
+#!/usr/bin/env bash
+printf 'make UV_PROJECT_ENVIRONMENT=%s CI_RECEIPT_FILE=%s\n' \
+  "${UV_PROJECT_ENVIRONMENT:-}" "${CI_RECEIPT_FILE:-}" >>"${CALL_LOG}"
+exit "${MAKE_STATUS:-0}"
+SH
+  cat >"${mocks}/receipt" <<'SH'
+#!/usr/bin/env bash
+printf 'receipt %s\n' "$*" >>"${CALL_LOG}"
+SH
+  chmod +x "${mocks}/"*
+
+  run env PATH="${mocks}:${PATH}" CALL_LOG="${log}" REPO_ROOT="${work}" \
+    DEVCONTAINER_CLI=devcontainer DOCKER_BIN=docker CI_RECEIPT_SCRIPT="${mocks}/receipt" \
+    "${REPO_ROOT}/scripts/run-ci-linux.sh" --execute
+  [ "${status}" -eq 0 ]
+  grep -Fq "UV_PROJECT_ENVIRONMENT=${work}/.venv-linux" "${log}"
+  grep -Fq "CI_RECEIPT_FILE=/tmp/platform-linux-receipt.json" "${log}"
+  grep -Fq 'receipt --execute --action stamp --environment linux' "${log}"
+  [ "$(cat "${work}/.venv/bin/python")" = "host sentinel" ]
+
+  : >"${log}"
+  run env PATH="${mocks}:${PATH}" CALL_LOG="${log}" MAKE_STATUS=1 REPO_ROOT="${work}" \
+    DEVCONTAINER_CLI=devcontainer DOCKER_BIN=docker CI_RECEIPT_SCRIPT="${mocks}/receipt" \
+    "${REPO_ROOT}/scripts/run-ci-linux.sh" --execute
+  [ "${status}" -ne 0 ]
+  ! grep -Fq 'receipt ' "${log}"
+  [ "$(cat "${work}/.venv/bin/python")" = "host sentinel" ]
+}

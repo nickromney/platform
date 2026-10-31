@@ -92,6 +92,7 @@ PLATFORM_WORKSPACE="${REPO_ROOT}" \
         -u DEFAULT_KUBECONFIG_PATH \
         -u PLATFORM_DEVCONTAINER_HOST_ALIAS \
         -u KIND_DEVCONTAINER_HOST_ALIAS \
+        UV_PROJECT_ENVIRONMENT="${PLATFORM_WORKSPACE}/.venv-linux" \
         CI_RECEIPT_FILE=/tmp/platform-linux-receipt.json \
         make test-ci
   '
