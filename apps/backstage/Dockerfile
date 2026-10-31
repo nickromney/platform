@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim AS packages
+FROM node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS packages
 
 WORKDIR /app
 
@@ -10,7 +10,7 @@ COPY plugins ./plugins
 RUN find packages -mindepth 2 -maxdepth 2 ! -name package.json -exec rm -rf {} + && \
     find plugins -mindepth 2 -maxdepth 2 ! -name package.json -exec rm -rf {} +
 
-FROM node:22-bookworm-slim AS deps
+FROM node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS deps
 
 ENV NODE_OPTIONS="--no-node-snapshot"
 ENV PYTHON=/usr/bin/python3
@@ -38,7 +38,7 @@ COPY . .
 
 RUN yarn tsc && yarn build:backend
 
-FROM node:22-bookworm-slim AS production-deps
+FROM node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS production-deps
 
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--no-node-snapshot"
@@ -73,7 +73,7 @@ COPY --chown=node:node --from=build /app/app-config*.yaml ./
 COPY --chown=node:node --from=build /app/packages/backend/dist/bundle.tar.gz ./
 RUN tar xzf bundle.tar.gz && rm bundle.tar.gz
 
-FROM dhi.io/node:22-debian13 AS runtime
+FROM dhi.io/node:22.23.4-debian13@sha256:b2191eda91feb8bcc6a8c3a055651216ddfed8239bd29c8c5e9fbcf43227a1bc AS runtime
 
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--no-node-snapshot"

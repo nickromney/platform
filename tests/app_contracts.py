@@ -5888,7 +5888,7 @@ def external_runtime_image_ref_expectations() -> dict[str, dict[str, int]]:
             "FROM dhi.io/static:20260413-alpine3.23": 1,
         },
         "apps/backstage/Dockerfile": {
-            "FROM dhi.io/node:22-debian13 AS runtime": 1,
+            "FROM dhi.io/node:22.23.4-debian13@sha256:b2191eda91feb8bcc6a8c3a055651216ddfed8239bd29c8c5e9fbcf43227a1bc AS runtime": 1,
         },
         "apps/sentiment/compose.yml": {
             "image: quay.io/keycloak/keycloak:26.6.4": 1,
