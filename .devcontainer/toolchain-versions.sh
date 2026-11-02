@@ -11,7 +11,7 @@ DEVCONTAINER_NODE_NVM_VERSION="${DEVCONTAINER_NODE_NVM_VERSION:-0.40.4}"
 
 ARKADE_VERSION="${ARKADE_VERSION:-0.11.116}"
 BUN_VERSION="${BUN_VERSION:-bun-v1.3.14}"
-KYVERNO_VERSION="${KYVERNO_VERSION:-v1.18.2}"
+KYVERNO_VERSION="${KYVERNO_VERSION:-v1.19.2}"
 LEFTHOOK_VERSION="${LEFTHOOK_VERSION:-v2.1.10}"
 # The linter itself was the only lint tool here with no pinned version, in any
 # environment: brew on macOS, apt in the devcontainer, and whatever
@@ -25,7 +25,7 @@ LEFTHOOK_VERSION="${LEFTHOOK_VERSION:-v2.1.10}"
 SHELLCHECK_VERSION="${SHELLCHECK_VERSION:-v0.11.0}"
 LIMA_VERSION="${LIMA_VERSION:-v2.2.0}"
 MKCERT_VERSION="${MKCERT_VERSION:-v1.4.4}"
-OPENTOFU_VERSION="${OPENTOFU_VERSION:-1.12.5}"
+OPENTOFU_VERSION="${OPENTOFU_VERSION:-1.13.2}"
 # Pinned because CI installs it from the GitHub release rather than apt:
 # ripgrep is the one tool ten gated Bats files need that the ubuntu-latest
 # image does not ship, and reaching for apt to get it made every CI run pay

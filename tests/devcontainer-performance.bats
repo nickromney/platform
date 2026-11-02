@@ -27,8 +27,8 @@ EOF
   chmod +x "${TEST_BIN}/git"
 }
 
-@test "devcontainer install-toolchain pins Playwright runtime deps to 1.63.0" {
-  run grep -Fn 'bun x playwright@1.63.0 install-deps chromium' "${REPO_ROOT}/.devcontainer/install-toolchain.sh"
+@test "devcontainer install-toolchain pins Playwright runtime deps to 1.64.1" {
+  run grep -Fn 'bun x playwright@1.64.1 install-deps chromium' "${REPO_ROOT}/.devcontainer/install-toolchain.sh"
 
   [ "${status}" -eq 0 ]
 

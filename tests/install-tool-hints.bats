@@ -120,7 +120,7 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"jq: mise use jq@1.8.2"* ]]
-  [[ "${output}" == *"tofu: mise use opentofu@1.12.5"* ]]
+  [[ "${output}" == *"tofu: mise use opentofu@1.13.2"* ]]
   [[ "${output}" == *"limactl: mise use lima@2.2.0"* ]]
   [[ "${output}" == *"hubble: mise use github:cilium/hubble@1.19.4"* ]]
   [[ "${output}" == *"npx: mise use node@24.15.0"* ]]
@@ -177,7 +177,7 @@ EOF
   run env PATH="${TEST_BIN}:/usr/bin:/bin" INSTALL_TOOL_HINTS_MANAGERS="arkade curl" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute --plain kyverno step bun
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"kyverno: arkade get kyverno@1.18.2"* ]]
+  [[ "${output}" == *"kyverno: arkade get kyverno@1.19.2"* ]]
   [[ "${output}" == *"step: arkade get step@0.30.6"* ]]
   [[ "${output}" == *"bun: arkade get bun@1.3.14"* ]]
 }
