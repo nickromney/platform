@@ -245,22 +245,23 @@ configure_split_kubeconfig_defaults() {
   fi
 }
 
-list_tofu_processes() {
-  pgrep -af 'tofu|terraform-provider|terraform' 2>/dev/null || true
+kill_process_group() {
+  local pid="$1"
+  if ! kill -TERM "-${pid}" 2>/dev/null; then
+    kill -TERM "${pid}" 2>/dev/null || true
+  fi
+  sleep 2
+  kill -KILL "-${pid}" 2>/dev/null || true
 }
 
-kill_process_tree() {
-  local pid="$1"
-
-  if command -v pkill >/dev/null 2>&1; then
-    pkill -TERM -P "${pid}" 2>/dev/null || true
-  fi
-  kill -TERM "${pid}" 2>/dev/null || true
-  sleep 2
-  if command -v pkill >/dev/null 2>&1; then
-    pkill -KILL -P "${pid}" 2>/dev/null || true
-  fi
-  kill -KILL "${pid}" 2>/dev/null || true
+interrupt_bounded_command() {
+  local exit_code="$1"
+  trap '' INT TERM
+  kill_process_group "${pid}"
+  wait "${pid}" 2>/dev/null || true
+  cat "${output_file}" >&2
+  rm -f "${output_file}"
+  exit "${exit_code}"
 }
 
 run_bounded_command() {
@@ -270,24 +271,33 @@ run_bounded_command() {
   shift
   output_file="$(mktemp "${TMPDIR:-/tmp}/opentofu-test-output.XXXXXX")"
 
-  "$@" >"${output_file}" 2>&1 &
+  perl -MPOSIX=setsid -e '
+    setsid() or die "setsid: $!";
+    $SIG{TERM} = sub { while (1) { sleep 60 } };
+    my $child = fork(); defined($child) or die "fork: $!";
+    if (!$child) { $SIG{TERM} = "DEFAULT"; exec @ARGV or die "exec: $!"; }
+    waitpid($child, 0);
+    my $status = $?;
+    exit(($status & 127) ? 128 + ($status & 127) : $status >> 8);
+  ' "$@" >"${output_file}" 2>&1 &
   pid=$!
+  trap 'interrupt_bounded_command 130' INT
+  trap 'interrupt_bounded_command 143' TERM
   start="$(date +%s)"
 
   while kill -0 "${pid}" >/dev/null 2>&1; do
+    sleep 1
+    kill -0 "${pid}" >/dev/null 2>&1 || break
     elapsed=$(( $(date +%s) - start ))
     if [[ "${elapsed}" -ge "${TIMEOUT_SECONDS}" ]]; then
       printf 'Timed out after %ss: %s\n' "${TIMEOUT_SECONDS}" "${label}" >&2
-      printf 'Terraform/OpenTofu provider processes at timeout:\n' >&2
-      list_tofu_processes >&2
-      kill_process_tree "${pid}"
+      kill_process_group "${pid}"
       wait "${pid}" 2>/dev/null || true
+      trap - INT TERM
       cat "${output_file}" >&2
       rm -f "${output_file}"
       return 124
     fi
-
-    sleep 1
   done
 
   rc=1
@@ -297,6 +307,7 @@ run_bounded_command() {
     rc=$?
   fi
 
+  trap - INT TERM
   cat "${output_file}"
   rm -f "${output_file}"
   return "${rc}"
