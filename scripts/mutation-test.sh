@@ -27,8 +27,6 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 source "${SCRIPT_DIR}/lib/shell-cli.sh"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/lib/mutation.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/lib/timeout.sh"
 
 usage() {
   cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
@@ -76,6 +74,7 @@ STEM=""
 WORKDIR=""
 BACKUP=""
 SOURCE=""
+SUITE_PID=""
 declare -a SUITES=()
 
 die() {
@@ -252,13 +251,89 @@ restore_target() {
 # So INT and TERM restore and then exit; EXIT stays a plain restore hook, since
 # by then the shell is already leaving. 130 is the conventional SIGINT status.
 on_interrupt() {
+  trap '' INT TERM
+  if [ -n "${SUITE_PID}" ]; then
+    kill -KILL "-${SUITE_PID}" 2>/dev/null || kill -KILL "${SUITE_PID}" 2>/dev/null || true
+    wait "${SUITE_PID}" 2>/dev/null || true
+    SUITE_PID=""
+  fi
   restore_target
   exit 130
 }
 
 run_suite() {
-  run_with_timeout "${TIMEOUT_SECS}" bats ${SUITES[@]+"${SUITES[@]}"} \
-    >"${WORKDIR}/run.log" 2>&1
+  local ready="${WORKDIR}/suite-ready" result="${WORKDIR}/suite-result" rc=0 interrupted=0
+  rm -f "${ready}" "${result}" "${result}.tmp"
+  # Defer interruption until the just-launched supervisor PID is recorded.
+  trap 'interrupted=1' INT TERM
+  # Do not launch the suite until the new session is visible to the parent.
+  # A signal before that handshake can only kill the supervisor, not an orphan.
+  perl -MPOSIX=setsid,WNOHANG -MTime::HiRes=clock_gettime,CLOCK_MONOTONIC,sleep -e '
+    setsid() or die "setsid: $!";
+    my ($ready_path, $result_path, $timeout) = splice @ARGV, 0, 3;
+    my $go = 0;
+    $SIG{USR1} = sub { $go = 1 };
+    open my $ready, ">", $ready_path or die "ready: $!";
+    close $ready or die "ready: $!";
+    while (!$go) { select undef, undef, undef, 0.05 }
+    my $child = fork(); defined($child) or die "fork: $!";
+    if (!$child) { $SIG{USR1} = "DEFAULT"; exec @ARGV or die "exec: $!" }
+    my $deadline = clock_gettime(CLOCK_MONOTONIC) + $timeout;
+    my $code;
+    while (1) {
+      my $done = waitpid($child, WNOHANG);
+      if ($done == $child) {
+        my $status = $?;
+        $code = ($status & 127) ? 128 + ($status & 127) : $status >> 8;
+        last;
+      }
+      die "waitpid: $!" if $done < 0;
+      if (clock_gettime(CLOCK_MONOTONIC) >= $deadline) { $code = 124; last }
+      sleep 0.05;
+    }
+    open my $result, ">", "$result_path.tmp" or die "result: $!";
+    print $result "$code\n"; close $result or die "result: $!";
+    rename "$result_path.tmp", $result_path or die "result: $!";
+    while (1) { sleep 60 }
+  ' "${ready}" "${result}" "${TIMEOUT_SECS}" bats ${SUITES[@]+"${SUITES[@]}"} \
+    >"${WORKDIR}/run.log" 2>&1 &
+  SUITE_PID=$!
+  trap on_interrupt INT TERM
+  if [ "${interrupted}" -ne 0 ]; then on_interrupt; fi
+  while [ ! -f "${ready}" ]; do
+    if ! kill -0 "${SUITE_PID}" 2>/dev/null; then
+      trap 'interrupted=1' INT TERM
+      wait "${SUITE_PID}" || rc=$?
+      SUITE_PID=""
+      [ "${rc}" -ne 0 ] || rc=1
+      trap on_interrupt INT TERM
+      if [ "${interrupted}" -ne 0 ]; then on_interrupt; fi
+      return "${rc}"
+    fi
+    sleep 0.05
+  done
+  kill -USR1 "${SUITE_PID}"
+  while [ ! -f "${result}" ]; do
+    if ! kill -0 "${SUITE_PID}" 2>/dev/null; then
+      trap 'interrupted=1' INT TERM
+      wait "${SUITE_PID}" || rc=$?
+      SUITE_PID=""
+      [ "${rc}" -ne 0 ] || rc=1
+      trap on_interrupt INT TERM
+      if [ "${interrupted}" -ne 0 ]; then on_interrupt; fi
+      return "${rc}"
+    fi
+    sleep 0.05
+  done
+  IFS= read -r rc <"${result}"
+  # Keep signals deferred between reaping the group leader and clearing its PID.
+  trap 'interrupted=1' INT TERM
+  kill -KILL "-${SUITE_PID}" 2>/dev/null || true
+  wait "${SUITE_PID}" 2>/dev/null || true
+  SUITE_PID=""
+  trap on_interrupt INT TERM
+  if [ "${interrupted}" -ne 0 ]; then on_interrupt; fi
+  return "${rc}"
 }
 
 preview_plan() {
@@ -362,6 +437,8 @@ execute_run() {
     return 0
   fi
 
+  trap restore_target EXIT
+  trap on_interrupt INT TERM
   printf 'Baseline suite run...\n'
   if ! run_suite; then
     sed -n '1,40p' "${WORKDIR}/run.log" >&2
@@ -371,9 +448,6 @@ execute_run() {
 
   : >"${WORKDIR}/killed.tsv"
   : >"${WORKDIR}/survived.tsv"
-  trap restore_target EXIT
-  trap on_interrupt INT TERM
-
   local started
   started="$(date +%s)"
   local id rc safe_func
