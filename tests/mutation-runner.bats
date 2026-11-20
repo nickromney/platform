@@ -83,7 +83,20 @@ setup() {
 @TEST "not named" { ! sample_is_named other; }
 # Pace each mutant's suite run. Without it the whole loop finishes in well under
 # a second on Linux, before the signal tests can interrupt it mid-run.
-@TEST "pace" { sleep 0.3; }
+@TEST "pace" {
+  if ! cmp -s "${TARGET}" "${PRISTINE}"; then
+    [ -z "${SLOW_STARTED:-}" ] || touch "${SLOW_STARTED}"
+    if [ -n "${TIMEOUT_CHILD_MARKER:-}" ]; then
+      bash -c 'trap "" TERM; bash -c "trap \"\" TERM; sleep 6; touch \"\$1\"" _ "$2" & wait; touch "$1"' _ \
+        "${TIMEOUT_CHILD_MARKER}" "${TIMEOUT_GRANDCHILD_MARKER}"
+    else
+      sleep "${MUTANT_PACE_SECONDS:-${PACE_SECONDS:-0.3}}"
+    fi
+    [ -z "${SLOW_FINISHED:-}" ] || touch "${SLOW_FINISHED}"
+  else
+    sleep "${PACE_SECONDS:-0.3}"
+  fi
+}
 EOF
 }
 
@@ -158,11 +171,100 @@ wait_for_exit() {
   [ "${status}" -eq 0 ]
 }
 
+@test "TERM stops a slow suite before restoring the target" {
+  export PACE_SECONDS=4 SLOW_STARTED="${BATS_TEST_TMPDIR}/slow-started" SLOW_FINISHED="${BATS_TEST_TMPDIR}/slow-finished"
+  "${RUNNER}" --script "${TARGET}" --bats "${SUITE}" \
+    --report-dir "${BATS_TEST_TMPDIR}/report" --timeout 30 --execute >"${RUN_LOG}" 2>&1 &
+  RUN_PID=$!
+  local waited=0
+  while [ ! -f "${SLOW_STARTED}" ] && [ "${waited}" -lt 120 ]; do
+    kill -0 "${RUN_PID}"
+    sleep 1
+    waited=$((waited + 1))
+  done
+  [ -f "${SLOW_STARTED}" ]
+  kill -TERM "${RUN_PID}"
+  sleep 2
+  kill -KILL "${RUN_PID}" 2>/dev/null || true
+  wait_for_exit
+  run cmp -s "${TARGET}" "${PRISTINE}"
+  [ "${status}" -eq 0 ]
+  sleep 3
+  [ ! -e "${SLOW_FINISHED}" ]
+}
+
+@test "suite timeouts still count as killed mutants" {
+  export TIMEOUT_CHILD_MARKER="${BATS_TEST_TMPDIR}/timeout-child" TIMEOUT_GRANDCHILD_MARKER="${BATS_TEST_TMPDIR}/timeout-grandchild"
+  run "${RUNNER}" --script "${TARGET}" --bats "${SUITE}" \
+    --report-dir "${BATS_TEST_TMPDIR}/timeout-report" --timeout 3 --max-mutants 1 --execute --no-fail
+  if [ "${status}" -ne 0 ]; then printf "%s\n" "${output}" >&2; fi
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"killed (timeout)"* ]]
+  run cmp -s "${TARGET}" "${PRISTINE}"
+  [ "${status}" -eq 0 ]
+  sleep 7
+  [ ! -e "${TIMEOUT_CHILD_MARKER}" ]
+  [ ! -e "${TIMEOUT_GRANDCHILD_MARKER}" ]
+}
+
+run_resistant_direct_suite() {
+  local mode="$1" bin_dir="${BATS_TEST_TMPDIR}/bin-${1}" name command_path
+  mkdir -p "${bin_dir}"
+  for name in bash perl awk basename cat cmp cp date diff dirname grep head mkdir rm sed sleep touch tr wc; do
+    command_path="$(command -v "${name}")"
+    ln -s "${command_path}" "${bin_dir}/${name}"
+  done
+  if [ "${mode}" = timeout ]; then
+    command_path="$(command -v timeout || command -v gtimeout)"
+    ln -s "${command_path}" "${bin_dir}/timeout"
+  fi
+  cat >"${bin_dir}/bats" <<'EOF'
+#!/usr/bin/env bash
+if cmp -s "${TARGET}" "${PRISTINE}"; then exit 0; fi
+date +%s >"${DIRECT_STARTED}"
+trap "" TERM
+bash -c 'trap "" TERM; sleep 6; touch "$1"' _ "${DIRECT_GRANDCHILD}" &
+sleep 6
+touch "${DIRECT_FINISHED}"
+EOF
+  chmod +x "${bin_dir}/bats"
+  export DIRECT_STARTED="${BATS_TEST_TMPDIR}/direct-started-${mode}"
+  export DIRECT_FINISHED="${BATS_TEST_TMPDIR}/direct-finished-${mode}"
+  export DIRECT_GRANDCHILD="${BATS_TEST_TMPDIR}/direct-grandchild-${mode}"
+  run env PATH="${bin_dir}" "${RUNNER}" --script "${TARGET}" --bats "${SUITE}" \
+    --report-dir "${BATS_TEST_TMPDIR}/direct-report-${mode}" --timeout 1 --max-mutants 1 --execute --no-fail
+  local finished started
+  finished="$(date +%s)"
+  if [ "${status}" -ne 0 ]; then printf '%s\n' "${output}" >&2; fi
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"killed (timeout)"* ]]
+  [ -f "${DIRECT_STARTED}" ]
+  started="$(cat "${DIRECT_STARTED}")"
+  printf 'direct %s elapsed: %s seconds\n' "${mode}" "$((finished - started))" >&2
+  [ "$((finished - started))" -le 3 ]
+  run cmp -s "${TARGET}" "${PRISTINE}"
+  [ "${status}" -eq 0 ]
+  sleep 7
+  [ ! -e "${DIRECT_FINISHED}" ]
+  [ ! -e "${DIRECT_GRANDCHILD}" ]
+}
+
+@test "hard deadline kills a TERM-resistant direct suite with timeout available" {
+  run_resistant_direct_suite timeout
+}
+
+@test "hard deadline kills a TERM-resistant direct suite without timeout utility" {
+  run_resistant_direct_suite fallback
+}
+
 @test "a completed run reconciles its bookkeeping and reports a score" {
   run "${RUNNER}" --script "${TARGET}" --bats "${SUITE}" \
     --report-dir "${BATS_TEST_TMPDIR}/clean-report" \
     --timeout 30 --max-mutants 4 --execute --no-fail
 
+  if [ "${status}" -ne 0 ]; then
+    printf 'mutation runner status %s:\n%s\n' "${status}" "${output}" >&2
+  fi
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Done in"* ]]
   run cmp -s "${TARGET}" "${PRISTINE}"
