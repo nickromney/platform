@@ -35,9 +35,6 @@ This directory contains the source applications that feed the local platform dem
   CSS/JavaScript and route/cache helpers used by browser-facing apps.
 - [`shared/idpauth/`](shared/idpauth/) contains provider-neutral OIDC and
   gateway-session helpers shared by the Go apps and browser bundles.
-- [`backstage/`](backstage/) contains Portal. It is an intentional Backstage
-  exception to the lightweight app rule and remains resource-gated in the local
-  Kubernetes profiles.
 
 ## Relationship To The Kubernetes Demos
 
@@ -82,13 +79,9 @@ The lightweight sample apps avoid JavaScript package managers in their default
 runtime paths. Checked browser JavaScript uses `// @ts-check`, app-local
 `api-types.d.ts` files, Biome as the standalone lint/format checker, and Deno
 as the non-npm semantic checker.
-Portal is the exception: `apps/backstage` uses Backstage's
-Yarn-based toolchain because the framework owns that dependency model. Keep it
-out of lightweight app defaults and minimal profiles rather than trying to make
-Backstage dependency free.
 
 - Use package-manager installs only in explicit legacy or product surfaces such
-  as Backstage, deprecated Vite examples, or one-shot API client tooling.
+  as deprecated Vite examples or one-shot API client tooling.
 - JavaScript package roots ship local `bunfig.toml` or `.npmrc` cooldown
   defaults, and any Python app roots set `[tool.uv].exclude-newer = "7 days"`,
   so copied app directories and compose/Docker builds keep the same dependency

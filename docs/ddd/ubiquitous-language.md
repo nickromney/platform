@@ -78,8 +78,7 @@ domain language.
 | terminal TUI | Bubble Tea guided surface for local operators | Implemented by `tools/platform-tui`; it streams command output and offers next-stage shortcuts while keeping Makefiles authoritative. |
 | browser workflow UI | local Go/HTMX guided surface for local operators | Implemented by `tools/platform-workflow-ui`; useful for browser-based command preview, run output, and command history. |
 | portal surface | browser-facing navigation or admin UI for platform operators | Current examples: Grafana Launchpad, Argo CD, Headlamp, Gitea, Keycloak, Hubble, and Policy Reporter. |
-| developer portal | the Backstage/Port-like browser UI over the local IDP | Public host: `portal.127.0.0.1.sslip.io`; this is a surface, not the whole platform. |
-| portal API | the small Go product API consumed by the developer portal, SDK, MCP, and TUI | Public host: `portal-api.127.0.0.1.sslip.io`; it exposes IDP contracts and dry-run workflows, not Terraform internals. |
+| portal API | the small Go product API consumed by the SDK, MCP, and TUI | Public host: `portal-api.127.0.0.1.sslip.io`; it exposes IDP contracts and dry-run workflows, not Terraform internals. |
 | runtime adapter | the IDP core boundary that translates stable portal API actions to a concrete runtime | Current adapters are `generic_kubernetes`, `kind`, `lima`, and `lima`; future adapters may include AKS, EKS, and bare-metal Kubernetes. |
 | status surface | CLI or dashboard view that summarizes current state | Current examples: `platform status`, variant `status` targets, Argo CD Applications, and Grafana Launchpad health tiles. |
 
@@ -145,7 +144,7 @@ The platform now has a first-class service catalog at
 `catalog/platform-apps.json`. Treat that file as the source of intent for
 application ownership, environments, app/environment RBAC, secret bindings,
 deployment evidence, and scorecards. Current app/environment surfaces include
-`backstage-local`, `idp-core-local`, `platform-mcp-local`,
+`idp-core-local`, `platform-mcp-local`,
 `mcp-inspector-local`, `auth-chat-dev`, `chatgpt-sim-dev`, `langfuse-local`,
 `langfuse-trace-chat-dev`, `langfuse-tool-agent-dev`,
 `langfuse-mcp-agent-dev`, `langfuse-eval-runner-dev`, `apim-simulator-local`,

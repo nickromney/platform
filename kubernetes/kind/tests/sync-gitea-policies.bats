@@ -286,21 +286,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: idp-core
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: backstage
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: backstage
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: backstage
 EOF
 
   cat >"${stack_dir}/apps/platform-gateway-routes/kustomization.yaml" <<'EOF'
@@ -353,7 +338,6 @@ EOF
 
   cat >"${stack_dir}/apps/platform-gateway-routes-sso/kustomization.yaml" <<'EOF'
 resources:
-  - httproute-portal.yaml
   - httproute-portal-api.yaml
   - httproute-hubble.yaml
   - httproute-grafana.yaml
@@ -365,7 +349,6 @@ resources:
   - referencegrant-hubble.yaml
 EOF
   touch \
-    "${stack_dir}/apps/platform-gateway-routes-sso/httproute-portal.yaml" \
     "${stack_dir}/apps/platform-gateway-routes-sso/httproute-portal-api.yaml" \
     "${stack_dir}/apps/platform-gateway-routes-sso/httproute-hubble.yaml" \
     "${stack_dir}/apps/platform-gateway-routes-sso/httproute-grafana.yaml" \
@@ -381,9 +364,6 @@ apiVersion: gateway.networking.k8s.io/v1beta1
 kind: ReferenceGrant
 spec:
   to:
-    - group: ""
-      kind: Service
-      name: oauth2-proxy-backstage
     - group: ""
       kind: Service
       name: oauth2-proxy-hubble
@@ -819,7 +799,7 @@ EOF
   stack_dir="${BATS_TEST_TMPDIR}/stack-render-only"
   create_minimal_policy_stack "${stack_dir}"
 
-  run bash -lc "unset GITEA_ADMIN_USERNAME GITEA_ADMIN_PWD GITEA_SSH_USERNAME GITEA_REPO_OWNER GITEA_REPO_NAME DEPLOY_KEY_TITLE DEPLOY_PUBLIC_KEY SSH_PRIVATE_KEY_PATH GITEA_HTTP_BASE GITEA_SSH_HOST GITEA_SSH_PORT; export STACK_DIR='${stack_dir}' ENABLE_BACKSTAGE=true ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_PROMETHEUS=false; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-only' >/dev/null; test -f '${BATS_TEST_TMPDIR}/render-only/repo/apps/platform-gateway-routes/httproute-gitea.yaml'; declare -f render_policy_repo_tree"
+  run bash -lc "unset GITEA_ADMIN_USERNAME GITEA_ADMIN_PWD GITEA_SSH_USERNAME GITEA_REPO_OWNER GITEA_REPO_NAME DEPLOY_KEY_TITLE DEPLOY_PUBLIC_KEY SSH_PRIVATE_KEY_PATH GITEA_HTTP_BASE GITEA_SSH_HOST GITEA_SSH_PORT; export STACK_DIR='${stack_dir}' ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_PROMETHEUS=false; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-only' >/dev/null; test -f '${BATS_TEST_TMPDIR}/render-only/repo/apps/platform-gateway-routes/httproute-gitea.yaml'; declare -f render_policy_repo_tree"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" != *"push_rendered_repo"* ]]
@@ -828,7 +808,7 @@ EOF
 }
 
 @test "render_policy_repo_tree exposes APIM console on admin host behind SSO when APIM is enabled" {
-  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_APIM_SIMULATOR=true ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-apim-admin' >/dev/null; cat '${BATS_TEST_TMPDIR}/render-apim-admin/repo/apps/platform-gateway-routes-sso/httproute-apim.yaml'; printf '%s\n' '---GRANT---'; cat '${BATS_TEST_TMPDIR}/render-apim-admin/repo/apps/platform-gateway-routes-sso/referencegrant-sso.yaml'"
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_APIM_SIMULATOR=true ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-apim-admin' >/dev/null; cat '${BATS_TEST_TMPDIR}/render-apim-admin/repo/apps/platform-gateway-routes-sso/httproute-apim.yaml'; printf '%s\n' '---GRANT---'; cat '${BATS_TEST_TMPDIR}/render-apim-admin/repo/apps/platform-gateway-routes-sso/referencegrant-sso.yaml'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"apim.admin.127.0.0.1.sslip.io"* ]]
@@ -836,7 +816,7 @@ EOF
 }
 
 @test "render_policy_repo_tree prunes APIM console route and SSO grant when APIM is disabled" {
-  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_APIM_SIMULATOR=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-apim-disabled' >/dev/null; test ! -f '${BATS_TEST_TMPDIR}/render-apim-disabled/repo/apps/platform-gateway-routes-sso/httproute-apim.yaml'; ! grep -Fq 'oauth2-proxy-apim' '${BATS_TEST_TMPDIR}/render-apim-disabled/repo/apps/platform-gateway-routes-sso/referencegrant-sso.yaml'"
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_APIM_SIMULATOR=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-apim-disabled' >/dev/null; test ! -f '${BATS_TEST_TMPDIR}/render-apim-disabled/repo/apps/platform-gateway-routes-sso/httproute-apim.yaml'; ! grep -Fq 'oauth2-proxy-apim' '${BATS_TEST_TMPDIR}/render-apim-disabled/repo/apps/platform-gateway-routes-sso/referencegrant-sso.yaml'"
 
   [ "${status}" -eq 0 ]
 }
@@ -844,7 +824,7 @@ EOF
 @test "render_policy_repo_tree leaves no router pointing at an absent APIM simulator" {
   # nginx refuses to start when an upstream host does not resolve, so a router
   # left pointing at the APIM service crashloops in dev and uat both.
-  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=false ENABLE_SUBNETCALC_APIM_GATEWAY=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-no-apim' >/dev/null; ! grep -Fq 'subnetcalc-apim-simulator.apim.svc.cluster.local' '${BATS_TEST_TMPDIR}/render-no-apim/repo/apps/workloads/base/sentiment.yaml'"
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=false ENABLE_SUBNETCALC_APIM_GATEWAY=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-no-apim' >/dev/null; ! grep -Fq 'subnetcalc-apim-simulator.apim.svc.cluster.local' '${BATS_TEST_TMPDIR}/render-no-apim/repo/apps/workloads/base/sentiment.yaml'"
 
   [ "${status}" -eq 0 ]
 }
@@ -854,7 +834,7 @@ EOF
   # left the next line over-indented. Argo CD reported it only as a kustomize
   # build failure across the whole cilium-policies tree.
   render_dir="${BATS_TEST_TMPDIR}/render-direct-api"
-  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=true ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=false ENABLE_SUBNETCALC_APIM_GATEWAY=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${render_dir}' >/dev/null"
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_HUBBLE=false ENABLE_POLICIES=true ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=false ENABLE_SUBNETCALC_APIM_GATEWAY=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${render_dir}' >/dev/null"
   [ "${status}" -eq 0 ]
 
   run uv run --locked --project "${REPO_ROOT}" python - "${render_dir}/repo/cluster-policies" <<'PYEOF'
@@ -882,7 +862,7 @@ PYEOF
 }
 
 @test "render_policy_repo_tree keeps the APIM upstream when the simulator is deployed" {
-  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=true ENABLE_SUBNETCALC_APIM_GATEWAY=true ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-with-apim' >/dev/null; grep -Fq 'subnetcalc-apim-simulator.apim.svc.cluster.local' '${BATS_TEST_TMPDIR}/render-with-apim/repo/apps/workloads/base/sentiment.yaml'"
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=true ENABLE_SUBNETCALC_APIM_GATEWAY=true ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-with-apim' >/dev/null; grep -Fq 'subnetcalc-apim-simulator.apim.svc.cluster.local' '${BATS_TEST_TMPDIR}/render-with-apim/repo/apps/workloads/base/sentiment.yaml'"
 
   [ "${status}" -eq 0 ]
 }
@@ -892,7 +872,7 @@ PYEOF
   # behind advertise hostnames whose backends never exist, and the gateway
   # answers 500 on each, which fails check-gateway-urls at the end of an apply.
   render_dir="${BATS_TEST_TMPDIR}/render-no-mcp"
-  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=false ENABLE_SUBNETCALC_APIM_GATEWAY=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${render_dir}' >/dev/null"
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=false ENABLE_SUBNETCALC_APIM_GATEWAY=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${render_dir}' >/dev/null"
   [ "${status}" -eq 0 ]
 
   for route in httproute-mcp.yaml httproute-mcp-console.yaml httproute-auth-chat.yaml httproute-chatgpt-sim.yaml; do
@@ -904,7 +884,7 @@ PYEOF
 
 @test "render_policy_repo_tree keeps MCP routes when the AI gateway is deployed" {
   render_dir="${BATS_TEST_TMPDIR}/render-with-mcp"
-  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=false ENABLE_SUBNETCALC_APIM_GATEWAY=false ENABLE_AGENTGATEWAY_AI_GATEWAY=true ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${render_dir}' >/dev/null"
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=false ENABLE_SUBNETCALC_APIM_GATEWAY=false ENABLE_AGENTGATEWAY_AI_GATEWAY=true ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${render_dir}' >/dev/null"
   [ "${status}" -eq 0 ]
   [ -f "${render_dir}/repo/apps/platform-gateway-routes-sso/httproute-mcp.yaml" ]
 }
@@ -913,7 +893,7 @@ PYEOF
   # The apps shared one manifest, so a profile that wanted one of them got both,
   # and the routers of the unwanted one crashlooped against missing services.
   render_dir="${BATS_TEST_TMPDIR}/render-one-app"
-  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=false ENABLE_APIM_SIMULATOR=false ENABLE_SUBNETCALC_APIM_GATEWAY=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${render_dir}' >/dev/null"
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=false ENABLE_APIM_SIMULATOR=false ENABLE_SUBNETCALC_APIM_GATEWAY=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${render_dir}' >/dev/null"
   [ "${status}" -eq 0 ]
 
   base_dir="${render_dir}/repo/apps/workloads/base"
@@ -925,7 +905,7 @@ PYEOF
 
 @test "render_policy_repo_tree keeps both sample apps when both repositories are enabled" {
   render_dir="${BATS_TEST_TMPDIR}/render-both-apps"
-  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=true ENABLE_SUBNETCALC_APIM_GATEWAY=true ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${render_dir}' >/dev/null"
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=true ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=true ENABLE_SUBNETCALC_APIM_GATEWAY=true ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${render_dir}' >/dev/null"
   [ "${status}" -eq 0 ]
 
   base_dir="${render_dir}/repo/apps/workloads/base"
@@ -937,7 +917,7 @@ PYEOF
   # kustomize fails the whole overlay when a patch names a Deployment that is
   # not in the resource list, so pruning an app has to take its patches too.
   render_dir="${BATS_TEST_TMPDIR}/render-kustomize"
-  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=false ENABLE_SUBNETCALC_APIM_GATEWAY=true ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${render_dir}' >/dev/null"
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=false ENABLE_SUBNETCALC_APIM_GATEWAY=true ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${render_dir}' >/dev/null"
   [ "${status}" -eq 0 ]
 
   [ ! -f "${render_dir}/repo/apps/uat/security-context-patches-sentiment.yaml" ]
@@ -1045,81 +1025,11 @@ EOF
   [ ! -f "${apps_dir}/002-nginx-gateway-fabric.application.yaml" ]
 }
 
-@test "Backstage resource gate prunes portal workload route and SSO grant" {
-  repo_dir="${BATS_TEST_TMPDIR}/repo"
-  idp_manifest="${repo_dir}/apps/idp/all.yaml"
-  routes_dir="${repo_dir}/apps/platform-gateway-routes-sso"
-  mkdir -p "$(dirname "${idp_manifest}")" "${routes_dir}"
-
-  cat >"${idp_manifest}" <<'EOF'
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: idp-core
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: backstage
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: backstage-kubernetes-reader
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: backstage-kubernetes-reader
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: backstage
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: backstage
-EOF
-
-  cat >"${routes_dir}/kustomization.yaml" <<'EOF'
-resources:
-  - httproute-portal.yaml
-  - httproute-portal-api.yaml
-  - referencegrant-sso.yaml
-EOF
-  touch "${routes_dir}/httproute-portal.yaml" "${routes_dir}/httproute-portal-api.yaml"
-  cat >"${routes_dir}/referencegrant-sso.yaml" <<'EOF'
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: ReferenceGrant
-spec:
-  to:
-    - group: ""
-      kind: Service
-      name: oauth2-proxy-backstage
-    - group: ""
-      kind: Service
-      name: oauth2-proxy-idp-core
-EOF
-
-  run bash -lc "export ENABLE_BACKSTAGE=false; source '${SCRIPT}'; remove_backstage_idp_resources '${idp_manifest}'; prune_gateway_routes_manifests '${routes_dir}'"
-
-  [ "${status}" -eq 0 ]
-  grep -Fq "name: idp-core" "${idp_manifest}"
-  [ "$(grep -Fc "name: backstage" "${idp_manifest}")" = "0" ]
-  [ ! -f "${routes_dir}/httproute-portal.yaml" ]
-  [ -f "${routes_dir}/httproute-portal-api.yaml" ]
-  [ "$(grep -Fc "httproute-portal.yaml" "${routes_dir}/kustomization.yaml")" = "0" ]
-  [ "$(grep -Fc "oauth2-proxy-backstage" "${routes_dir}/referencegrant-sso.yaml")" = "0" ]
-  grep -Fq "oauth2-proxy-idp-core" "${routes_dir}/referencegrant-sso.yaml"
-}
-
 @test "sync-gitea-policies can load render inputs from a GitOps render contract" {
   contract_file="${BATS_TEST_TMPDIR}/gitops-render-contract.json"
   cat >"${contract_file}" <<'EOF'
 {
-  "enable_backstage": false,
+  "enable_headlamp": true,
   "enable_prometheus": true,
   "enable_grafana": true,
   "enable_app_repo_sentiment": true,
@@ -1127,7 +1037,6 @@ EOF
   "external_sentiment_api": "host.docker.internal:5002/platform/sentiment-api:contract",
   "external_sentiment_ui": "host.docker.internal:5002/platform/sentiment-auth-ui:contract",
   "prefer_external_platform": true,
-  "external_platform_backstage": "host.docker.internal:5002/platform/backstage:contract",
   "external_platform_idp_core": "host.docker.internal:5002/platform/idp-core:contract",
   "grafana_image_registry": "host.docker.internal:5002",
   "grafana_image_repository": "platform/grafana-victorialogs",
@@ -1137,23 +1046,23 @@ EOF
 }
 EOF
 
-  run bash -lc "export GITOPS_RENDER_CONTRACT_FILE='${contract_file}'; source '${SCRIPT}'; printf '%s\n' \"\$ENABLE_BACKSTAGE\" \"\$ENABLE_PROMETHEUS\" \"\$ENABLE_GRAFANA\" \"\$ENABLE_APP_REPO_SENTIMENT\" \"\$PREFER_EXTERNAL_WORKLOAD_IMAGES\" \"\$EXTERNAL_IMAGE_SENTIMENT_API\" \"\$PREFER_EXTERNAL_PLATFORM_IMAGES\" \"\$EXTERNAL_PLATFORM_IMAGE_BACKSTAGE\" \"\$GRAFANA_IMAGE_REPOSITORY\" \"\$GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS\""
+  run bash -lc "export GITOPS_RENDER_CONTRACT_FILE='${contract_file}'; source '${SCRIPT}'; printf '%s\n' \"\$ENABLE_HEADLAMP\" \"\$ENABLE_PROMETHEUS\" \"\$ENABLE_GRAFANA\" \"\$ENABLE_APP_REPO_SENTIMENT\" \"\$PREFER_EXTERNAL_WORKLOAD_IMAGES\" \"\$EXTERNAL_IMAGE_SENTIMENT_API\" \"\$PREFER_EXTERNAL_PLATFORM_IMAGES\" \"\$EXTERNAL_PLATFORM_IMAGE_IDP_CORE\" \"\$GRAFANA_IMAGE_REPOSITORY\" \"\$GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS\""
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = "$(printf 'false\ntrue\ntrue\ntrue\ntrue\nhost.docker.internal:5002/platform/sentiment-api:contract\ntrue\nhost.docker.internal:5002/platform/backstage:contract\nplatform/grafana-victorialogs\n111')" ]
+  [ "${output}" = "$(printf 'true\ntrue\ntrue\ntrue\ntrue\nhost.docker.internal:5002/platform/sentiment-api:contract\ntrue\nhost.docker.internal:5002/platform/idp-core:contract\nplatform/grafana-victorialogs\n111')" ]
 }
 
 @test "sync-gitea-policies keeps explicit render inputs ahead of a GitOps render contract" {
   contract_file="${BATS_TEST_TMPDIR}/gitops-render-contract.json"
   cat >"${contract_file}" <<'EOF'
 {
-  "enable_backstage": false,
+  "enable_headlamp": false,
   "prefer_external_platform": true,
   "external_platform_idp_core": "host.docker.internal:5002/platform/idp-core:contract"
 }
 EOF
 
-  run bash -lc "export GITOPS_RENDER_CONTRACT_FILE='${contract_file}' ENABLE_BACKSTAGE=true PREFER_EXTERNAL_PLATFORM_IMAGES=true EXTERNAL_PLATFORM_IMAGE_IDP_CORE='host.docker.internal:5002/platform/idp-core:env'; source '${SCRIPT}'; printf '%s\n' \"\$ENABLE_BACKSTAGE\" \"\$PREFER_EXTERNAL_PLATFORM_IMAGES\" \"\$EXTERNAL_PLATFORM_IMAGE_IDP_CORE\""
+  run bash -lc "export GITOPS_RENDER_CONTRACT_FILE='${contract_file}' ENABLE_HEADLAMP=true PREFER_EXTERNAL_PLATFORM_IMAGES=true EXTERNAL_PLATFORM_IMAGE_IDP_CORE='host.docker.internal:5002/platform/idp-core:env'; source '${SCRIPT}'; printf '%s\n' \"\$ENABLE_HEADLAMP\" \"\$PREFER_EXTERNAL_PLATFORM_IMAGES\" \"\$EXTERNAL_PLATFORM_IMAGE_IDP_CORE\""
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "$(printf 'true\ntrue\nhost.docker.internal:5002/platform/idp-core:env')" ]
@@ -1212,8 +1121,6 @@ spec:
       containers:
         - name: idp-core
           image: platform/idp-core:latest
-        - name: backstage
-          image: platform/backstage:latest
 EOF
   cat >"${mcp_manifest}" <<'EOF'
 apiVersion: apps/v1
@@ -1243,8 +1150,7 @@ EOF
   "external_platform_mcp": "host.docker.internal:5002/platform/platform-mcp:golden",
   "external_platform_chatgpt_sim": "host.docker.internal:5002/platform/chatgpt-sim:golden",
   "prefer_external_platform": true,
-  "external_platform_idp_core": "host.docker.internal:5002/platform/idp-core:golden",
-  "external_platform_backstage": "host.docker.internal:5002/platform/backstage:golden"
+  "external_platform_idp_core": "host.docker.internal:5002/platform/idp-core:golden"
 }
 EOF
 
@@ -1268,8 +1174,6 @@ spec:
       containers:
         - name: idp-core
           image: host.docker.internal:5002/platform/idp-core:golden
-        - name: backstage
-          image: host.docker.internal:5002/platform/backstage:golden
 apiVersion: apps/v1
 kind: Deployment
 spec:
@@ -1502,7 +1406,7 @@ EOF
 }
 
 @test "policy repo render vendors subnetcalc frontend canary route and dev ReferenceGrant" {
-  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=true ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true ENABLE_PROGRESSIVE_DELIVERY=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-canary-route' >/dev/null; test -f '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/httproute-subnetcalc-frontend-dev.yaml'; test -f '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/referencegrant-dev-subnetcalc-frontend.yaml'; grep -Fq 'subnetcalc-frontend-canary' '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/httproute-subnetcalc-frontend-dev.yaml'; grep -Fq 'referencegrant-dev-subnetcalc-frontend.yaml' '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/kustomization.yaml'; ! grep -Fq 'subnetcalc-router-gateway-canary-patch.yaml' '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/dev/kustomization.yaml'"
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=true ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true ENABLE_PROGRESSIVE_DELIVERY=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-canary-route' >/dev/null; test -f '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/httproute-subnetcalc-frontend-dev.yaml'; test -f '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/referencegrant-dev-subnetcalc-frontend.yaml'; grep -Fq 'subnetcalc-frontend-canary' '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/httproute-subnetcalc-frontend-dev.yaml'; grep -Fq 'referencegrant-dev-subnetcalc-frontend.yaml' '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/kustomization.yaml'; ! grep -Fq 'subnetcalc-router-gateway-canary-patch.yaml' '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/dev/kustomization.yaml'"
 
   [ "${status}" -eq 0 ]
 }
@@ -1548,7 +1452,6 @@ EOF
     ENABLE_VICTORIA_LOGS \
     ENABLE_OTEL_GATEWAY \
     ENABLE_HEADLAMP \
-    ENABLE_BACKSTAGE \
     ENABLE_OBSERVABILITY_AGENT \
     HARDENED_IMAGE_REGISTRY \
     POLICIES_REPO_URL_CLUSTER \
@@ -1590,7 +1493,6 @@ EOF
   gitops_tf="${REPO_ROOT}/terraform/kubernetes/gitops.tf"
   sync_block="$(awk '/resource \"null_resource\" \"sync_gitea_policies_repo\"/{capture=1} capture{print} /^# -----------------------------------------------------------------------------/{if (capture) exit}' "${gitops_tf}")"
 
-  [[ "${sync_block}" == *"kubernetes_secret_v1.backstage_gitea_credentials"* ]]
   [[ "${sync_block}" == *"kubernetes_secret_v1.headlamp_mkcert_ca"* ]]
 }
 
@@ -1686,7 +1588,7 @@ EOF
   stack_dir="${BATS_TEST_TMPDIR}/stack-render"
   create_minimal_policy_stack "${stack_dir}"
 
-  run bash -lc "export STACK_DIR='${stack_dir}' PLATFORM_BASE_DOMAIN='apps.example.test' PLATFORM_ADMIN_BASE_DOMAIN='admin.example.test' GATEWAY_HTTPS_HOST_PORT='8443' ADMIN_ROUTE_ALLOWLIST_CIDRS='10.0.0.0/8, 192.168.0.0/16' ENABLE_HUBBLE=true ENABLE_POLICIES=true ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=true ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_BACKSTAGE=true ENABLE_PROMETHEUS=true; source '${SCRIPT}'; render_repo '${BATS_TEST_TMPDIR}/render-out' >/dev/null; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes/httproute-gitea.yaml'; printf '%s\n' '---NO-NGF-FILTER---'; ls '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes/' | grep -c snippetsfilter || true"
+  run bash -lc "export STACK_DIR='${stack_dir}' PLATFORM_BASE_DOMAIN='apps.example.test' PLATFORM_ADMIN_BASE_DOMAIN='admin.example.test' GATEWAY_HTTPS_HOST_PORT='8443' ADMIN_ROUTE_ALLOWLIST_CIDRS='10.0.0.0/8, 192.168.0.0/16' ENABLE_HUBBLE=true ENABLE_POLICIES=true ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=true ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_PROMETHEUS=true; source '${SCRIPT}'; render_repo '${BATS_TEST_TMPDIR}/render-out' >/dev/null; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes/httproute-gitea.yaml'; printf '%s\n' '---NO-NGF-FILTER---'; ls '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes/' | grep -c snippetsfilter || true"
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "$(cat <<'EOF'
@@ -1736,11 +1638,11 @@ EOF
 )" ]
 }
 
-@test "render_repo golden prunes disabled SSO routes and Backstage resources" {
+@test "render_repo golden prunes disabled SSO routes" {
   stack_dir="${BATS_TEST_TMPDIR}/stack-render"
   create_minimal_policy_stack "${stack_dir}"
 
-  run bash -lc "export STACK_DIR='${stack_dir}' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_PROMETHEUS=false; source '${SCRIPT}'; render_repo '${BATS_TEST_TMPDIR}/render-out' >/dev/null; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/idp/all.yaml'; printf '%s\n' '---KUSTOMIZATION---'; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes-sso/kustomization.yaml'; printf '%s\n' '---GRANT---'; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes-sso/referencegrant-sso.yaml'"
+  run bash -lc "export STACK_DIR='${stack_dir}' ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_PROMETHEUS=false; source '${SCRIPT}'; render_repo '${BATS_TEST_TMPDIR}/render-out' >/dev/null; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/idp/all.yaml'; printf '%s\n' '---KUSTOMIZATION---'; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes-sso/kustomization.yaml'; printf '%s\n' '---GRANT---'; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes-sso/referencegrant-sso.yaml'"
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "$(cat <<'EOF'
@@ -1768,7 +1670,7 @@ EOF
   stack_dir="${BATS_TEST_TMPDIR}/stack-render"
   create_minimal_policy_stack "${stack_dir}"
 
-  run bash -lc "export STACK_DIR='${stack_dir}' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false; source '${SCRIPT}'; render_repo '${BATS_TEST_TMPDIR}/render-out' >/dev/null; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/argocd-apps/68-agentgateway-crds.application.yaml'; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/argocd-apps/69-agentgateway.application.yaml'; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/argocd-apps/73-agentgateway-ai-gateway.application.yaml'; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes/httproute-agentgateway-ai-gateway.yaml'; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes-sso/httproute-agentgateway-ai-gateway.yaml'; ! grep -R 'agentgateway-ai-gateway' '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes' '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes-sso'"
+  run bash -lc "export STACK_DIR='${stack_dir}' ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false; source '${SCRIPT}'; render_repo '${BATS_TEST_TMPDIR}/render-out' >/dev/null; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/argocd-apps/68-agentgateway-crds.application.yaml'; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/argocd-apps/69-agentgateway.application.yaml'; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/argocd-apps/73-agentgateway-ai-gateway.application.yaml'; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes/httproute-agentgateway-ai-gateway.yaml'; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes-sso/httproute-agentgateway-ai-gateway.yaml'; ! grep -R 'agentgateway-ai-gateway' '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes' '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes-sso'"
 
   [ "${status}" -eq 0 ]
 }

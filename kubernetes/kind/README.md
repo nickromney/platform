@@ -284,11 +284,12 @@ platform image builder mirrors the plugin binary into
 copies it into the controller pod so cluster startup does not fetch the plugin
 from GitHub.
 
-Backstage is gated in the kind happy path by local Docker memory:
+To start a new service with the review-environment workflow already wired in,
+seed a Gitea repository from `templates/platform-service`:
 
-- `KIND_ENABLE_BACKSTAGE=auto` is the default and enables Backstage only when `docker info` reports at least `10GiB` (`10737418240` bytes) of daemon memory.
-- `KIND_ENABLE_BACKSTAGE=on` forces the portal on.
-- `KIND_ENABLE_BACKSTAGE=off` keeps the Portal API but skips the Backstage deployment, route, proxy, and image build.
+```bash
+make -C kubernetes/kind scaffold-service NAME=orders ENVIRONMENTS=dev,uat
+```
 
 ## 16GB Local IDP Profile
 
@@ -335,7 +336,7 @@ what omitting it costs.
 Keycloak, the metrics and dashboards, logs and Hubble, and `sentiment` as its
 single sample app. It drops the second app repository, the APIM simulator and
 the agentgateway AI gateway, which also removes the MCP server, its inspector,
-auth-chat and chatgpt-sim, and it drops Alertmanager, Backstage, External
+auth-chat and chatgpt-sim, and it drops Alertmanager, External
 Secrets, Headlamp, progressive delivery, the UAT workload sync, and the Argo CD
 ApplicationSet and notifications controllers.
 

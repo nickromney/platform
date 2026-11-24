@@ -42,8 +42,7 @@ image_selection_true() {
 image_selection_enabled() {
   local category="$1" image_id="$2"
   if [ -z "${IMAGE_BUILD_TFVARS_FILES:-}" ]; then
-    [ "${image_id}" != backstage ] || [ "${ENABLE_BACKSTAGE:-false}" = true ]
-    return
+    return 0
   fi
   if ! declare -F tf_default_from_variables >/dev/null 2>&1; then
     export VARIABLES_FILE="${VARIABLES_FILE:-${REPO_ROOT}/terraform/kubernetes/variables.tf}"
@@ -60,7 +59,6 @@ image_selection_enabled() {
     platform:grafana-victorialogs) image_selection_true enable_grafana ;;
     platform:argo-rollouts-gatewayapi-plugin) image_selection_true enable_progressive_delivery ;;
     platform:idp-core) image_selection_true enable_sso ;;
-    platform:backstage) image_selection_true enable_sso && image_selection_true enable_backstage ;;
     platform:platform-mcp|platform:auth-chat|platform:chatgpt-sim)
       image_selection_true enable_sso && {
         image_selection_true enable_apim_simulator ||

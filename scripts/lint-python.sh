@@ -29,13 +29,12 @@ fail() {
 list_python_files() {
   if command -v git >/dev/null 2>&1 && git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     git -C "${REPO_ROOT}" ls-files -z -- \
-      '*.py' \
-      ':(exclude)apps/backstage/**'
+      '*.py'
     return 0
   fi
 
   find "${REPO_ROOT}" \
-    \( -path '*/.git' -o -path '*/.run' -o -path '*/node_modules' -o -path '*/.venv' -o -path '*/.terraform' -o -path "${REPO_ROOT}/apps/backstage" \) -prune \
+    \( -path '*/.git' -o -path '*/.run' -o -path '*/node_modules' -o -path '*/.venv' -o -path '*/.terraform' \) -prune \
     -o \( -type f -name '*.py' -print0 \) | sort -z
 }
 

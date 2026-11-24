@@ -87,34 +87,6 @@ spec:
   owner: group:default/platform
 EOF
 
-  for app in subnetcalc sentiment; do
-    cat >"${FIXTURE_ROOT}/apps/${app}/catalog-info.yaml" <<EOF
-apiVersion: backstage.io/v1alpha1
-kind: API
-metadata:
-  name: ${app}
-  annotations:
-    backstage.io/techdocs-ref: dir:.
-spec:
-  type: openapi
-  lifecycle: experimental
-  owner: platform
-  definition: |
-    openapi: 3.0.3
-    info:
-      title: ${app}
-      version: 0.1.0
-    paths: {}
-EOF
-
-    cat >"${FIXTURE_ROOT}/apps/${app}/mkdocs.yml" <<'EOF'
-site_name: fixture
-docs_dir: .
-plugins:
-  - techdocs-core
-EOF
-  done
-
   cat >"${FIXTURE_ROOT}/apps/demo/frontend-budgets.json" <<'EOF'
 {
   "frontends": [
@@ -232,7 +204,7 @@ EOF
 }
 
 @test "check-version batches workflow action parsing when upstream resolution is skipped" {
-  mkdir -p "${FIXTURE_ROOT}/apps/backstage/catalog/templates/platform-service/content/.gitea/workflows"
+  mkdir -p "${FIXTURE_ROOT}/templates/platform-service/content/.gitea/workflows"
 
   cat >"${FIXTURE_ROOT}/.github/workflows/build.yml" <<'EOF'
 name: Build
@@ -242,7 +214,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 EOF
 
-  cat >"${FIXTURE_ROOT}/apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/review-environment.yaml" <<'EOF'
+  cat >"${FIXTURE_ROOT}/templates/platform-service/content/.gitea/workflows/review-environment.yaml" <<'EOF'
 name: Review environment
 jobs:
   review:

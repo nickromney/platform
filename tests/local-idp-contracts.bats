@@ -44,12 +44,11 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
-@test "local Kubernetes variants expose Portal API Backstage SDK and MCP targets" {
+@test "local Kubernetes variants expose Portal API SDK and MCP targets" {
   for variant in kind lima; do
     run make -C "${REPO_ROOT}/kubernetes/${variant}" help
     [ "${status}" -eq 0 ]
     [[ "${output}" == *"make idp-api"* ]]
-    [[ "${output}" == *"make backstage"* ]]
     [[ "${output}" == *"make idp-sdk"* ]]
     [[ "${output}" == *"make idp-mcp"* ]]
   done
@@ -57,7 +56,7 @@ setup() {
 
 @test "IDP Make targets are dry-run friendly and do not apply infrastructure" {
   for variant in kind lima; do
-    for target in idp-api backstage idp-sdk idp-mcp; do
+    for target in idp-api idp-sdk idp-mcp; do
       run make -C "${REPO_ROOT}/kubernetes/${variant}" "${target}" DRY_RUN=1
       [ "${status}" -eq 0 ]
       [[ "${output}" == *"would"* ]]
@@ -71,10 +70,6 @@ setup() {
     run make -C "${REPO_ROOT}/kubernetes/${variant}" idp-api DRY_RUN=1
     [ "${status}" -eq 0 ]
     [[ "${output}" == *"https://portal-api.127.0.0.1.sslip.io"* ]]
-
-    run make -C "${REPO_ROOT}/kubernetes/${variant}" backstage DRY_RUN=1
-    [ "${status}" -eq 0 ]
-    [[ "${output}" == *"https://portal.127.0.0.1.sslip.io"* ]]
   done
 }
 
@@ -83,7 +78,7 @@ setup() {
 
   run "${catalog}" --targets
   [ "${status}" -eq 0 ]
-  [ "${output}" = $'idp-api\nbackstage\nidp-sdk\nidp-mcp' ]
+  [ "${output}" = $'idp-api\nidp-sdk\nidp-mcp' ]
   targets="${output}"
 
   run "${REPO_ROOT}/scripts/platform-status.sh" --execute --output json
@@ -116,12 +111,6 @@ setup() {
   run rg -n '^min-release-age=7$' "${REPO_ROOT}/apps/idp-sdk/.npmrc"
   [ "${status}" -eq 0 ]
 
-  run jq -e '.packageManager == "yarn@4.18.1"' "${REPO_ROOT}/apps/backstage/package.json"
-  [ "${status}" -eq 0 ]
-
-  [ -f "${REPO_ROOT}/apps/backstage/.yarn/releases/yarn-4.18.1.cjs" ]
-  [ -f "${REPO_ROOT}/apps/backstage/yarn.lock" ]
-
   run jq -e '.packageManager == "npm@11.12.1"' "${REPO_ROOT}/apps/idp-sdk/package.json"
   [ "${status}" -eq 0 ]
 
@@ -137,10 +126,8 @@ setup() {
 
   for term in \
     "internal developer platform" \
-    "developer portal" \
     "portal API" \
     "runtime adapter" \
-    "portal.127.0.0.1.sslip.io" \
     "portal-api.127.0.0.1.sslip.io"
   do
     run rg -n "${term}" "${glossary}"

@@ -40,7 +40,6 @@ mkcert \
   -cert-file "${CERT_FILE}" \
   -key-file "${KEY_FILE}" \
   dex.compose.127.0.0.1.sslip.io \
-  portal.compose.127.0.0.1.sslip.io \
   subnetcalc.dev.compose.127.0.0.1.sslip.io \
   subnetcalc.uat.compose.127.0.0.1.sslip.io
 

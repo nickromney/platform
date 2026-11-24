@@ -187,9 +187,7 @@ fi
 if [[ -z "${HOST}" ]]; then
   # Heuristic: many workloads use env subdomains (sentiment.dev, subnetcalc.uat, etc) while their
   # Argo app names use "-dev"/"-uat". Default HOST should "just work" for these too.
-  if [[ "${APP}" == "portal" ]]; then
-    HOST="portal.${PLATFORM_BASE_DOMAIN}"
-  elif [[ "${APP}" == "portal-api" ]]; then
+  if [[ "${APP}" == "portal-api" ]]; then
     HOST="portal-api.${PLATFORM_BASE_DOMAIN}"
   elif [[ "${APP}" == "mcp-console" ]]; then
     HOST="mcp-console.${PLATFORM_BASE_DOMAIN}"
@@ -210,9 +208,6 @@ fi
 
 if [[ -z "${OAUTH2_PROXY_NAME}" ]]; then
   case "${APP}" in
-    portal)
-      OAUTH2_PROXY_NAME="oauth2-proxy-backstage"
-      ;;
     portal-api)
       OAUTH2_PROXY_NAME="oauth2-proxy-idp-core"
       ;;
@@ -224,7 +219,7 @@ fi
 
 if [[ -z "${APP_ARGOCD_NAME}" ]]; then
   case "${APP}" in
-    portal|portal-api)
+    portal-api)
       APP_ARGOCD_NAME="idp"
       ;;
     mcp-console)
@@ -242,9 +237,6 @@ fi
 
 if [[ -z "${APP_SERVICE_PATTERN}" ]]; then
   case "${APP}" in
-    portal)
-      APP_SERVICE_PATTERN="portal|backstage"
-      ;;
     portal-api)
       APP_SERVICE_PATTERN="portal-api|idp-core"
       ;;

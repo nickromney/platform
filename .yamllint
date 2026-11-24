@@ -8,7 +8,7 @@ ignore: |
   **/.venv/
   **/.terraform/
   .playwright-mcp/*.yml
-  apps/backstage/catalog/templates/platform-service/content/kubernetes/routing/httproutes.yaml
+  templates/platform-service/content/kubernetes/routing/httproutes.yaml
   kubernetes/kind/tests/fixtures/policy-render/
   terraform/kubernetes/apps/gateway-api-crds/*.yaml
   terraform/kubernetes/apps/argocd-apps/95-grafana.application.yaml

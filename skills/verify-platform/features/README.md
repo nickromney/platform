@@ -18,7 +18,7 @@ This directory is the maintained source for verifying the user-facing behaviour 
 
 - UI proof is the screenshot and text per step, with hosts recorded in `steps.jsonl`.
 - APIM-hop proof is the `apim request … status=200` line for the call the UI made.
-- UAT, the Backstage portal and the kind/Lima stacks are not covered. Name them as skipped.
+- UAT and the kind/Lima stacks are not covered. Name them as skipped.
 
 ## Feature entry contract
 

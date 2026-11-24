@@ -313,7 +313,6 @@ run "external_platform_images_accepts_idp_refs" {
     host_local_registry_host        = "host.docker.internal:5002"
     prefer_external_platform_images = true
     external_platform_image_refs = {
-      backstage      = "host.docker.internal:5002/platform/backstage:1.0.0"
       grafana        = "host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.31.0"
       "idp-core"     = "host.docker.internal:5002/platform/idp-core:0.1.0"
       "platform-mcp" = "host.docker.internal:5002/platform/platform-mcp:0.1.0"
@@ -323,11 +322,6 @@ run "external_platform_images_accepts_idp_refs" {
   assert {
     condition     = local.external_platform_idp_core == "host.docker.internal:5002/platform/idp-core:0.1.0"
     error_message = "Expected idp-core external platform image ref to be accepted and exposed through locals"
-  }
-
-  assert {
-    condition     = local.external_platform_backstage == "host.docker.internal:5002/platform/backstage:1.0.0"
-    error_message = "Expected backstage external platform image ref to be accepted and exposed through locals"
   }
 
   assert {

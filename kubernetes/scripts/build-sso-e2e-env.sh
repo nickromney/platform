@@ -7,7 +7,6 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 BUILD_TFVAR_ARGS="${SCRIPT_DIR}/build-tfvar-args.sh"
-RESOLVE_TFVAR_VALUE="${SCRIPT_DIR}/resolve-tfvar-value.sh"
 
 usage() {
   cat <<'EOF' | sed "s|@SCRIPT_NAME@|${0##*/}|g"
@@ -107,9 +106,7 @@ done < <(
   "${BUILD_TFVAR_ARGS}" "${build_tfvar_args[@]}"
 )
 
-enable_backstage="$("${RESOLVE_TFVAR_VALUE}" --execute enable_backstage false "${tfvar_files[@]}")"
 tfvar_files_joined="$(join_by_colon "${tfvar_files[@]}")"
 
-emit_assignment "SSO_E2E_ENABLE_BACKSTAGE" "${enable_backstage}"
 emit_assignment "STAGE_TFVARS" "${stage_tfvars}"
 emit_assignment "STAGE_TFVARS_FILES" "${tfvar_files_joined}"

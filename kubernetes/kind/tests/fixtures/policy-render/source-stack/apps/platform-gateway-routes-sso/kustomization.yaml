@@ -1,5 +1,4 @@
 resources:
-  - httproute-portal.yaml
   - httproute-portal-api.yaml
   - httproute-hubble.yaml
   - httproute-grafana.yaml

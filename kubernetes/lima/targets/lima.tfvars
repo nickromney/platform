@@ -20,7 +20,6 @@ keycloak_image                  = "host.lima.internal:5002/platform/keycloak:26.
 
 external_platform_image_refs = {
   "argo-rollouts-gatewayapi-plugin" = "host.lima.internal:5002/platform/argo-rollouts-gatewayapi-plugin:v0.5.0"
-  backstage                         = "host.lima.internal:5002/platform/backstage:1.0.0"
   "auth-chat"                       = "host.lima.internal:5002/platform/auth-chat:0.1.0"
   "chatgpt-sim"                     = "host.lima.internal:5002/platform/chatgpt-sim:0.1.0"
   grafana                           = "host.lima.internal:5002/platform/grafana-victorialogs:12.3.1-v0.31.0"

@@ -110,11 +110,9 @@ planning, while the Docker image copies a single prebuilt binary into an Alpine
 runtime. The previous FastAPI implementation remains in-tree as a deprecated
 compatibility reference.
 
-## Portal exception
+## IDP SDK
 
-`apps/backstage` is intentionally dependency-heavy because it demonstrates
-Backstage itself. It stays in-tree, but it is not the template for lightweight
-sample apps and remains gated out of constrained local profiles. The companion
+The former Backstage portal exception was removed by ADR 0016. The
 `apps/idp-sdk` package is dependency-free and wraps browser-native `fetch`.
 
 ## Platform MCP

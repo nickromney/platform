@@ -5,7 +5,7 @@ setup() {
   setup_repo_root
 }
 
-@test "platform catalog projects application surfaces into Backstage, launchpad, and observability metrics" {
+@test "platform catalog projects application surfaces into launchpad tiles" {
   run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 import os
 from pathlib import Path

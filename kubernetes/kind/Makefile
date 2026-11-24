@@ -91,12 +91,6 @@ KIND_WORKER_COUNT ?=
 KIND_PRELOAD_IMAGES_MODE ?= off
 KIND_IMAGE_DISTRIBUTION_MODE ?= registry
 KIND_BAKED_NODE_IMAGE ?=
-# Opt-in: Backstage is heavy, and the old "auto" default meant an identical
-# command built a different stack per host (Docker Engine on Linux reports
-# host RAM and cleared the 10GiB gate; a Docker Desktop VM sized below that
-# did not). Set KIND_ENABLE_BACKSTAGE=on to include it.
-KIND_ENABLE_BACKSTAGE ?= off
-KIND_BACKSTAGE_MIN_DOCKER_MEMORY_BYTES ?= 10737418240
 KIND_LOCAL_IMAGE_CACHE_HOST ?= host.docker.internal:5002
 ifeq ($(PLATFORM_DEVCONTAINER),1)
 KIND_LOCAL_IMAGE_CACHE_PUSH_HOST ?= host.docker.internal:5002
@@ -141,7 +135,7 @@ VALID_STAGE_HELPERS := $(KUBERNETES_STAGE_READONLY_HELPERS)
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state state-snapshot state-restore check-stage-monotonicity check-docker-daemon check-memory check-kind-state ensure-kind-running ensure-node-host-alias check-node-host-alias check-policy-drift install-host-alias-timer uninstall-host-alias-timer check-kubeconfig check-kind-host-ports check-lima-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e check-sso-working exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status dhi-creds-offline docker-health docker-prune-estimate docker-safe-clean memory-report stop-kind stop start-kind start prereqs playwright-install image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state state-snapshot state-restore check-stage-monotonicity check-docker-daemon check-memory check-kind-state ensure-kind-running ensure-node-host-alias check-node-host-alias check-policy-drift install-host-alias-timer uninstall-host-alias-timer check-kubeconfig check-kind-host-ports check-lima-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e check-sso-working exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo scaffold-service launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api idp-sdk idp-mcp show-urls status dhi-creds-offline docker-health docker-prune-estimate docker-safe-clean memory-report stop-kind stop start-kind start prereqs playwright-install image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 MAKE_UNKNOWN_GOAL_GUARD_DEFER_GOALS := $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
@@ -291,13 +285,13 @@ help:
 	@echo "  make image-signing-prereqs                   Check optional cosign prerequisites for local image signing"
 	@echo "  make gitea-sync                               Sync apps/ + cluster-policies/ into the Gitea policies repo"
 	@echo "  make gitea-repo-lifecycle-demo [REPO_NAME=chatgpt-sim] [DRY_RUN=1]"
+	@echo "  make scaffold-service NAME=orders [ENVIRONMENTS=dev,uat] [DRY_RUN=1]  Create a Gitea repo from templates/platform-service"
 	@echo "  make idp-catalog                              Show the local IDP service catalog"
 	@echo "  make idp-env ACTION=create APP=chatgpt-sim ENV=preview-nr [DRY_RUN=1]"
 	@echo "  make idp-deployments                          Show the app/environment deployment read model"
 	@echo "  make idp-secrets                              Show app secret bindings and rotation posture"
 	@echo "  make idp-scorecards                           Show app readiness and security scorecards"
 	@echo "  make idp-api                                  Start or preview the Go IDP core"
-	@echo "  make backstage                                Start or preview the Backstage developer portal"
 	@echo "  make idp-sdk                                  Generate or preview the IDP SDK"
 	@echo "  make idp-mcp                                  Start or preview the IDP MCP server"
 	@echo "  make init"
@@ -353,7 +347,6 @@ help:
 	@echo "  KIND_WORKER_COUNT=0|1|2|...                          -> pin worker node count, 0 for a single-node cluster (default: unset, stage baseline is 0)"
 	@echo "  KIND_IMAGE_DISTRIBUTION_MODE=load|registry|hybrid|baked -> image distribution mode (default: registry)"
 	@echo "  KIND_BAKED_NODE_IMAGE=<image-ref>                    -> required for KIND_IMAGE_DISTRIBUTION_MODE=hybrid|baked"
-	@echo "  KIND_ENABLE_BACKSTAGE=off|on|auto                    -> Backstage portal gate (default: off; auto requires >=10GiB Docker memory)"
 	@echo "  CHECK_VERSION_FORMAT=text|json                       -> render version audits as human text or machine-readable JSON (default: text)"
 	@echo "  OIDC_RECOVERY_FORMAT=text|json                       -> render the OIDC recovery exercise as human text or machine-readable JSON (default: text)"
 	@echo "  OIDC_RECOVERY_FORCE_MODE=kyverno-rollout             -> controlled perturbation used to force the explicit recovery branch (default: kyverno-rollout)"
@@ -397,8 +390,6 @@ render-operator-overrides:
 	@KIND_OPERATOR_OVERRIDES_FILE="$(KIND_OPERATOR_OVERRIDES_FILE)" \
 	KIND_IMAGE_DISTRIBUTION_MODE="$(KIND_IMAGE_DISTRIBUTION_MODE)" \
 	KIND_WORKER_COUNT="$(KIND_WORKER_COUNT)" \
-	KIND_ENABLE_BACKSTAGE="$(KIND_ENABLE_BACKSTAGE)" \
-	KIND_BACKSTAGE_MIN_DOCKER_MEMORY_BYTES="$(KIND_BACKSTAGE_MIN_DOCKER_MEMORY_BYTES)" \
 	KIND_LOCAL_IMAGE_CACHE_HOST="$(KIND_LOCAL_IMAGE_CACHE_HOST)" \
 	KIND_BAKED_NODE_IMAGE="$(KIND_BAKED_NODE_IMAGE)" \
 	"$(RENDER_OPERATOR_OVERRIDES)" $(READONLY_MODE_FLAG) >/dev/null
@@ -770,9 +761,6 @@ apply: workflow-validate-stage
 	); \
 	export IMAGE_BUILD_TFVARS_FILES="$$(printf '%s\n' "$${tfvar_files[@]}")"; \
 	prefer_external_platform_images="$$( "$(RESOLVE_TFVAR_VALUE)" --execute prefer_external_platform_images false "$${tfvar_files[@]}" )"; \
-	enable_sso="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_sso false "$${tfvar_files[@]}" )"; \
-	enable_backstage="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_backstage true "$${tfvar_files[@]}" )"; \
-	if [ "$$enable_sso" != "true" ]; then enable_backstage=false; fi; \
 	cache_ensured=0; \
 	if { [ "$$kind_image_distribution_mode" = "registry" ] || [ "$$kind_image_distribution_mode" = "hybrid" ]; } && [ "$$stage_num" -ge 200 ]; then \
 		run_step "ensure-image-cache" $(MAKE) ensure-image-cache; \
@@ -784,7 +772,7 @@ apply: workflow-validate-stage
 			run_step "ensure-image-cache" $(MAKE) ensure-image-cache; \
 			cache_ensured=1; \
 		fi; \
-		run_step "build-local-platform-images" env ENABLE_BACKSTAGE="$$enable_backstage" $(MAKE) build-local-platform-images; \
+		run_step "build-local-platform-images" $(MAKE) build-local-platform-images; \
 	fi; \
 	if { [ "$$kind_image_distribution_mode" = "registry" ] || [ "$$kind_image_distribution_mode" = "hybrid" ]; } && [ "$$stage_num" -ge 700 ]; then \
 		run_step "build-local-workload-images" $(MAKE) build-local-workload-images; \
@@ -855,10 +843,6 @@ apply: workflow-validate-stage
 	fi; \
 	if [ $$rc -eq 0 ]; then \
 		run_step "refresh-kind-kubeconfig" "$(REFRESH_KIND_KUBECONFIG)" --execute; \
-		if [ "$$stage_num" -ge 800 ] && [ "$$prefer_external_platform_images" = "true" ] && [ "$$enable_backstage" = "true" ]; then \
-			run_step "rollout-restart-backstage" env KUBECONFIG="$(KUBECONFIG_PATH)" kubectl --context "$(KUBECONFIG_CONTEXT)" -n idp rollout restart deployment/backstage; \
-			run_step "rollout-status-backstage" env KUBECONFIG="$(KUBECONFIG_PATH)" kubectl --context "$(KUBECONFIG_CONTEXT)" -n idp rollout status deployment/backstage --timeout=600s; \
-		fi; \
 		post_apply_args=(); \
 		for tfvar_file in "$${tfvar_files[@]}"; do post_apply_args+=(--var-file "$$tfvar_file"); done; \
 		post_apply_plan="$$( "$(PLAN_POST_APPLY_VERIFICATION)" --execute --variant-json "$(VARIANT_JSON)" --stage "$(STAGE)" "$${post_apply_args[@]}" )"; \
@@ -936,6 +920,15 @@ gitea-repo-lifecycle-demo:
 	@"$(STACK_DIR)/scripts/gitea-repo-lifecycle-demo.sh" $(READONLY_MODE_FLAG) \
 		$(if $(strip $(REPO_NAME)),--repo "$(REPO_NAME)")
 
+.PHONY: scaffold-service
+scaffold-service:
+	@[ -n "$(NAME)" ] || { echo "NAME is required, e.g. make scaffold-service NAME=orders"; exit 1; }
+	@"$(STACK_DIR)/scripts/scaffold-platform-service.sh" $(READONLY_MODE_FLAG) --name "$(NAME)" \
+		$(if $(strip $(ENVIRONMENTS)),--environments "$(ENVIRONMENTS)") \
+		$(if $(strip $(TEAM)),--team "$(TEAM)") \
+		$(if $(strip $(OWNER)),--owner "$(OWNER)") \
+		$(if $(strip $(DESCRIPTION)),--description "$(DESCRIPTION)")
+
 .PHONY: check-gateway-stack
 check-gateway-stack:
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
@@ -1006,7 +999,7 @@ check-sso-e2e: workflow-validate-stage
 		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
 	)"; \
 	eval "$$sso_env"; \
-	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" SSO_E2E_ENABLE_BACKSTAGE="$${SSO_E2E_ENABLE_BACKSTAGE}" STAGE_TFVARS="$${STAGE_TFVARS}" STAGE_TFVARS_FILES="$${STAGE_TFVARS_FILES}" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh" $(READONLY_MODE_FLAG)
+	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" STAGE_TFVARS="$${STAGE_TFVARS}" STAGE_TFVARS_FILES="$${STAGE_TFVARS_FILES}" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: check-sso-working
 check-sso-working: workflow-validate-stage

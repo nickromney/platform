@@ -249,7 +249,7 @@ func TestOpenAPIUsesRegisteredRouteSpecs(t *testing.T) {
 func TestCORSAllowsPortalOrigins(t *testing.T) {
 	server := testServer(t)
 
-	for _, origin := range []string{"https://portal.127.0.0.1.sslip.io", "https://portal-api.127.0.0.1.sslip.io"} {
+	for _, origin := range []string{"https://portal-api.127.0.0.1.sslip.io"} {
 		req := httptest.NewRequest(http.MethodOptions, "/api/v1/catalog/apps", nil)
 		req.Header.Set("origin", origin)
 		req.Header.Set("access-control-request-method", "GET")
@@ -266,6 +266,21 @@ func TestCORSAllowsPortalOrigins(t *testing.T) {
 		if got := rec.Header().Get("access-control-allow-credentials"); got != "true" {
 			t.Fatalf("%s allow-credentials = %q", origin, got)
 		}
+	}
+}
+
+func TestCORSRejectsTheRetiredBackstagePortalOrigin(t *testing.T) {
+	server := testServer(t)
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/v1/catalog/apps", nil)
+	req.Header.Set("origin", "https://portal.127.0.0.1.sslip.io")
+	req.Header.Set("access-control-request-method", "GET")
+	rec := httptest.NewRecorder()
+
+	server.ServeHTTP(rec, req)
+
+	if got := rec.Header().Get("access-control-allow-origin"); got != "" {
+		t.Fatalf("retired portal origin should not be allowed, got allow-origin %q", got)
 	}
 }
 

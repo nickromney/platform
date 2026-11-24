@@ -109,8 +109,8 @@ from pathlib import Path
 import yaml
 
 repo_root = Path(os.environ["REPO_ROOT"])
-workflow_path = repo_root / "apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/review-environment.yaml"
-build_workflow_path = repo_root / "apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/build.yaml"
+workflow_path = repo_root / "templates/platform-service/content/.gitea/workflows/review-environment.yaml"
+build_workflow_path = repo_root / "templates/platform-service/content/.gitea/workflows/build.yaml"
 workflow_text = workflow_path.read_text(encoding="utf-8")
 build_workflow_text = build_workflow_path.read_text(encoding="utf-8")
 workflow = yaml.safe_load(workflow_text)

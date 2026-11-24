@@ -62,13 +62,13 @@ In Kubernetes, the applications prove that the platform can:
 
 ## Platform Surfaces
 
-APIM, Platform MCP, and Backstage now sit beside the sample workloads:
+APIM, Platform MCP, and the IDP API now sit beside the sample workloads:
 
 | App | What it proves |
 | --- | --- |
 | [APIM simulator](./apim-simulator) | API mediation, policy behaviour, subscription-key checks, and Keycloak audiences. |
 | [Platform MCP](./platform-mcp) | Protected machine API access, tool discovery, D2 tooling, and platform diagnostics. |
-| [Portal and IDP](./backstage-idp) | Developer portal, catalog metadata, TechDocs, IDP Core API, SDK, and IDP MCP integration. |
+| [IDP API, SDK, and MCP](./idp) | IDP Core API, SDK, IDP MCP integration, and service scaffolding into Gitea. |
 
 ## Compose Pattern
 
@@ -92,5 +92,5 @@ make -C docker/compose up-all
 - [Sentiment](./sentiment)
 - [APIM simulator](./apim-simulator)
 - [Platform MCP](./platform-mcp)
-- [Portal and IDP](./backstage-idp)
+- [IDP API, SDK, and MCP](./idp)
 - [Build and use containers](../tutorials/container-workflow)

@@ -36,7 +36,6 @@ VARS
     ! image_selection_enabled platform keycloak
     unset IMAGE_BUILD_TFVARS_FILES
     image_selection_enabled platform keycloak
-    ! image_selection_enabled platform backstage
   '
   [ "$status" -eq 0 ]
 }

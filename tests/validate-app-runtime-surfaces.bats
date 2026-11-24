@@ -1289,7 +1289,7 @@ print(f"validated {external_runtime_image_ref_expectation_count()} external imag
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 9 external image expectation(s)"* ]]
+  [[ "${output}" == *"validated 8 external image expectation(s)"* ]]
 }
 
 @test "app runtime tests share external image ref helpers" {

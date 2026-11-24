@@ -145,7 +145,6 @@ __YAML__
 
   depends_on = [
     kubectl_manifest.namespace_idp,
-    kubernetes_secret_v1.backstage_gitea_credentials,
     kubernetes_secret_v1.argocd_repo_policies,
     null_resource.sync_gitea_policies_repo,
     null_resource.argocd_repo_server_restart,

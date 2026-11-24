@@ -476,7 +476,6 @@ func collectStatus(command []string) map[string]any {
 func portalCORSConfig() apphttp.CORSConfig {
 	return apphttp.CORSConfig{
 		AllowedOrigins: []string{
-			"https://portal.127.0.0.1.sslip.io",
 			"https://portal-api.127.0.0.1.sslip.io",
 			"http://127.0.0.1:5173",
 			"http://localhost:5173",

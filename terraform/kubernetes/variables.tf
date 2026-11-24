@@ -1362,23 +1362,17 @@ variable "prefer_external_platform_images" {
   default     = false
 }
 
-variable "enable_backstage" {
-  description = "Deploy the Backstage developer portal. Opt-in, like enable_apim_simulator: kind writes it through an operator override driven by KIND_ENABLE_BACKSTAGE."
-  type        = bool
-  default     = false
-}
-
 variable "external_platform_image_refs" {
-  description = "Optional external platform image references keyed by platform image name. Supported keys today: argo-rollouts-gatewayapi-plugin, auth-chat, backstage, chatgpt-sim, grafana, hardened-registry, idp-core, platform-mcp."
+  description = "Optional external platform image references keyed by platform image name. Supported keys today: argo-rollouts-gatewayapi-plugin, auth-chat, chatgpt-sim, grafana, hardened-registry, idp-core, platform-mcp."
   type        = map(string)
   default     = {}
 
   validation {
     condition = alltrue([
       for key in keys(var.external_platform_image_refs) :
-      contains(["argo-rollouts-gatewayapi-plugin", "auth-chat", "backstage", "chatgpt-sim", "grafana", "hardened-registry", "idp-core", "platform-mcp"], key)
+      contains(["argo-rollouts-gatewayapi-plugin", "auth-chat", "chatgpt-sim", "grafana", "hardened-registry", "idp-core", "platform-mcp"], key)
     ])
-    error_message = "external_platform_image_refs supports only: argo-rollouts-gatewayapi-plugin, auth-chat, backstage, chatgpt-sim, grafana, hardened-registry, idp-core, platform-mcp."
+    error_message = "external_platform_image_refs supports only: argo-rollouts-gatewayapi-plugin, auth-chat, chatgpt-sim, grafana, hardened-registry, idp-core, platform-mcp."
   }
 }
 

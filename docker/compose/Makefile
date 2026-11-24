@@ -1,5 +1,5 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help prereqs check-docker-prerequisites check-mkcert-prerequisites check-host-ports check-https-443-available certs config binaries build up up-dev up-uat up-portal up-all down logs ps urls check-backstage test test-backstage
+MAKE_KNOWN_GOALS := help prereqs check-docker-prerequisites check-mkcert-prerequisites check-host-ports check-https-443-available certs config binaries build up up-dev up-uat up-all down logs ps urls test
 MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 
 include ../../mk/common.mk
@@ -14,7 +14,7 @@ ifneq ($(strip $(wildcard $(PLATFORM_ENV_FILE))),)
 include $(PLATFORM_ENV_FILE)
 endif
 
-.PHONY: help prereqs check-docker-prerequisites check-mkcert-prerequisites check-host-ports check-https-443-available certs config binaries build up up-dev up-uat up-portal up-all down logs ps urls check-backstage test test-backstage
+.PHONY: help prereqs check-docker-prerequisites check-mkcert-prerequisites check-host-ports check-https-443-available certs config binaries build up up-dev up-uat up-all down logs ps urls test
 
 COMPOSE = $(COMPOSE_CMD) -f compose.yml
 # Must match the platform: pins in compose.yml. The app Dockerfiles COPY prebuilt
@@ -25,8 +25,6 @@ COMPOSE_ENV := OAUTH2_PROXY_CLIENT_SECRET=compose-oauth2-proxy-secret
 COMPOSE_TEST_COOKIE_SECRET := 0123456789abcdef0123456789abcdef
 COMPOSE_TEST_ENV := $(COMPOSE_ENV) OAUTH2_PROXY_COOKIE_SECRET=$${OAUTH2_PROXY_COOKIE_SECRET:-$(COMPOSE_TEST_COOKIE_SECRET)}
 CHECK_HOST_PORTS := ./scripts/check-host-ports.sh
-CHECK_BACKSTAGE := ./scripts/check-backstage.sh
-COMPOSE_BACKSTAGE_E2E_DIR := ../../tests/kubernetes/sso
 
 export PLATFORM_ENV_FILE
 export PLATFORM_ENV_TEMPLATE
@@ -68,14 +66,14 @@ certs: check-mkcert-prerequisites ## Generate or refresh the mkcert TLS certs fo
 
 ##@ Compose
 config: check-docker-prerequisites ## Validate the full compose graph
-	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile dev --profile uat --profile portal config -q
+	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile dev --profile uat config -q
 
 binaries: ## Build the Linux binaries the compose app images COPY, for the compose platform
 	@GOARCH=$(COMPOSE_IMAGE_GOARCH) $(MAKE) --no-print-directory -C ../../apps/apim-simulator/app build-linux
 	@GOARCH=$(COMPOSE_IMAGE_GOARCH) $(MAKE) --no-print-directory -C ../../apps/subnetcalc/app build-linux
 
 build: check-docker-prerequisites binaries ## Build the shared compose app images
-	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile dev --profile uat --profile portal build apim-simulator subnetcalc-api-dev subnetcalc-api-uat subnetcalc-frontend-dev subnetcalc-frontend-uat backstage
+	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile dev --profile uat build apim-simulator subnetcalc-api-dev subnetcalc-api-uat subnetcalc-frontend-dev subnetcalc-frontend-uat
 
 up: up-all ## Start the full dev + uat compose platform
 
@@ -87,28 +85,23 @@ up-uat: check-docker-prerequisites check-host-ports certs binaries ## Start the 
 	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile uat up -d --build
 	@$(MAKE) --no-print-directory urls
 
-up-portal: check-docker-prerequisites check-host-ports certs ## Start the shared services plus Backstage portal
-	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile portal up -d --build edge dex backstage oauth2-proxy-backstage
-	@$(MAKE) --no-print-directory urls
-
 up-all: check-docker-prerequisites check-host-ports certs binaries ## Start the shared services plus subnetcalc dev and uat
-	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile dev --profile uat --profile portal up -d --build
+	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile dev --profile uat up -d --build
 	@$(MAKE) --no-print-directory urls
 
 down: check-docker-prerequisites ## Stop the compose platform and remove orphaned containers
-	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile dev --profile uat --profile portal down --remove-orphans
+	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile dev --profile uat down --remove-orphans
 
 logs: check-docker-prerequisites ## Tail compose logs; optionally pass SERVICE=<name>
-	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile dev --profile uat --profile portal logs -f --tail=200 $(SERVICE)
+	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile dev --profile uat logs -f --tail=200 $(SERVICE)
 
 ps: check-docker-prerequisites ## Show compose container status
-	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile dev --profile uat --profile portal ps
+	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile dev --profile uat ps
 
 urls: ## Print the operator URLs and demo credentials
 	@echo "Compose edge:"
 	@echo "  DEV  -> https://subnetcalc.dev.compose.127.0.0.1.sslip.io:8443"
 	@echo "  UAT  -> https://subnetcalc.uat.compose.127.0.0.1.sslip.io:8443"
-	@echo "  Portal -> https://portal.compose.127.0.0.1.sslip.io:8443"
 	@echo "  HTTP -> http://subnetcalc.dev.compose.127.0.0.1.sslip.io:8088 (redirects to HTTPS)"
 	@echo ""
 	@echo "Shared services:"
@@ -126,21 +119,7 @@ urls: ## Print the operator URLs and demo credentials
 	@echo "  Run 'make -C docker/compose check-https-443-available' before attempting direct :443."
 
 ##@ Verification
-check-backstage: check-docker-prerequisites check-host-ports certs ## Start and smoke-check the Backstage compose portal
-	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile portal up -d --build edge dex backstage oauth2-proxy-backstage
-	@OAUTH2_PROXY_CLIENT_SECRET=compose-oauth2-proxy-secret OAUTH2_PROXY_COOKIE_SECRET=$${OAUTH2_PROXY_COOKIE_SECRET:-$(COMPOSE_TEST_COOKIE_SECRET)} COMPOSE_COMMAND="$(COMPOSE) --profile portal" $(CHECK_BACKSTAGE) --execute
-
 test: check-docker-prerequisites ## Validate the compose topology renders cleanly
-	@bats ../../tests/backstage-compose.bats ../../tests/compose-binaries.bats
-	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile dev --profile uat --profile portal config -q
+	@bats ../../tests/compose-binaries.bats
+	@$(COMPOSE_TEST_ENV) $(COMPOSE) --profile dev --profile uat config -q
 
-test-backstage: check-backstage ## Run the live Backstage compose red/green smoke proof
-	@cd $(COMPOSE_BACKSTAGE_E2E_DIR) && bun install --frozen-lockfile
-	@cd $(COMPOSE_BACKSTAGE_E2E_DIR) && bun x playwright install chromium
-	@cd $(COMPOSE_BACKSTAGE_E2E_DIR) && \
-		COMPOSE_BACKSTAGE_URL=https://portal.compose.127.0.0.1.sslip.io:8443/ \
-		COMPOSE_DEX_URL=https://dex.compose.127.0.0.1.sslip.io:8443/dex/ \
-		COMPOSE_DEX_LOGIN=$${COMPOSE_DEX_LOGIN:-demo@dev.test} \
-		COMPOSE_DEX_PASSWORD=$${COMPOSE_DEX_PASSWORD:-$${PLATFORM_DEMO_PASSWORD:-password123}} \
-		COMPOSE_BACKSTAGE_E2E=1 \
-		bun x playwright test tests/compose-backstage-smoke.spec.ts --config playwright.config.ts

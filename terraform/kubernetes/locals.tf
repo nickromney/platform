@@ -141,8 +141,6 @@ locals {
   chatgpt_sim_public_url               = "https://${local.chatgpt_sim_public_host}${local.gateway_https_host_port_suffix}"
   agentgateway_ai_gateway_public_host  = "llm.${local.platform_base_domain_effective}"
   agentgateway_ai_gateway_public_url   = "https://${local.agentgateway_ai_gateway_public_host}${local.gateway_https_host_port_suffix}"
-  idp_portal_public_host               = "portal.${local.platform_base_domain_effective}"
-  idp_portal_public_url                = "https://${local.idp_portal_public_host}${local.gateway_https_host_port_suffix}"
   idp_api_public_host                  = "portal-api.${local.platform_base_domain_effective}"
   idp_api_public_url                   = "https://${local.idp_api_public_host}${local.gateway_https_host_port_suffix}"
   # The four admin-domain proxies differ only in which upstream they front and
@@ -204,30 +202,17 @@ locals {
       }
     } : {},
   )
-  sso_idp_proxy_apps = merge(
-    local.enable_backstage_effective ? {
-      portal = {
-        name             = "oauth2-proxy-backstage"
-        public_url       = local.idp_portal_public_url
-        upstream         = "http://backstage.idp.svc.cluster.local:7007"
-        group            = local.sso_viewer_group
-        cookie_name      = local.portal_sso_cookie_name
-        cookie_domain    = local.portal_cookie_domain
-        whitelist_domain = local.portal_whitelist_domains
-      }
-    } : {},
-    {
-      api = {
-        name             = "oauth2-proxy-idp-core"
-        public_url       = local.idp_api_public_url
-        upstream         = "http://idp-core.idp.svc.cluster.local:8080"
-        group            = local.sso_viewer_group
-        cookie_name      = local.portal_sso_cookie_name
-        cookie_domain    = local.portal_cookie_domain
-        whitelist_domain = local.portal_whitelist_domains
-      }
-    },
-  )
+  sso_idp_proxy_apps = {
+    api = {
+      name             = "oauth2-proxy-idp-core"
+      public_url       = local.idp_api_public_url
+      upstream         = "http://idp-core.idp.svc.cluster.local:8080"
+      group            = local.sso_viewer_group
+      cookie_name      = local.portal_sso_cookie_name
+      cookie_domain    = local.portal_cookie_domain
+      whitelist_domain = local.portal_whitelist_domains
+    }
+  }
   sso_mcp_console_proxy_apps = {
     console = {
       name             = "oauth2-proxy-mcp-console"
@@ -351,7 +336,6 @@ locals {
   enable_victoria_logs_effective        = var.enable_victoria_logs
   enable_otel_gateway_effective         = var.enable_otel_gateway || local.enable_prometheus_effective || local.enable_grafana_effective || local.enable_victoria_logs_effective
   enable_observability_effective        = local.enable_otel_gateway_effective || var.enable_observability_agent
-  enable_backstage_effective            = var.enable_backstage && var.enable_sso && var.enable_argocd
   gitea_admin_promote_users_effective = var.enable_gitea ? distinct(compact(concat(
     [var.gitea_admin_username],
     var.gitea_admin_promote_users,
@@ -368,7 +352,6 @@ locals {
   external_platform_grafana_image     = trimspace(lookup(var.external_platform_image_refs, "grafana", ""))
   external_platform_hardened_registry = trimspace(lookup(var.external_platform_image_refs, "hardened-registry", ""))
   external_platform_idp_core          = trimspace(lookup(var.external_platform_image_refs, "idp-core", ""))
-  external_platform_backstage         = trimspace(lookup(var.external_platform_image_refs, "backstage", ""))
   external_platform_mcp               = trimspace(lookup(var.external_platform_image_refs, "platform-mcp", ""))
   external_platform_chatgpt_sim       = trimspace(lookup(var.external_platform_image_refs, "chatgpt-sim", ""))
   external_platform_argo_rollouts_gatewayapi_plugin = trimspace(lookup(
@@ -654,7 +637,7 @@ locals {
     var.enable_sso && local.enable_sentiment_workloads_effective && var.enable_argocd ? ["oauth2-proxy-sentiment-dev", "oauth2-proxy-sentiment-uat"] : [],
     var.enable_sso && local.enable_subnetcalc_workloads_effective && var.enable_argocd ? ["oauth2-proxy-subnetcalc-dev", "oauth2-proxy-subnetcalc-uat"] : [],
     var.enable_sso && local.enable_apim_simulator_effective && var.enable_argocd ? ["oauth2-proxy-apim"] : [],
-    var.enable_sso && var.enable_argocd ? concat(local.enable_backstage_effective ? ["oauth2-proxy-backstage"] : [], ["oauth2-proxy-idp-core"]) : [],
+    var.enable_sso && var.enable_argocd ? ["oauth2-proxy-idp-core"] : [],
     local.enable_mcp_effective && var.enable_argocd ? ["oauth2-proxy-mcp-console", "oauth2-proxy-auth-chat", "oauth2-proxy-chatgpt-sim"] : [],
   ))
 
@@ -721,7 +704,6 @@ locals {
     enable_progressive_delivery          = var.enable_progressive_delivery
     enable_headlamp                      = var.enable_headlamp
     enable_sso                           = var.enable_sso
-    enable_backstage                     = var.enable_backstage
     headlamp_cluster_role_binding_create = var.headlamp_cluster_role_binding_create
     headlamp_oidc_skip_tls_verify        = var.headlamp_oidc_skip_tls_verify
     headlamp_oidc_client_secret          = var.enable_sso && var.enable_headlamp ? random_password.oidc_headlamp_client_secret[0].result : ""
@@ -746,7 +728,6 @@ locals {
     prefer_external_platform               = var.prefer_external_platform_images
     external_platform_grafana              = local.external_platform_grafana_image
     external_platform_idp_core             = local.external_platform_idp_core
-    external_platform_backstage            = local.external_platform_backstage
     hardened_image_registry                = local.hardened_image_registry_effective
     cert_manager_chart_version             = var.cert_manager_chart_version
     grafana_chart_version                  = var.grafana_chart_version

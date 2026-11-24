@@ -12,9 +12,8 @@ sso_provider        = "keycloak"
 enable_argocd_oidc  = true
 
 # Portal API/status surfaces are enabled by enable_sso + enable_argocd through
-# apps/idp and the oauth2-proxy IDP Application. Backstage stays off.
+# apps/idp and the oauth2-proxy IDP Application.
 enable_app_of_apps = false
-enable_backstage   = false
 
 # Keep the GitOps path, but avoid optional Argo CD controllers for this profile.
 argocd_applicationset_enabled = false

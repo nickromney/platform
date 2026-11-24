@@ -4,9 +4,6 @@ spec:
   to:
     - group: ""
       kind: Service
-      name: oauth2-proxy-backstage
-    - group: ""
-      kind: Service
       name: oauth2-proxy-hubble
     - group: ""
       kind: Service

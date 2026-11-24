@@ -231,7 +231,6 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"KIND_IMAGE_DISTRIBUTION_MODE=registry"* ]]
   [[ "${output}" == *"PLATFORM_TFVARS=${tfvars_file}"* ]]
-  [[ "${output}" == *"enable_backstage = false"* ]]
   [[ "${output}" == *"enable_app_repo_subnetcalc = true"* ]]
   [[ "${output}" == *"enable_subnetcalc_apim_gateway = false"* ]]
   [[ "${output}" == *"worker_count = 2"* ]]

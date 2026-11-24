@@ -20,12 +20,6 @@ setup() {
   done
 }
 
-@test "docker compose portal target does not build the app binaries it never starts" {
-  run make -C "${REPO_ROOT}/docker/compose" -n up-portal
-  [ "${status}" -eq 0 ]
-  [[ "${output}" != *"build-linux"* ]]
-}
-
 @test "docker compose binary GOARCH matches the platform pinned on the app images" {
   run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations

@@ -11,11 +11,9 @@ import {
   chatgptAddMcpOauthConnector,
   completeOidcLogin,
   creds,
-  developerPortalWorks,
   loginArgocdConsoleIfNeeded,
   fetchHeadlampStatus,
   gotoWithGatewayRetry,
-  grafanaBackstageObservabilityDashboardWorks,
   grafanaLaunchpadShowsHealthyTiles,
   grafanaMcpObservabilityDashboardWorks,
   grafanaPlatformNamespaceHealthDashboardWorks,
@@ -31,7 +29,6 @@ import {
   sentimentSamplePositiveAndAnalyze,
   subnetcalcRfc1918Lookup,
   type Target,
-  watchBrowserApiTraffic,
   watchPageRuntimeEvents,
 } from './harness'
 
@@ -205,13 +202,11 @@ const WORKING_BY_NAME: Record<string, WorkingFn> = {
   'kyverno-admin': async (page) => kyvernoPolicyReporterHasPolicies(page),
   'apim-admin': async (page) => apimSimulatorHasGatewaySurface(page),
   'developer-portal-api': async (page) => portalApiJsonWorks(page),
-  'developer-portal': async (page) => developerPortalWorks(page, watchBrowserApiTraffic(page)),
   'auth-chat': async (page) => authChatShellWorks(page),
   'chatgpt-sim': async (page) => chatgptAddMcpOauthConnector(page, watchPageRuntimeEvents(page)),
   'mcp-console': async (page) => mcpInspectorD2RenderAndExport(page),
   'grafana-platform-namespace-health': async (page) => grafanaPlatformNamespaceHealthDashboardWorks(page),
   'grafana-mcp-observability': async (page) => grafanaMcpObservabilityDashboardWorks(page),
-  'grafana-backstage-observability': async (page) => grafanaBackstageObservabilityDashboardWorks(page),
   'headlamp-admin': headlampShowsClusterNamespaces,
 }
 

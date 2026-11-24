@@ -14,12 +14,10 @@ export type Target = {
     | 'grafana-launchpad'
     | 'grafana-platform-namespace-health'
     | 'grafana-mcp-observability'
-    | 'grafana-backstage-observability'
     | 'grafana-victoria-logs'
     | 'keycloak-admin-console'
     | 'sentiment-sample-positive'
     | 'subnetcalc-rfc1918-lookup'
-    | 'developer-portal'
     | 'developer-portal-api-json'
     | 'auth-chat-model-reply'
     | 'chatgpt-add-mcp-oauth'
@@ -40,7 +38,6 @@ export function isEnabled(envName: string, defaultValue: boolean) {
 
 export const INCLUDE_HEADLAMP = isEnabled('SSO_E2E_ENABLE_HEADLAMP', false)
 export const INCLUDE_VICTORIA_LOGS = isEnabled('SSO_E2E_ENABLE_VICTORIA_LOGS', false)
-export const INCLUDE_BACKSTAGE = isEnabled('SSO_E2E_ENABLE_BACKSTAGE', true)
 export const INCLUDE_MCP = isEnabled('SSO_E2E_ENABLE_MCP', true)
 export const INCLUDE_SENTIMENT = isEnabled('SSO_E2E_ENABLE_SENTIMENT', true)
 export const INCLUDE_SUBNETCALC = isEnabled('SSO_E2E_ENABLE_SUBNETCALC', true)
@@ -61,7 +58,6 @@ export const VERIFY_AUTH_CHAT_MODEL = isEnabled('SSO_E2E_VERIFY_AUTH_CHAT_MODEL'
 export const BASE_SCHEME = process.env.SSO_E2E_SCHEME || 'https'
 export const BASE_DOMAIN = process.env.SSO_E2E_BASE_DOMAIN || '127.0.0.1.sslip.io'
 export const BASE_PORT = process.env.SSO_E2E_BASE_PORT ? `:${process.env.SSO_E2E_BASE_PORT}` : ''
-export const PORTAL_HOSTNAME = `portal.${BASE_DOMAIN}`.toLowerCase()
 export const PORTAL_API_HOSTNAME = `portal-api.${BASE_DOMAIN}`.toLowerCase()
 export const OAUTH2_PROXY_CLIENT_SECRET = process.env.SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET || ''
 
@@ -160,16 +156,6 @@ export function isLightweightPlatformApp(target: Target) {
 
 export const TARGETS: Target[] = BASE_TARGETS.filter(filterTargetByEnabledApps)
 
-if (INCLUDE_BACKSTAGE) {
-  TARGETS.push({
-    name: 'developer-portal',
-    url: platformUrl('portal'),
-    segment: 'dev',
-    flow: 'oauth2-proxy',
-    postLogin: 'developer-portal',
-  })
-}
-
 if (INCLUDE_MCP) {
   TARGETS.push({
     name: 'auth-chat',
@@ -208,16 +194,6 @@ if (INCLUDE_GRAFANA && INCLUDE_MCP && INCLUDE_VICTORIA_LOGS) {
     segment: 'admin',
     flow: 'oauth2-proxy',
     postLogin: 'grafana-mcp-observability',
-  })
-}
-
-if (INCLUDE_GRAFANA && INCLUDE_BACKSTAGE && INCLUDE_VICTORIA_LOGS) {
-  TARGETS.push({
-    name: 'grafana-backstage-observability',
-    url: absolutePlatformUrl('grafana.admin', '/d/backstage-observability/backstage-observability?orgId=1&from=now-6h&to=now&timezone=browser&refresh=30s'),
-    segment: 'admin',
-    flow: 'oauth2-proxy',
-    postLogin: 'grafana-backstage-observability',
   })
 }
 
@@ -816,12 +792,11 @@ export async function hubbleChooseNamespaceArgocd(page: Page, baseUrl: string) {
 export function expectedLaunchpadTileCount() {
   // Keep in lockstep with terraform/kubernetes/config/platform-launchpad.apps.json
   // requires[] and render-platform-launchpad.sh toggles. Kind stage 900 with
-  // Headlamp on and Backstage off is 19 tiles; a full click-through of every
+  // Headlamp on is 19 tiles; a full click-through of every
   // tile exceeds the apply-path Playwright timeout.
   let count = 6
   count += 7
   if (INCLUDE_HEADLAMP) count += 1
-  if (INCLUDE_BACKSTAGE) count += 2
   if (INCLUDE_SENTIMENT) count += 2
   if (INCLUDE_SUBNETCALC) count += 3
   return count
@@ -945,16 +920,6 @@ export async function grafanaPlatformNamespaceHealthDashboardWorks(page: Page) {
     /Scraped pods up/i,
   ])
   await expect(page.locator('body')).not.toContainText(/No data/i, { timeout: 30_000 })
-}
-
-export async function grafanaBackstageObservabilityDashboardWorks(page: Page) {
-  await grafanaDashboardContains(page, /Backstage Observability/i, [
-    /Catalog APIs/i,
-    /Services With Kubernetes Selector/i,
-    /Services Missing Kubernetes Selector/i,
-  ])
-  await page.keyboard.press('End')
-  await expect(page.locator('body')).toContainText(/Recent Backstage Logs/i, { timeout: 30_000 })
 }
 
 export async function keycloakAccessToken(page: Page, segment: Segment) {
@@ -1188,59 +1153,13 @@ export async function waitForChatgptSimReady(page: Page, events?: PageRuntimeEve
   throw new Error(`ChatGPT Sim did not initialize after login. diagnostics=${JSON.stringify(diagnostics, null, 2)} lastError=${errorMessage}`)
 }
 
-export type BrowserApiTraffic = {
-  requestUrls: string[]
-  responses: Array<{ url: string; status: number }>
-}
-
 export type PageRuntimeEvents = {
   consoleMessages: string[]
   pageErrors: string[]
 }
 
-export function isBrowserApiUrl(value: string) {
-  try {
-    return new URL(value).pathname.startsWith('/api/')
-  } catch {
-    return false
-  }
-}
-
-export function isLoopbackApiTarget(value: string) {
-  const hostname = new URL(value).hostname.toLowerCase()
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
-}
-
 export function usesPortalApiHost(value: string) {
   return new URL(value).hostname === PORTAL_API_HOSTNAME
-}
-
-export function isBackstageCatalogApiResponse(response: { url: string; status: number }) {
-  const url = new URL(response.url)
-  return url.hostname === PORTAL_HOSTNAME && url.pathname.startsWith('/api/catalog/') && response.status >= 200 && response.status < 400
-}
-
-export function watchBrowserApiTraffic(page: Page): BrowserApiTraffic {
-  const traffic: BrowserApiTraffic = {
-    requestUrls: [],
-    responses: [],
-  }
-
-  page.on('request', (request) => {
-    const url = request.url()
-    if (isBrowserApiUrl(url)) {
-      traffic.requestUrls.push(url)
-    }
-  })
-
-  page.on('response', (response) => {
-    const url = response.url()
-    if (isBrowserApiUrl(url)) {
-      traffic.responses.push({ url, status: response.status() })
-    }
-  })
-
-  return traffic
 }
 
 export function watchPageRuntimeEvents(page: Page): PageRuntimeEvents {
@@ -1274,33 +1193,6 @@ export async function bodyText(page: Page) {
 
 export async function expectBodyToContain(page: Page, pattern: RegExp, message: string) {
   await expect.poll(() => bodyText(page), { message, timeout: 120_000 }).toMatch(pattern)
-}
-
-export async function developerPortalWorks(page: Page, traffic: BrowserApiTraffic) {
-  await expect(page).toHaveURL((u) => u.hostname === PORTAL_HOSTNAME && !u.pathname.startsWith('/oauth2/'))
-  await expect(page).toHaveURL((u) => u.pathname === '/' || u.pathname.startsWith('/catalog'))
-
-  const body = page.locator('body')
-  await expect(body).not.toContainText(/sign in as guest|continue as guest|guest sign[- ]?in/i, { timeout: 10_000 })
-  await expect(page.getByRole('button', { name: /guest/i })).toHaveCount(0)
-  await expect(page.getByRole('link', { name: /guest/i })).toHaveCount(0)
-
-  await expectBodyToContain(page, /Platform Engineering Catalog|Catalog/i, 'Backstage catalog shell did not render after edge SSO login')
-  await page.goto(absolutePlatformUrl('portal', '/?filters%5Bkind%5D=component&filters%5Buser%5D=all'))
-  await expect(page).toHaveURL((u) => u.hostname === PORTAL_HOSTNAME && (u.pathname === '/' || u.pathname.startsWith('/catalog')))
-  await expectBodyToContain(page, /Developer Portal/i, 'Backstage catalog did not expose the Backstage portal component')
-  await expectBodyToContain(page, /Portal API/i, 'Backstage catalog did not expose the IDP API component')
-  await expectBodyToContain(page, /Sentiment|SubnetCalc/i, 'Backstage catalog did not expose workload catalog content')
-
-  await expect
-    .poll(() => traffic.responses.some(isBackstageCatalogApiResponse), {
-      message: 'Developer portal did not load Backstage catalog content through the portal host',
-      timeout: 60_000,
-    })
-    .toBe(true)
-
-  const loopbackApiUrls = traffic.requestUrls.filter(isLoopbackApiTarget)
-  expect(loopbackApiUrls, 'Developer portal browser API calls must not target localhost or raw loopback').toEqual([])
 }
 
 export async function fetchJsonThroughBrowser(page: Page, path: string) {
@@ -1341,7 +1233,6 @@ export async function portalApiJsonWorks(page: Page) {
 
   const catalog = await fetchJsonThroughBrowser(page, '/api/v1/catalog/apps')
   expect(Array.isArray(catalog?.applications)).toBe(true)
-  expect(catalog.applications.some((app: any) => app?.name === 'backstage')).toBe(true)
   expect(catalog.applications.some((app: any) => app?.name === 'idp-core')).toBe(true)
   expect(catalog.applications.some((app: any) => app?.name === 'chatgpt-sim')).toBe(true)
 }

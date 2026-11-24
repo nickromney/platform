@@ -29,8 +29,7 @@ SSO_E2E_TEST_GREP="hubble-admin: is working" make -C kubernetes/kind check-sso-w
 ```
 
 When `enable_victoria_logs=true` in the active stage tfvars, the Grafana smoke path also verifies the `victorialogs` datasource/plugin and the `platform-logs` dashboard.
-The developer portal smoke path signs in through oauth2-proxy, verifies Backstage renders the software catalog without the Guest sign-in flow, and checks browser API traffic does not target localhost.
-The Portal API smoke path is also browser-authenticated through SSO and verifies `/api/v1/runtime` and `/api/v1/catalog/apps` return JSON after login.
+The Portal API smoke path is browser-authenticated through SSO and verifies `/api/v1/runtime` and `/api/v1/catalog/apps` return JSON after login.
 Do not add unauthenticated curl expectations for those JSON endpoints here; the public `portal-api` route is intentionally SSO-protected.
 The target-specific `check-sso-e2e` wrappers no longer repair Lima/Lima k3s apiserver OIDC settings before the browser run.
 If you are testing an older Lima or Lima cluster, rerun `900 apply` first or invoke that target's `configure-k3s-apiserver-oidc` command manually.

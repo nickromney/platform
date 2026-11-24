@@ -172,7 +172,7 @@ EOF
 
 @test "a cooldown-held package without a reported date gets one from the blocked release" {
   jq '.app_dependencies = [{
-    "app": "apps/backstage",
+    "app": "apps/idp-sdk",
     "dependency": "jest",
     "current": "30.3.0",
     "latest_eligible": "30.3.0",
@@ -202,8 +202,8 @@ EOF
     "${SCRIPT}" --execute --only packages
 
   [ "${status}" -eq 0 ]
-  # apps/backstage/.npmrc sets min-release-age=7, so 2026-11-20 clears on 2026-11-27.
-  [[ "${output}" == *$'apps/backstage:jest\t30.3.0\t30.6.0\tBLOCKED by cooldown\t2026-11-27'* ]]
+  # apps/idp-sdk/.npmrc sets min-release-age=7, so 2026-11-20 clears on 2026-11-27.
+  [[ "${output}" == *$'apps/idp-sdk:jest\t30.3.0\t30.6.0\tBLOCKED by cooldown\t2026-11-27'* ]]
 }
 
 @test "charts report surfaces cooldown-held chart versions with eligible dates" {

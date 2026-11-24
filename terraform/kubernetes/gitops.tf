@@ -68,7 +68,6 @@ resource "null_resource" "sync_gitea_policies_repo" {
     # Keep Terraform-owned namespaces and image pull secrets ahead of that sync
     # so Argo CD does not create those namespaces first.
     kubernetes_secret_v1.gitea_registry_creds,
-    kubernetes_secret_v1.backstage_gitea_credentials,
     kubernetes_secret_v1.headlamp_mkcert_ca,
     kubernetes_secret_v1.dev_mkcert_ca,
     local_sensitive_file.policies_repo_private_key,

@@ -12,7 +12,6 @@ than by one application package.
   <FileTree.Folder name="platform" defaultOpen>
     <FileTree.Folder name="apps">
       <FileTree.Folder name="apim-simulator" />
-      <FileTree.Folder name="backstage" />
       <FileTree.Folder name="idp-core" />
       <FileTree.Folder name="idp-mcp" />
       <FileTree.Folder name="idp-sdk" />
@@ -21,6 +20,7 @@ than by one application package.
       <FileTree.Folder name="subnetcalc" />
     </FileTree.Folder>
     <FileTree.Folder name="catalog" />
+    <FileTree.Folder name="templates" />
     <FileTree.Folder name="kubernetes">
       <FileTree.Folder name="kind" />
       <FileTree.Folder name="lima" />
@@ -65,8 +65,8 @@ than by one application package.
 | `terraform/kubernetes` | Shared in-cluster platform resources. |
 | `terraform/kubernetes/apps/gitea-actions-runner` | In-cluster Gitea Actions runner and review-environment RBAC. |
 | `terraform/kubernetes/cluster-policies` | Cilium and Kyverno policy source. |
-| `apps/backstage` | Portal UI, catalog, TechDocs, and scaffolding templates. |
 | `apps/idp-core` | Product API for catalog, runtime, environments, deployments, secrets, and actions. |
+| `templates/platform-service` | Starter service repository rendered into Gitea by `make -C kubernetes/kind scaffold-service`. |
 | `apps/idp-sdk` | TypeScript client for the IDP API. |
 | `apps/idp-mcp` | MCP wrapper over the IDP API. |
 | `apps/platform-mcp` | Learning and diagnostic MCP server for platform workflows. |
