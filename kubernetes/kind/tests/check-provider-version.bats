@@ -99,7 +99,7 @@ EOF
     [ "${status}" -eq 0 ]
   done
 
-  run grep -Fn 'version     = "3.2.0"' "${REPO_ROOT}/terraform/kubernetes/.terraform.lock.hcl"
+  run grep -Fn 'version     = "3.3.0"' "${REPO_ROOT}/terraform/kubernetes/.terraform.lock.hcl"
 
   [ "${status}" -eq 0 ]
 
@@ -108,15 +108,15 @@ EOF
   [ "${status}" -eq 0 ]
 
   for expected in \
-    'version     = "2.4.1"' \
+    'version     = "2.4.2"' \
     'constraints = "~> 2.4"' \
-    'version     = "2.9.0"' \
+    'version     = "2.9.1"' \
     'constraints = "~> 2.9"' \
-    'version     = "3.3.1"' \
+    'version     = "3.3.2"' \
     'constraints = "~> 3.3"' \
-    'version     = "3.9.0"' \
+    'version     = "3.9.1"' \
     'constraints = "~> 3.9"' \
-    'version     = "4.3.0"' \
+    'version     = "4.4.2"' \
     'constraints = "~> 4.3"'; do
     run grep -Fn "${expected}" "${REPO_ROOT}/terraform/kubernetes/.terraform.lock.hcl"
 

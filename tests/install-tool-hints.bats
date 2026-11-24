@@ -120,11 +120,11 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"jq: mise use jq@1.8.2"* ]]
-  [[ "${output}" == *"tofu: mise use opentofu@1.12.5"* ]]
-  [[ "${output}" == *"limactl: mise use lima@2.2.0"* ]]
-  [[ "${output}" == *"hubble: mise use github:cilium/hubble@1.19.4"* ]]
+  [[ "${output}" == *"tofu: mise use opentofu@1.13.9"* ]]
+  [[ "${output}" == *"limactl: mise use lima@2.3.0"* ]]
+  [[ "${output}" == *"hubble: mise use github:cilium/hubble@1.20.4"* ]]
   [[ "${output}" == *"npx: mise use node@24.15.0"* ]]
-  [[ "${output}" == *"k3sup-pro: mise use k3sup@0.13.12"* ]]
+  [[ "${output}" == *"k3sup-pro: mise use k3sup@0.13.14"* ]]
 }
 
 @test "install-tool-hints uses pacman on Arch and picks go-yq for mikefarah yq" {
@@ -161,7 +161,7 @@ EOF
 
   [ "${status}" -eq 0 ]
   # mise carries kubectl, so arkade must not win it.
-  [[ "${output}" == *"kubectl: mise use kubectl@1.36.3"* ]]
+  [[ "${output}" == *"kubectl: mise use kubectl@1.37.2"* ]]
   # docker is in neither mise nor arkade, so pacman handles it.
   [[ "${output}" == *"docker: sudo pacman -S --needed docker"* ]]
 }
@@ -178,8 +178,8 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"kyverno: arkade get kyverno@1.18.2"* ]]
-  [[ "${output}" == *"step: arkade get step@0.30.6"* ]]
-  [[ "${output}" == *"bun: arkade get bun@1.3.14"* ]]
+  [[ "${output}" == *"step: arkade get step@0.31.0"* ]]
+  [[ "${output}" == *"bun: arkade get bun@1.4.4"* ]]
 }
 
 @test "install-tool-hints reports missing platform facts without unknown placeholders" {

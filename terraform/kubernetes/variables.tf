@@ -455,13 +455,13 @@ variable "public_demo_allow_actions_runner_host_mounts" {
 variable "cilium_version" {
   description = "Cilium chart version."
   type        = string
-  default     = "1.20.1"
+  default     = "1.20.4"
 }
 
 variable "argocd_chart_version" {
   description = "Argo CD chart version."
   type        = string
-  default     = "10.2.1"
+  default     = "10.18.0"
 }
 
 variable "prefer_hardened_component_images" {
@@ -479,7 +479,7 @@ variable "argocd_hardened_image_repository" {
 variable "argocd_hardened_image_tag" {
   description = "Docker Hardened Images tag for Argo CD, used when prefer_hardened_component_images is true. Must track argocd_image_tag version for version."
   type        = string
-  default     = "3.4.5-debian13"
+  default     = "3.6.1-debian13"
 }
 
 variable "argocd_image_repository" {
@@ -491,7 +491,7 @@ variable "argocd_image_repository" {
 variable "argocd_image_tag" {
   description = "Argo CD container image tag used by the argo-cd Helm chart when prefer_hardened_component_images is false."
   type        = string
-  default     = "v3.4.5"
+  default     = "v3.6.1"
 }
 
 variable "provision_argocd" {
@@ -521,13 +521,13 @@ variable "gitea_chart_version" {
 variable "prometheus_chart_version" {
   description = "Prometheus chart version (prometheus-community/prometheus)."
   type        = string
-  default     = "29.27.0"
+  default     = "29.47.2"
 }
 
 variable "prometheus_image_tag" {
   description = "Prometheus container image tag."
   type        = string
-  default     = "v3.14.0"
+  default     = "v3.16.0"
 }
 
 variable "grafana_chart_version" {
@@ -619,7 +619,7 @@ variable "grafana_liveness_initial_delay_seconds" {
 variable "victoria_logs_chart_version" {
   description = "VictoriaLogs chart version (victoria-metrics/victoria-logs-single)."
   type        = string
-  default     = "0.13.9"
+  default     = "0.13.13"
 }
 
 
@@ -627,7 +627,7 @@ variable "victoria_logs_chart_version" {
 variable "headlamp_chart_version" {
   description = "Headlamp chart version."
   type        = string
-  default     = "0.45.0"
+  default     = "0.46.0"
 }
 
 variable "metrics_server_chart_version" {
@@ -669,13 +669,13 @@ variable "kyverno_chart_version" {
 variable "policy_reporter_chart_version" {
   description = "Policy Reporter chart version."
   type        = string
-  default     = "3.9.1"
+  default     = "3.11.2"
 }
 
 variable "cert_manager_chart_version" {
   description = "cert-manager chart version (Jetstack)."
   type        = string
-  default     = "v1.21.1"
+  default     = "v1.21.3"
 }
 
 variable "hardened_image_registry" {
@@ -706,7 +706,7 @@ variable "keycloak_realm" {
 variable "oauth2_proxy_chart_version" {
   description = "oauth2-proxy chart version (oauth2-proxy.github.io/manifests)."
   type        = string
-  default     = "10.7.0"
+  default     = "10.7.4"
 }
 
 variable "oauth2_proxy_memory_request" {
@@ -736,7 +736,7 @@ variable "oauth2_proxy_session_store_image" {
 variable "opentelemetry_collector_chart_version" {
   description = "OpenTelemetry Collector chart version (open-telemetry/opentelemetry-collector)."
   type        = string
-  default     = "0.170.0"
+  default     = "0.178.3"
 }
 
 # -----------------------------------------------------------------------------
