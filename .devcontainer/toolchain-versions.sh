@@ -9,10 +9,10 @@ DEVCONTAINER_NODE_VERSION="${DEVCONTAINER_NODE_VERSION:-24.15.0}"
 DEVCONTAINER_NODE_PNPM_VERSION="${DEVCONTAINER_NODE_PNPM_VERSION:-none}"
 DEVCONTAINER_NODE_NVM_VERSION="${DEVCONTAINER_NODE_NVM_VERSION:-0.40.4}"
 
-ARKADE_VERSION="${ARKADE_VERSION:-0.11.116}"
-BUN_VERSION="${BUN_VERSION:-bun-v1.3.14}"
+ARKADE_VERSION="${ARKADE_VERSION:-0.12.1}"
+BUN_VERSION="${BUN_VERSION:-bun-v1.4.4}"
 KYVERNO_VERSION="${KYVERNO_VERSION:-v1.18.2}"
-LEFTHOOK_VERSION="${LEFTHOOK_VERSION:-v2.1.10}"
+LEFTHOOK_VERSION="${LEFTHOOK_VERSION:-v2.2.2}"
 # The linter itself was the only lint tool here with no pinned version, in any
 # environment: brew on macOS, apt in the devcontainer, and whatever
 # ubuntu-latest happened to ship in CI. That is how PR #201 passed locally on
@@ -23,9 +23,9 @@ LEFTHOOK_VERSION="${LEFTHOOK_VERSION:-v2.1.10}"
 # after the hash is parsed as a DIRECTIVE, not prose, and fails with SC1073.
 # This comment said exactly that and broke the file it documents.
 SHELLCHECK_VERSION="${SHELLCHECK_VERSION:-v0.11.0}"
-LIMA_VERSION="${LIMA_VERSION:-v2.2.0}"
+LIMA_VERSION="${LIMA_VERSION:-v2.3.0}"
 MKCERT_VERSION="${MKCERT_VERSION:-v1.4.4}"
-OPENTOFU_VERSION="${OPENTOFU_VERSION:-1.12.5}"
+OPENTOFU_VERSION="${OPENTOFU_VERSION:-1.13.9}"
 # Pinned because CI installs it from the GitHub release rather than apt:
 # ripgrep is the one tool ten gated Bats files need that the ubuntu-latest
 # image does not ship, and reaching for apt to get it made every CI run pay
@@ -43,8 +43,8 @@ YAMLLINT_VERSION="${YAMLLINT_VERSION:-1.38.0}"
 # build sees .devcontainer/ and nothing else, so install-toolchain.sh cannot
 # read go.mod. tests/devcontainer-toolchain-surface.bats holds the two equal.
 GO_VERSION="${GO_VERSION:-1.26.5}"
-STARSHIP_VERSION="${STARSHIP_VERSION:-v1.26.0}"
-STEP_VERSION="${STEP_VERSION:-v0.30.6}"
+STARSHIP_VERSION="${STARSHIP_VERSION:-v1.27.0}"
+STEP_VERSION="${STEP_VERSION:-v0.31.0}"
 VIM_SENSIBLE_REF="${VIM_SENSIBLE_REF:-0ce2d843d6f588bb0c8c7eec6449171615dc56d9}"
 
 # Host lint/format toolchain. These are resolved per platform by
@@ -56,22 +56,22 @@ VIM_SENSIBLE_REF="${VIM_SENSIBLE_REF:-0ce2d843d6f588bb0c8c7eec6449171615dc56d9}"
 # toolchain-sources.tsv; biome and markdownlint-cli2 are audit-only there
 # because biome tags carry an "@biomejs/biome@" prefix and markdownlint-cli2
 # ships on npm, neither of which the github release resolver understands.
-RUFF_VERSION="${RUFF_VERSION:-0.16.2}"
-DENO_VERSION="${DENO_VERSION:-v2.9.5}"
+RUFF_VERSION="${RUFF_VERSION:-0.17.5}"
+DENO_VERSION="${DENO_VERSION:-v2.9.8}"
 BIOME_VERSION="${BIOME_VERSION:-2.5.8}"
 MARKDOWNLINT_CLI2_VERSION="${MARKDOWNLINT_CLI2_VERSION:-0.23.2}"
 
 # shellcheck disable=SC2034 # sourced by install/check scripts that consume the version matrix
 DEVCONTAINER_ARKADE_TOOLS=(
-  "cilium=v0.19.7"
-  "helm=v4.2.3"
-  "hubble=v1.19.4"
+  "cilium=v0.20.3"
+  "helm=v4.3.2"
+  "hubble=v1.20.4"
   "jq=jq-1.8.2"
-  "k3sup=0.13.12"
+  "k3sup=0.13.14"
   "kind=v0.33.0"
-  "kubectl=v1.36.3"
+  "kubectl=v1.37.2"
   "kubie=v0.28.0"
   "kubectx=v0.11.0"
-  "terragrunt=v1.1.2"
-  "yq=v4.53.3"
+  "terragrunt=v1.2.2"
+  "yq=v4.54.3"
 )

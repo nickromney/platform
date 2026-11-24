@@ -3,11 +3,11 @@
     {
       "package": "htmx.org",
       "registry": "npm",
-      "version": "2.0.10",
+      "version": "2.0.11",
       "path": "static/htmx.min.js",
-      "sha256": "71ea67185bfa8c98c39d31717c6fce5d852370fcdfd129db4543774d3145c0de",
-      "tarball": "https://registry.npmjs.org/htmx.org/-/htmx.org-2.0.10.tgz",
-      "tarball_sha256": "577ad40c1c94c9de47edb89e0aec78a8353d36024c50017eb53e02992a55e889",
+      "sha256": "d6fdc75f204e6bdefa99b69bf1e6d4ac69b8a364f77929f45c13476b4000f717",
+      "tarball": "https://registry.npmjs.org/htmx.org/-/htmx.org-2.0.11.tgz",
+      "tarball_sha256": "165a2655073e9e6e55e307a7c74e8ebcdb76afb7701f9c16cfd106a13add408e",
       "tarball_member": "package/dist/htmx.min.js"
     }
   ]
