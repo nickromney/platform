@@ -20,6 +20,9 @@ UPDATE_VERSIONS_GITHUB_API_BASE="${UPDATE_VERSIONS_GITHUB_API_BASE:-https://api.
 UPDATE_VERSIONS_MCR_API_BASE="${UPDATE_VERSIONS_MCR_API_BASE:-https://mcr.microsoft.com}"
 UPDATE_VERSIONS_MIN_RELEASE_AGE_SECONDS="${UPDATE_VERSIONS_MIN_RELEASE_AGE_SECONDS:-604800}"
 UPDATE_VERSIONS_ALLOW_UNKNOWN_COOLDOWN="${UPDATE_VERSIONS_ALLOW_UNKNOWN_COOLDOWN:-0}"
+MISE_CONFIG_FILE="${MISE_CONFIG_FILE:-${REPO_ROOT}/mise.toml}"
+UPDATE_VERSIONS_MISE_CMD="${UPDATE_VERSIONS_MISE_CMD:-mise}"
+UPDATE_VERSIONS_VERIFY_MISE_INSTALL="${UPDATE_VERSIONS_VERIFY_MISE_INSTALL:-1}"
 
 COMPONENT_REPORT_FILE=""
 PROVIDER_REPORT_FILE=""
@@ -42,6 +45,13 @@ Environment:
   GITHUB_TOKEN / GH_TOKEN  Optional GitHub API token for release lookups;
                            falls back to 'gh auth token', then anonymous
                            requests (60/hour rate limit).
+  UPDATE_VERSIONS_VERIFY_MISE_INSTALL
+                           Default 1. Before bumping a tool that mise.toml
+                           also pins, install that version with mise in a
+                           throwaway data dir (which runs mise's checksum and
+                           signature checks); skip the bump if it fails, and
+                           keep mise.toml in step when it passes. Set 0 to
+                           skip the install check.
 
 $(shell_cli_standard_options)
 EOF
@@ -439,8 +449,87 @@ update_toolchain_pin() {
   esac
 }
 
+# Prints the version mise.toml's [tools] table pins for a tool, or fails when
+# it pins none. Tool names in toolchain-sources.tsv match mise.toml keys.
+mise_toml_pin() {
+  local tool="$1"
+
+  [[ -f "${MISE_CONFIG_FILE}" ]] || return 1
+  awk -v want="${tool}" '
+    /^[[:space:]]*\[/ { in_tools = ($0 ~ /^[[:space:]]*\[tools\][[:space:]]*$/); next }
+    !in_tools || /^[[:space:]]*#/ || $0 !~ /=/ { next }
+    {
+      name = $0; sub(/=.*/, "", name); gsub(/^[[:space:]]+|[[:space:]]+$/, "", name)
+      if (name != want) { next }
+      value = $0; sub(/^[^=]*=/, "", value); gsub(/^[[:space:]]*"|"[[:space:]]*$/, "", value)
+      print value; found = 1; exit
+    }
+    END { exit found ? 0 : 1 }
+  ' "${MISE_CONFIG_FILE}"
+}
+
+update_mise_toml_pin() {
+  local tool="$1"
+  local version="$2"
+
+  TOOL_NAME="${tool}" LATEST_VERSION="${version}" LC_ALL=C perl -0pi -e \
+    's/(\[tools\][^\[]*?^\s*\Q$ENV{TOOL_NAME}\E\s*=\s*")[^"]*(")/$1$ENV{LATEST_VERSION}$2/ms' \
+    "${MISE_CONFIG_FILE}"
+}
+
+# Installs tool@version with mise into throwaway directories so the download,
+# checksum and signature checks run for real instead of hitting a cached
+# install. Prints mise's last error line on failure.
+verify_mise_install() {
+  local tool="$1"
+  local version="$2"
+  local work_dir rc=0
+
+  command -v "${UPDATE_VERSIONS_MISE_CMD}" >/dev/null 2>&1 || {
+    printf '%s is not installed, so the install check cannot run\n' "${UPDATE_VERSIONS_MISE_CMD}"
+    return 1
+  }
+  work_dir="$(mktemp -d "${TMPDIR:-/tmp}/update-versions-mise.XXXXXX")"
+  (
+    cd "${work_dir}" &&
+      MISE_DATA_DIR="${work_dir}/data" MISE_CACHE_DIR="${work_dir}/cache" MISE_STATE_DIR="${work_dir}/state" \
+        "${UPDATE_VERSIONS_MISE_CMD}" install -y "${tool}@${version}" >"${work_dir}/install.log" 2>&1
+  ) || rc=$?
+  if [[ "${rc}" -ne 0 ]]; then
+    grep -m 1 -E 'ERROR|failed' "${work_dir}/install.log" || tail -n 1 "${work_dir}/install.log"
+  fi
+  rm -rf "${work_dir}"
+  return "${rc}"
+}
+
+# Applies one tool bump. Tools that mise.toml also pins are installed with mise
+# first; a failed install skips the bump and leaves both files untouched.
+apply_tool_update() {
+  local tool="$1"
+  local pin="$2"
+  local current="$3"
+  local latest="$4"
+  local note="$5"
+  local mise_current mise_version reason
+
+  if mise_current="$(mise_toml_pin "${tool}")"; then
+    mise_version="${latest#v}"
+    if [[ "${UPDATE_VERSIONS_VERIFY_MISE_INSTALL}" != "0" ]]; then
+      if ! reason="$(verify_mise_install "${tool}" "${mise_version}")"; then
+        printf 'Skipped tools: %s %s failed mise install verification: %s\n' "${tool}" "${latest}" "${reason:-unknown error}"
+        return 1
+      fi
+    fi
+    update_mise_toml_pin "${tool}" "${mise_version}"
+    printf 'Updated mise.toml: %s %s -> %s\n' "${tool}" "${mise_current}" "${mise_version}"
+  fi
+
+  update_toolchain_pin "${pin}" "${latest}"
+  printf 'Updated tools: %s %s -> %s%s\n' "${tool}" "${current}" "${latest}" "${note}"
+}
+
 apply_tools() {
-  local tool source pin current latest status eligible_date applied=0 skipped=0
+  local tool source pin current latest status eligible_date applied=0 skipped=0 failed=0
 
   # Checked up front rather than at first use: update_toolchain_pin rewrites the
   # pin file in place, one pin per iteration, so discovering a missing perl
@@ -454,15 +543,19 @@ apply_tools() {
     IFS=$'\t' read -r _ _ latest status eligible_date <<< "$(tool_resolved_row "${tool}" "${source}" "${pin}")"
     case "${status}" in
       update_available)
-        update_toolchain_pin "${pin}" "${latest}"
-        printf 'Updated tools: %s %s -> %s\n' "${tool}" "${current}" "${latest}"
-        applied=$((applied + 1))
+        if apply_tool_update "${tool}" "${pin}" "${current}" "${latest}" ""; then
+          applied=$((applied + 1))
+        else
+          failed=$((failed + 1))
+        fi
         ;;
       cooldown_unknown)
         if [[ "${UPDATE_VERSIONS_ALLOW_UNKNOWN_COOLDOWN}" == "1" ]]; then
-          update_toolchain_pin "${pin}" "${latest}"
-          printf 'Updated tools: %s %s -> %s (cooldown unknown allowed)\n' "${tool}" "${current}" "${latest}"
-          applied=$((applied + 1))
+          if apply_tool_update "${tool}" "${pin}" "${current}" "${latest}" " (cooldown unknown allowed)"; then
+            applied=$((applied + 1))
+          else
+            failed=$((failed + 1))
+          fi
         else
           printf 'Skipped tools: %s latest %s has unknown cooldown; set UPDATE_VERSIONS_ALLOW_UNKNOWN_COOLDOWN=1 to apply\n' "${tool}" "${latest:-unknown}"
           skipped=$((skipped + 1))
@@ -480,6 +573,9 @@ apply_tools() {
   fi
   if [[ "${skipped}" -gt 0 ]]; then
     printf 'Skipped %s toolchain update(s) because of cooldown policy.\n' "${skipped}"
+  fi
+  if [[ "${failed}" -gt 0 ]]; then
+    printf 'Skipped %s toolchain update(s) that failed mise install verification.\n' "${failed}"
   fi
 }
 
@@ -632,7 +728,10 @@ package_cooldown_eligible_date() {
     npm_registry_payload "${dep}" 2>/dev/null | jq -r --arg version "${version}" '.time[$version] // empty' 2>/dev/null || true
   )"
   [[ -n "${published}" ]] || return 0
-  date -u -r "$(( $(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "${published%.*Z}Z" '+%s' 2>/dev/null || printf 0) + cooldown ))" '+%Y-%m-%d' 2>/dev/null || true
+  local published_epoch
+  published_epoch="$(epoch_from_iso "${published}" 2>/dev/null || true)"
+  [[ "${published_epoch}" =~ ^[0-9]+$ ]] || return 0
+  date_from_epoch "$((published_epoch + cooldown))" 2>/dev/null || true
 }
 
 report_packages() {
@@ -642,9 +741,13 @@ report_packages() {
     printf '%s\n' "${UPDATE_VERSIONS_PACKAGE_REPORT_TSV}" | render_update_rows
   else
     ensure_component_report || return 1
+    # A cooldown-held row names the blocked release (latest_overall) and the
+    # date it clears, matching the charts domain. Using latest_eligible here
+    # printed the version already in use and a date that had already passed.
     jq -r '
       .app_dependencies[]
-      | [.app + ":" + .dependency, .current, .latest_eligible, .status_code, (.eligible_date // "")] | @tsv
+      | (if .status_code == "cooldown_active" then (.latest_overall // .latest_eligible) else .latest_eligible end) as $shown
+      | [.app + ":" + .dependency, .current, ($shown // ""), .status_code, (.eligible_date // "")] | @tsv
     ' "${COMPONENT_REPORT_FILE}" | while IFS=$'\t' read -r name current latest status eligible_date; do
       if [[ "${status}" == "cooldown_active" && -z "${eligible_date}" ]]; then
         app="${name%%:*}"
