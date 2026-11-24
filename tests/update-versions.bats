@@ -7,6 +7,9 @@ setup() {
   export COMPONENT_JSON="${BATS_TEST_TMPDIR}/components.json"
   export PROVIDER_JSON="${BATS_TEST_TMPDIR}/providers.json"
   export CALLS="${BATS_TEST_TMPDIR}/calls"
+  # Keep the repo's real mise.toml out of reach: tests that exercise the mise
+  # install check write their own.
+  export MISE_CONFIG_FILE="${BATS_TEST_TMPDIR}/absent-mise.toml"
 
   cat >"${COMPONENT_JSON}" <<'EOF'
 {
@@ -163,9 +166,44 @@ EOF
   run "${SCRIPT}" --execute --only packages
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"sites/docs:vite"* ]]
-  [[ "${output}" == *"BLOCKED by cooldown"* ]]
-  [[ "${output}" == *"2026-07-14"* ]]
+  # The row names the blocked release (7.1.0), not the 7.0.0 already in use.
+  [[ "${output}" == *$'sites/docs:vite\t7.0.0\t7.1.0\tBLOCKED by cooldown\t2026-07-14'* ]]
+}
+
+@test "a cooldown-held package without a reported date gets one from the blocked release" {
+  jq '.app_dependencies = [{
+    "app": "apps/backstage",
+    "dependency": "jest",
+    "current": "30.3.0",
+    "latest_eligible": "30.3.0",
+    "latest_overall": "30.6.0",
+    "status_code": "cooldown_active",
+    "status_text": "cooldown active"
+  }]' "${COMPONENT_JSON}" >"${COMPONENT_JSON}.tmp"
+  mv "${COMPONENT_JSON}.tmp" "${COMPONENT_JSON}"
+
+  mkdir -p "${BATS_TEST_TMPDIR}/bin" "${BATS_TEST_TMPDIR}/http-cache"
+  # Whole-second timestamps are what used to resolve to 1970-01-08.
+  cat >"${BATS_TEST_TMPDIR}/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${*: -1}" in
+  https://registry.npmjs.org/jest)
+    printf '{"time":{"30.3.0":"2026-03-01T00:00:00Z","30.6.0":"2026-11-20T09:30:00Z"}}\n'
+    ;;
+  *)
+    exit 22
+    ;;
+esac
+EOF
+  chmod +x "${BATS_TEST_TMPDIR}/bin/curl"
+
+  run env PATH="${BATS_TEST_TMPDIR}/bin:${PATH}" HTTP_FETCH_CACHE_DIR="${BATS_TEST_TMPDIR}/http-cache" \
+    "${SCRIPT}" --execute --only packages
+
+  [ "${status}" -eq 0 ]
+  # apps/backstage/.npmrc sets min-release-age=7, so 2026-11-20 clears on 2026-11-27.
+  [[ "${output}" == *$'apps/backstage:jest\t30.3.0\t30.6.0\tBLOCKED by cooldown\t2026-11-27'* ]]
 }
 
 @test "charts report surfaces cooldown-held chart versions with eligible dates" {
@@ -304,6 +342,88 @@ EOF
   [[ "${output}" == *"Updated tools: step v0.30.6 -> v0.31.0"* ]]
   [[ "$(cat "${TOOLCHAIN_VERSIONS_FILE}")" == *'OPENTOFU_VERSION="${OPENTOFU_VERSION:-1.12.5}"'* ]]
   [[ "$(cat "${TOOLCHAIN_VERSIONS_FILE}")" == *'STEP_VERSION="${STEP_VERSION:-v0.31.0}"'* ]]
+}
+
+write_mise_fixture() {
+  export MISE_CONFIG_FILE="${BATS_TEST_TMPDIR}/mise.toml"
+  cat >"${MISE_CONFIG_FILE}" <<'EOF'
+[tools]
+opentofu = "1.12.3"
+step = "0.30.6"
+
+[settings]
+step = "untouched"
+EOF
+  export MISE_CALLS="${BATS_TEST_TMPDIR}/mise-calls"
+  export UPDATE_VERSIONS_MISE_CMD="${BATS_TEST_TMPDIR}/bin/mise"
+  mkdir -p "${BATS_TEST_TMPDIR}/bin"
+  # Stands in for mise: logs each install with the data dir it was given and
+  # fails opentofu the way a cosign mismatch does.
+  cat >"${UPDATE_VERSIONS_MISE_CMD}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s data=%s\n' "$*" "${MISE_DATA_DIR:-unset}" >>"${MISE_CALLS}"
+case "$*" in
+  "install -y opentofu@1.12.5")
+    printf 'mise ERROR Failed to install aqua:opentofu/opentofu@1.12.5: cosign bundle-based verification failed\n' >&2
+    exit 1
+    ;;
+esac
+exit 0
+EOF
+  chmod +x "${UPDATE_VERSIONS_MISE_CMD}"
+}
+
+@test "tools apply skips a mise-pinned bump that fails mise install verification" {
+  write_fake_curl
+  write_pin_style_fixture "1.12.3"
+  write_mise_fixture
+  unset UPDATE_VERSIONS_TOOL_REPORT_TSV
+
+  run "${SCRIPT}" --execute --apply --only tools
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Skipped tools: opentofu 1.12.5 failed mise install verification: mise ERROR Failed to install aqua:opentofu/opentofu@1.12.5: cosign bundle-based verification failed"* ]]
+  [[ "${output}" != *"Updated tools: opentofu"* ]]
+  [[ "${output}" == *"Skipped 1 toolchain update(s) that failed mise install verification."* ]]
+  # Neither file moves for the failed tool.
+  [[ "$(cat "${TOOLCHAIN_VERSIONS_FILE}")" == *'OPENTOFU_VERSION="${OPENTOFU_VERSION:-1.12.3}"'* ]]
+  grep -qx 'opentofu = "1.12.3"' "${MISE_CONFIG_FILE}"
+  # The install ran against a throwaway data dir, not the operator's mise.
+  run grep -c 'data=unset' "${MISE_CALLS}"
+  [ "${output}" = "0" ]
+}
+
+@test "tools apply keeps mise.toml in step with a verified bump" {
+  write_fake_curl
+  write_pin_style_fixture "1.12.3"
+  write_mise_fixture
+  unset UPDATE_VERSIONS_TOOL_REPORT_TSV
+
+  run "${SCRIPT}" --execute --apply --only tools
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Updated mise.toml: step 0.30.6 -> 0.31.0"* ]]
+  [[ "${output}" == *"Updated tools: step v0.30.6 -> v0.31.0"* ]]
+  [[ "$(cat "${TOOLCHAIN_VERSIONS_FILE}")" == *'STEP_VERSION="${STEP_VERSION:-v0.31.0}"'* ]]
+  grep -qx 'step = "0.31.0"' "${MISE_CONFIG_FILE}"
+  # Only the [tools] entry changes; a same-named key in another table stays.
+  grep -qx 'step = "untouched"' "${MISE_CONFIG_FILE}"
+  grep -qx 'install -y step@0.31.0 data=.*' "${MISE_CALLS}"
+}
+
+@test "tools apply can skip the mise install check when asked" {
+  write_fake_curl
+  write_pin_style_fixture "1.12.3"
+  write_mise_fixture
+  unset UPDATE_VERSIONS_TOOL_REPORT_TSV
+
+  run env UPDATE_VERSIONS_VERIFY_MISE_INSTALL=0 "${SCRIPT}" --execute --apply --only tools
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Updated tools: opentofu 1.12.3 -> 1.12.5"* ]]
+  grep -qx 'opentofu = "1.12.5"' "${MISE_CONFIG_FILE}"
+  [ ! -e "${MISE_CALLS}" ]
 }
 
 @test "tools report treats a pin as current when only the leading-v style differs from the tag" {

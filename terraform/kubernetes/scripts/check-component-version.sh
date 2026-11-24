@@ -4204,7 +4204,9 @@ main() {
   if [ -n "${CODE_ARGOCD_IMAGE_REF}" ] && [ "${CODE_ARGOCD_IMAGE_REPO}" = "dhi.io/argocd" ]; then
     image_rows+=("$(print_preferred_image_row "argo-cd image" "${CODE_ARGOCD_IMAGE_REF}" "${CONFIGURED_ARGOCD_IMAGE_STATUS}" "${LATEST_PREFERRED_ARGOCD_IMAGE_REF}" "${LATEST_PREFERRED_ARGOCD_IMAGE_STATUS}")")
   fi
-  preferred_image_rows_sorted="$(printf "%s\n" "${image_rows[@]}" | sort -t $'\t' -k1,1 || true)"
+  # image_rows is empty unless Argo CD uses the hardened image; Bash 3.2 reports
+  # an empty "${arr[@]}" as unbound under set -u, so expand it only when set.
+  preferred_image_rows_sorted="$(printf "%s\n" ${image_rows[@]+"${image_rows[@]}"} | sort -t $'\t' -k1,1 || true)"
 
   INSTALLED_KIND="$(kind_installed_version)"
   KIND_LOAD_MINIMUM_KIND_TAG="$(kind_load_minimum_version_for_node_tag "${CODE_KIND_NODE_TAG}")"
