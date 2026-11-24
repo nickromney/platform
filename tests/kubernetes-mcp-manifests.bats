@@ -389,12 +389,7 @@ assert "How to read this dashboard" in grafana, "MCP dashboard needs operator gu
 assert "Prometheus Scrape" in grafana, "MCP dashboard must show whether metrics are being scraped"
 assert "Total Tool Calls" in grafana, "MCP dashboard must render zero calls as an explicit value"
 assert "Platform MCP" in grafana, "launchpad must include an MCP dashboard tile"
-assert "Backstage Observability" in grafana, "launchpad must include a Backstage observability tile"
 assert "k8s.namespace.name:mcp" in grafana, "missing MCP Victoria Logs query"
-
-catalog = (repo_root / "apps/backstage/catalog/apps/platform-mcp/catalog-info.yaml").read_text(encoding="utf-8")
-assert "MCP Observability" in catalog, "missing catalog observability link title"
-assert "platform-mcp-observability" in catalog, "missing catalog observability link URL"
 
 print("validated MCP observability wiring")
 PY
@@ -426,7 +421,7 @@ assert "oauth2-proxy-oidc" in sso_run, "runner must discover the oauth2-proxy OI
 assert 'kubectl_args+=(--context "${KUBECONFIG_CONTEXT}")' in sso_run, "runner must honor the selected kubeconfig context"
 assert "SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET" in sso_run, "runner must pass the OIDC client secret to Playwright"
 kind_makefile = (repo_root / "kubernetes/kind/Makefile").read_text(encoding="utf-8")
-assert 'KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" SSO_E2E_ENABLE_BACKSTAGE' in kind_makefile
+assert 'KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" STAGE_TFVARS=' in kind_makefile
 
 assert "mcp-console" in sso_spec, "MCP Inspector console target missing"
 assert "mcp-inspector-d2-render-export" in sso_spec, "D2 render/export post-login check missing"
@@ -440,10 +435,6 @@ assert "grafana-mcp-observability" in sso_spec, "MCP Grafana dashboard target mi
 assert "Platform MCP Observability" in sso_spec, "MCP Grafana dashboard title not asserted"
 assert "Total Tool Calls" in sso_spec, "MCP tool-call panel not asserted"
 assert "Tool Calls by Tool" in sso_spec, "MCP tool breakdown panel not asserted"
-assert "grafana-backstage-observability" in sso_spec, "Backstage Grafana dashboard target missing"
-assert "Backstage Observability" in sso_spec, "Backstage Grafana dashboard title not asserted"
-assert "Services Missing Kubernetes Selector" in sso_spec, "Backstage catalog quality panel not asserted"
-assert "Recent Backstage Logs" in sso_spec, "Backstage Victoria Logs panel not asserted"
 
 sso_readme = (repo_root / "tests/kubernetes/sso/README.md").read_text(encoding="utf-8")
 assert 'SSO_E2E_TEST_GREP="mcp-console: load and login" make check-sso-e2e' in sso_readme

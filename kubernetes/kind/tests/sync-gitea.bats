@@ -58,21 +58,21 @@ EOF
   target_tfvars="${BATS_TEST_TMPDIR}/target.tfvars"
   cat >"${stage_tfvars}" <<'EOF'
 enable_actions_runner = true
-enable_backstage = true
+enable_headlamp = true
 EOF
   cat >"${target_tfvars}" <<'EOF'
 enable_actions_runner = false
-enable_backstage = false
+enable_headlamp = false
 EOF
 
-  run bash -lc "export GITEA_SYNC_TFVARS_FILE='${stage_tfvars}' GITEA_SYNC_TARGET_TFVARS_FILE='${target_tfvars}'; source '${SCRIPT}'; printf '%s\n' \"\$(resolve_bool_target_or_stage ENABLE_ACTIONS_RUNNER enable_actions_runner true)\" \"\$(resolve_bool_target_or_stage ENABLE_BACKSTAGE enable_backstage true)\""
+  run bash -lc "export GITEA_SYNC_TFVARS_FILE='${stage_tfvars}' GITEA_SYNC_TARGET_TFVARS_FILE='${target_tfvars}'; source '${SCRIPT}'; printf '%s\n' \"\$(resolve_bool_target_or_stage ENABLE_ACTIONS_RUNNER enable_actions_runner true)\" \"\$(resolve_bool_target_or_stage ENABLE_HEADLAMP enable_headlamp true)\""
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "$(printf 'false\nfalse')" ]
 }
 
 @test "sync-gitea.sh exports local kind toggles from target-or-stage inputs" {
-  run bash -lc "grep -F 'export_resolved_bool_target_or_stage ENABLE_ACTIONS_RUNNER enable_actions_runner true' '${SCRIPT}' && grep -F 'export_resolved_bool_target_or_stage ENABLE_BACKSTAGE enable_backstage false' '${SCRIPT}'"
+  run bash -lc "grep -F 'export_resolved_bool_target_or_stage ENABLE_ACTIONS_RUNNER enable_actions_runner true' '${SCRIPT}'"
 
   [ "${status}" -eq 0 ]
 }

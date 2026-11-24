@@ -2,7 +2,6 @@
   "admin_route_allowlist_cidrs": "",
   "enable_app_repo_sentiment": false,
   "enable_app_repo_subnetcalc": false,
-  "enable_backstage": false,
   "enable_gateway_tls": true,
   "enable_grafana": false,
   "enable_hubble": false,

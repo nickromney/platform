@@ -13,8 +13,7 @@ smallest stack in the repo that still exercises TLS, SSO and the APIM hop. It
 uses about 150 MiB of RAM across 7 containers.
 
 The kind and Lima Kubernetes stacks are out of scope here: they are
-heavyweight and covered by `skills/use-platform`. Backstage (the `portal`
-profile) is not started either.
+heavyweight and covered by `skills/use-platform`.
 
 Helper: `skills/verify-platform/scripts/control.sh`. It is built on verify-kit:
 the shared library (`scripts/verify-lib.sh`), contract tests (`tests/contract.bats`)

@@ -13,7 +13,6 @@ run "gitops_render_contract_includes_external_image_refs" {
     enable_gitea                    = true
     enable_sso                      = false
     enable_app_repo_sentiment       = true
-    enable_backstage                = true
     enable_host_local_registry      = true
     prefer_external_workload_images = true
     prefer_external_platform_images = true
@@ -22,7 +21,6 @@ run "gitops_render_contract_includes_external_image_refs" {
       sentiment-auth-ui = "host.docker.internal:5002/platform/sentiment-auth-ui:golden"
     }
     external_platform_image_refs = {
-      backstage    = "host.docker.internal:5002/platform/backstage:golden"
       idp-core     = "host.docker.internal:5002/platform/idp-core:golden"
       platform-mcp = "host.docker.internal:5002/platform/platform-mcp:golden"
       grafana      = "host.docker.internal:5002/platform/grafana-victorialogs:golden"
@@ -667,18 +665,18 @@ run "review_environment_contract_aligns_substrate_and_branch_workflow" {
     condition = alltrue([
       for label in local.review_environment_contract.runner_labels :
       strcontains(file("${path.module}/apps/gitea-actions-runner/configmap.yaml"), "- \"${label}\"") &&
-      strcontains(file("${path.module}/../../apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/review-environment.yaml"), label)
+      strcontains(file("${path.module}/../../templates/platform-service/content/.gitea/workflows/review-environment.yaml"), label)
     ])
     error_message = "Expected runner labels to stay aligned with the scaffolded review workflow"
   }
 
   assert {
     condition = (
-      strcontains(file("${path.module}/../../apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/review-environment.yaml"), "branches-ignore:\n      - ${local.review_environment_contract.main_branch}") &&
-      strcontains(file("${path.module}/../../apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/review-environment.yaml"), "delete:") &&
-      strcontains(file("${path.module}/../../apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/review-environment.yaml"), "REVIEW_NAMESPACE: ${local.review_environment_contract.namespace}") &&
-      strcontains(file("${path.module}/../../apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/review-environment.yaml"), "gitea-registry-creds") &&
-      strcontains(file("${path.module}/../../apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/review-environment.yaml"), ".review.127.0.0.1.sslip.io")
+      strcontains(file("${path.module}/../../templates/platform-service/content/.gitea/workflows/review-environment.yaml"), "branches-ignore:\n      - ${local.review_environment_contract.main_branch}") &&
+      strcontains(file("${path.module}/../../templates/platform-service/content/.gitea/workflows/review-environment.yaml"), "delete:") &&
+      strcontains(file("${path.module}/../../templates/platform-service/content/.gitea/workflows/review-environment.yaml"), "REVIEW_NAMESPACE: ${local.review_environment_contract.namespace}") &&
+      strcontains(file("${path.module}/../../templates/platform-service/content/.gitea/workflows/review-environment.yaml"), "gitea-registry-creds") &&
+      strcontains(file("${path.module}/../../templates/platform-service/content/.gitea/workflows/review-environment.yaml"), ".review.127.0.0.1.sslip.io")
     )
     error_message = "Expected branch review workflow dispatch, namespace, registry secret, and host contract to stay aligned"
   }

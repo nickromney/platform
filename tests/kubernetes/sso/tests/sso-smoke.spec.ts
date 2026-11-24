@@ -9,10 +9,8 @@ import {
   attachLoggedInScreenshotIfEnabled,
   authChatModelReply,
   chatgptAddMcpOauthConnector,
-  developerPortalWorks,
   expectLightweightAppAccessible,
   gotoWithGatewayRetry,
-  grafanaBackstageObservabilityDashboardWorks,
   grafanaLaunchpadShowsHealthyTiles,
   grafanaMcpObservabilityDashboardWorks,
   grafanaPlatformNamespaceHealthDashboardWorks,
@@ -28,7 +26,6 @@ import {
   sentimentSamplePositiveAndAnalyze,
   subnetcalcRfc1918Lookup,
   type Target,
-  watchBrowserApiTraffic,
   watchPageRuntimeEvents,
 } from '../lib/harness'
 
@@ -40,7 +37,6 @@ test.describe(SUITE_NAME, () => {
   for (const t of TARGETS) {
     test(`${t.name}: load and login`, async ({ page }, testInfo) => {
       test.setTimeout(180_000)
-      const browserApiTraffic = t.postLogin === 'developer-portal' ? watchBrowserApiTraffic(page) : undefined
       const runtimeEvents = t.name === 'chatgpt-sim' ? watchPageRuntimeEvents(page) : undefined
 
       await loginToTarget(page, t)
@@ -51,9 +47,6 @@ test.describe(SUITE_NAME, () => {
         }
         if (t.postLogin === 'subnetcalc-rfc1918-lookup') {
           await subnetcalcRfc1918Lookup(page)
-        }
-        if (t.postLogin === 'developer-portal') {
-          await developerPortalWorks(page, browserApiTraffic ?? watchBrowserApiTraffic(page))
         }
         if (t.postLogin === 'developer-portal-api-json') {
           await portalApiJsonWorks(page)
@@ -78,9 +71,6 @@ test.describe(SUITE_NAME, () => {
         }
         if (t.postLogin === 'grafana-mcp-observability') {
           await grafanaMcpObservabilityDashboardWorks(page)
-        }
-        if (t.postLogin === 'grafana-backstage-observability') {
-          await grafanaBackstageObservabilityDashboardWorks(page)
         }
         if (t.postLogin === 'keycloak-admin-console') {
           await keycloakAdminConsoleWorks(page)

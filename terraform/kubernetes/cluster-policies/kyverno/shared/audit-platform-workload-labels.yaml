@@ -6,7 +6,7 @@ metadata:
     policies.kyverno.io/title: Audit platform workload discovery labels
     policies.kyverno.io/description: >-
       Audit Deployments in platform-owned workload namespaces for the labels used
-      by Backstage discovery, Grafana dashboards, and Cilium selectors. This is
+      by Grafana dashboards, Launchpad, and Cilium selectors. This is
       intentionally scoped away from vendor-managed chart namespaces so policy
       reports stay actionable.
 spec:

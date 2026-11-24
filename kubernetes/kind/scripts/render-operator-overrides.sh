@@ -29,8 +29,6 @@ mode="${KIND_IMAGE_DISTRIBUTION_MODE:-load}"
 worker_count="${KIND_WORKER_COUNT:-}"
 cache_host="${KIND_LOCAL_IMAGE_CACHE_HOST:-host.docker.internal:5002}"
 baked_node_image="${KIND_BAKED_NODE_IMAGE:-}"
-backstage_mode="${KIND_ENABLE_BACKSTAGE:-off}"
-backstage_min_docker_memory_bytes="${KIND_BACKSTAGE_MIN_DOCKER_MEMORY_BYTES:-10737418240}"
 output_file="${KIND_OPERATOR_OVERRIDES_FILE:-}"
 
 usage() {
@@ -53,40 +51,12 @@ case "${mode}" in
   *) fail "invalid KIND_IMAGE_DISTRIBUTION_MODE=${mode} (expected load|registry|hybrid|baked)" ;;
 esac
 
-case "${backstage_mode}" in
-  auto|on|off) ;;
-  *) fail "invalid KIND_ENABLE_BACKSTAGE=${backstage_mode} (expected auto|on|off)" ;;
-esac
-
 if [ -n "${worker_count}" ]; then
   # 0 is allowed and supported: kind schedules on the control plane once it is
   # the only node, and the stack clears its NoSchedule taint via a kubeadm
   # config patch. See local.kind_control_plane_kubeadm_config_patches.
   [[ "${worker_count}" =~ ^[0-9]+$ ]] || fail "KIND_WORKER_COUNT must be a whole number"
 fi
-[[ "${backstage_min_docker_memory_bytes}" =~ ^[0-9]+$ ]] || fail "KIND_BACKSTAGE_MIN_DOCKER_MEMORY_BYTES must be a whole number"
-
-detect_docker_memory_bytes() {
-  command -v docker >/dev/null 2>&1 || return 0
-  docker info --format '{{json .MemTotal}}' 2>/dev/null | tr -d '"'
-}
-
-backstage_enabled="false"
-backstage_detected_memory=""
-case "${backstage_mode}" in
-  on)
-    backstage_enabled="true"
-    ;;
-  off)
-    backstage_enabled="false"
-    ;;
-  auto)
-    backstage_detected_memory="$(detect_docker_memory_bytes || true)"
-    if [[ "${backstage_detected_memory}" =~ ^[0-9]+$ ]] && (( backstage_detected_memory >= backstage_min_docker_memory_bytes )); then
-      backstage_enabled="true"
-    fi
-    ;;
-esac
 
 case "${mode}" in
   baked|hybrid)
@@ -108,18 +78,10 @@ chatgpt_sim_image_tag="$(
 idp_core_image_tag="$(
   image_catalog_source_tag platform idp-core
 )"
-backstage_image_tag="$(
-  if [ "${backstage_enabled}" = "true" ]; then
-    image_catalog_source_tag platform backstage
-  fi
-)"
 image_namespace="$(image_catalog_namespace)"
 
 write_external_platform_images() {
   local tag_overrides=()
-  if [ -n "${backstage_image_tag}" ]; then
-    tag_overrides+=("backstage=${backstage_image_tag}")
-  fi
   if [ -n "${idp_core_image_tag}" ]; then
     tag_overrides+=("idp-core=${idp_core_image_tag}")
   fi
@@ -168,12 +130,6 @@ EOF
     echo "# KIND_WORKER_COUNT counts worker nodes. Total kind nodes = workers + 1 control-plane."
     echo "worker_count = ${worker_count}"
   fi
-  if [ "${backstage_mode}" = "auto" ]; then
-    echo "# KIND_ENABLE_BACKSTAGE=auto, Docker MemTotal=${backstage_detected_memory:-not reported}, minimum=${backstage_min_docker_memory_bytes}"
-  else
-    echo "# KIND_ENABLE_BACKSTAGE=${backstage_mode}"
-  fi
-  echo "enable_backstage = ${backstage_enabled}"
 
   case "${mode}" in
     load)

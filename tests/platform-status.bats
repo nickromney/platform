@@ -329,7 +329,7 @@ JSON
   run jq -e '
     . as $root
     | all(["kind", "lima"][]; . as $variant
-      | all(["idp-api", "backstage", "idp-sdk", "idp-mcp"][]; . as $target
+      | all(["idp-api", "idp-sdk", "idp-mcp"][]; . as $target
         | any($root.actions[];
           .id == ($variant + "-" + $target)
           and .variant == $variant

@@ -29,7 +29,7 @@ export default defineConfig({
   projects: [
     {
       name: 'smoke',
-      testMatch: /sso-smoke\.spec\.ts$|compose-backstage-smoke\.spec\.ts$/,
+      testMatch: /sso-smoke\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     {

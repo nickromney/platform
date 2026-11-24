@@ -470,7 +470,7 @@ func selectionFromForm(options optionsPayload, r *http.Request) workflowSelectio
 	for _, group := range options.PresetGroups {
 		selection.Presets["preset_"+group.ID] = first(r.Form.Get("preset_"+group.ID), "default")
 	}
-	for _, field := range []string{"custom_worker_count", "custom_node_image", "custom_enable_backstage"} {
+	for _, field := range []string{"custom_worker_count", "custom_node_image"} {
 		selection.CustomOverrides[field] = r.Form.Get(field)
 	}
 	return selection
@@ -509,9 +509,8 @@ func workflowArgs(options optionsPayload, selection workflowSelection, subcomman
 	}
 	sets := map[string]string{}
 	customMap := map[string]string{
-		"custom_worker_count":     "worker_count",
-		"custom_node_image":       "node_image",
-		"custom_enable_backstage": "enable_backstage",
+		"custom_worker_count": "worker_count",
+		"custom_node_image":   "node_image",
 	}
 	for field, option := range customMap {
 		if value := selection.CustomOverrides[field]; value != "" {

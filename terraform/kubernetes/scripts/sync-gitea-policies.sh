@@ -98,7 +98,6 @@ platform|EXTERNAL_PLATFORM_IMAGE_AUTH_CHAT|external_platform_auth_chat|auth-chat
 platform|EXTERNAL_PLATFORM_IMAGE_CHATGPT_SIM|external_platform_chatgpt_sim|chatgpt-sim|chatgpt
 platform|EXTERNAL_PLATFORM_IMAGE_GRAFANA|external_platform_grafana|grafana-victorialogs|grafana
 platform|EXTERNAL_PLATFORM_IMAGE_IDP_CORE|external_platform_idp_core|idp-core|idp
-platform|EXTERNAL_PLATFORM_IMAGE_BACKSTAGE|external_platform_backstage|backstage|idp
 platform|EXTERNAL_PLATFORM_IMAGE_ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN|external_platform_argo_rollouts_gatewayapi_plugin|argo-rollouts-gatewayapi-plugin|argo-rollouts
 EOF
 }
@@ -160,7 +159,6 @@ bool|ENABLE_EXTERNAL_SECRETS|enable_external_secrets|false
 bool|ENABLE_PROGRESSIVE_DELIVERY|enable_progressive_delivery|false
 bool|ENABLE_HEADLAMP|enable_headlamp|false
 bool|ENABLE_SSO|enable_sso|false
-bool|ENABLE_BACKSTAGE|enable_backstage|false
 bool|HEADLAMP_CLUSTER_ROLE_BINDING_CREATE|headlamp_cluster_role_binding_create|true
 bool|HEADLAMP_OIDC_SKIP_TLS_VERIFY|headlamp_oidc_skip_tls_verify|true
 string|HEADLAMP_OIDC_CLIENT_SECRET|headlamp_oidc_client_secret|
@@ -312,7 +310,6 @@ ENABLE_EXTERNAL_SECRETS="${ENABLE_EXTERNAL_SECRETS:-false}"
 ENABLE_PROGRESSIVE_DELIVERY="${ENABLE_PROGRESSIVE_DELIVERY:-false}"
 ENABLE_HEADLAMP="${ENABLE_HEADLAMP:-false}"
 ENABLE_SSO="${ENABLE_SSO:-false}"
-ENABLE_BACKSTAGE="${ENABLE_BACKSTAGE:-false}"
 HEADLAMP_CLUSTER_ROLE_BINDING_CREATE="${HEADLAMP_CLUSTER_ROLE_BINDING_CREATE:-true}"
 HEADLAMP_OIDC_SKIP_TLS_VERIFY="${HEADLAMP_OIDC_SKIP_TLS_VERIFY:-true}"
 HEADLAMP_OIDC_CLIENT_SECRET="${HEADLAMP_OIDC_CLIENT_SECRET:-}"
@@ -325,7 +322,6 @@ EXTERNAL_IMAGE_SUBNETCALC_FRONTEND="${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND:-}"
 PREFER_EXTERNAL_PLATFORM_IMAGES="${PREFER_EXTERNAL_PLATFORM_IMAGES:-false}"
 EXTERNAL_PLATFORM_IMAGE_GRAFANA="${EXTERNAL_PLATFORM_IMAGE_GRAFANA:-}"
 EXTERNAL_PLATFORM_IMAGE_IDP_CORE="${EXTERNAL_PLATFORM_IMAGE_IDP_CORE:-}"
-EXTERNAL_PLATFORM_IMAGE_BACKSTAGE="${EXTERNAL_PLATFORM_IMAGE_BACKSTAGE:-}"
 EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP="${EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP:-}"
 EXTERNAL_PLATFORM_IMAGE_ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN="${EXTERNAL_PLATFORM_IMAGE_ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN:-}"
 ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_IMAGE="${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_IMAGE:-$(tf_default_from_variables argo_rollouts_gatewayapi_plugin_image)}"
@@ -1021,9 +1017,6 @@ apply_external_platform_images() {
   if [[ -z "${EXTERNAL_PLATFORM_IMAGE_IDP_CORE}" ]]; then
     EXTERNAL_PLATFORM_IMAGE_IDP_CORE="$(infer_external_platform_cache_ref idp-core)"
   fi
-  if [[ -z "${EXTERNAL_PLATFORM_IMAGE_BACKSTAGE}" ]]; then
-    EXTERNAL_PLATFORM_IMAGE_BACKSTAGE="$(infer_external_platform_cache_ref backstage)"
-  fi
   if [[ -z "${EXTERNAL_PLATFORM_IMAGE_ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN}" ]]; then
     EXTERNAL_PLATFORM_IMAGE_ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN="$(infer_external_platform_cache_ref argo-rollouts-gatewayapi-plugin)"
   fi
@@ -1086,7 +1079,6 @@ render_platform_launchpad_dashboard() {
   STACK_DIR="${STACK_DIR}" \
     INVENTORY_FILE="${inventory_file}" \
     ENABLE_SSO="${ENABLE_SSO:-true}" \
-    ENABLE_BACKSTAGE="${ENABLE_BACKSTAGE:-false}" \
     ENABLE_HEADLAMP="${ENABLE_HEADLAMP:-true}" \
     ENABLE_APP_REPO_SENTIMENT="${ENABLE_APP_REPO_SENTIMENT:-true}" \
     ENABLE_APP_REPO_SUBNETCALC="${ENABLE_APP_REPO_SUBNETCALC:-true}" \
@@ -1356,75 +1348,6 @@ remove_referencegrant_service() {
     { print }
   ' "${file}" > "${tmp_file}"
   mv "${tmp_file}" "${file}"
-}
-
-remove_yaml_document() {
-  local file="$1"
-  local kind="$2"
-  local name="$3"
-
-  [[ -f "${file}" ]] || return 0
-
-  local tmp_file
-  tmp_file="$(mktemp)"
-  awk -v wanted_kind="${kind}" -v wanted_name="${name}" '
-    function trim(value) {
-      sub(/^[[:space:]]+/, "", value)
-      sub(/[[:space:]]+$/, "", value)
-      return value
-    }
-    function flush_doc() {
-      if (doc != "" && !(doc_kind == wanted_kind && doc_name == wanted_name)) {
-        if (printed) {
-          print "---"
-        }
-        printf "%s", doc
-        printed = 1
-      }
-      doc = ""
-      doc_kind = ""
-      doc_name = ""
-      in_metadata = 0
-    }
-    /^[[:space:]]*---[[:space:]]*$/ {
-      flush_doc()
-      next
-    }
-    {
-      doc = doc $0 "\n"
-      if ($0 ~ /^kind:[[:space:]]*/) {
-        value = $0
-        sub(/^kind:[[:space:]]*/, "", value)
-        doc_kind = trim(value)
-      }
-      if ($0 ~ /^metadata:[[:space:]]*$/) {
-        in_metadata = 1
-        next
-      }
-      if (in_metadata && $0 ~ /^[^[:space:]]/) {
-        in_metadata = 0
-      }
-      if (in_metadata && $0 ~ /^[[:space:]]+name:[[:space:]]*/) {
-        value = $0
-        sub(/^[[:space:]]+name:[[:space:]]*/, "", value)
-        doc_name = trim(value)
-      }
-    }
-    END {
-      flush_doc()
-    }
-  ' "${file}" > "${tmp_file}"
-  mv "${tmp_file}" "${file}"
-}
-
-remove_backstage_idp_resources() {
-  local idp_manifest="$1"
-
-  remove_yaml_document "${idp_manifest}" "ServiceAccount" "backstage"
-  remove_yaml_document "${idp_manifest}" "ClusterRole" "backstage-kubernetes-reader"
-  remove_yaml_document "${idp_manifest}" "ClusterRoleBinding" "backstage-kubernetes-reader"
-  remove_yaml_document "${idp_manifest}" "Deployment" "backstage"
-  remove_yaml_document "${idp_manifest}" "Service" "backstage"
 }
 
 remove_observability_targetref_route() {
@@ -2185,12 +2108,6 @@ prune_gateway_routes_manifests() {
   local routes_dir="$1"
   local kustomization_file="${routes_dir}/kustomization.yaml"
 
-  if ! is_true "${ENABLE_BACKSTAGE}"; then
-    remove_if_present "${routes_dir}/httproute-portal.yaml"
-    remove_kustomization_entry "${kustomization_file}" "httproute-portal.yaml"
-    remove_referencegrant_service "${routes_dir}/referencegrant-sso.yaml" "oauth2-proxy-backstage"
-  fi
-
   if ! is_true "${ENABLE_HUBBLE}"; then
     remove_if_present "${routes_dir}/httproute-hubble.yaml"
     remove_if_present "${routes_dir}/referencegrant-hubble.yaml"
@@ -2697,9 +2614,6 @@ render_policy_repo_tree() {
   apply_external_workload_images "${repo_dir}/apps/dev/all.yaml"
   apply_external_workload_images "${repo_dir}/apps/uat/all.yaml"
   apply_external_platform_images "${repo_dir}"
-  if ! is_true "${ENABLE_BACKSTAGE}"; then
-    remove_backstage_idp_resources "${repo_dir}/apps/idp/all.yaml"
-  fi
   prune_workload_manifests "${repo_dir}"
   configure_subnetcalc_direct_api "${repo_dir}"
   configure_routers_without_apim "${repo_dir}"

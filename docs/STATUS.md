@@ -22,14 +22,16 @@ notes live under [`docs/plans/archive`](plans/archive/).
   [`terraform/kubernetes`](../terraform/kubernetes/), with GitOps policy/app
   output synchronized to the in-cluster Gitea repository for Argo CD.
 - Platform and app inventory is projected from
-  [`catalog/platform-apps.json`](../catalog/platform-apps.json), Backstage
-  catalog files, Argo CD Applications, route manifests, and Launchpad tiles.
+  [`catalog/platform-apps.json`](../catalog/platform-apps.json), Argo CD
+  Applications, route manifests, and Launchpad tiles.
 - The app family lives under [`apps`](../apps/). Shared Go packages such as
   `apps/shared/idpauth` and `apps/shared/apphttp` carry common auth and HTTP
   behavior for lightweight apps.
-- The developer portal/API surface lives in `apps/idp-core`, `apps/idp-sdk`,
-  `apps/platform-mcp`, and `apps/backstage`, with runtime adapters for
-  `generic_kubernetes`, `kind`, and `lima`.
+- The IDP API surface lives in `apps/idp-core`, `apps/idp-sdk`,
+  `apps/idp-mcp`, and `apps/platform-mcp`, with runtime adapters for
+  `generic_kubernetes`, `kind`, and `lima`. There is no portal UI; new
+  services are scaffolded into Gitea with `make -C kubernetes/kind
+  scaffold-service` from `templates/platform-service`.
 - DDD vocabulary and contract boundaries remain in [`docs/ddd`](ddd/); ADRs
   remain in [`docs/adr`](adr/).
 
@@ -132,7 +134,7 @@ notes live under [`docs/plans/archive`](plans/archive/).
   Terraform/Terragrunt, and browser E2E checks are validation concerns rather
   than apply convergence logic.
 - JavaScript dependency direction: sample app frontends avoid npm dependency
-  sprawl; Backstage is the explicit portal exception.
+  sprawl, with no exceptions now that Backstage is gone.
 
 ## Decided
 
@@ -150,6 +152,10 @@ notes live under [`docs/plans/archive`](plans/archive/).
 - Kubernetes SSO is Keycloak-only (2026-07-07): `sso_provider` is validated as
   `keycloak`, Kubernetes Dex manifests/routes/tests were removed, and Docker
   Compose keeps its separate Dex substrate.
+- Backstage removed (2026-11-24, ADR 0016): the portal UI, its image, routes,
+  compose profile, and catalog descriptors are gone. IDP Core, the SDK, both MCP
+  servers, and review environments stay; `scaffold-service` replaces the
+  scaffolder template.
 
 ## Open Decisions And Backlog
 
@@ -159,10 +165,10 @@ notes live under [`docs/plans/archive`](plans/archive/).
 - Progressive delivery / Argo Rollouts: decide whether rollout controllers
   belong in the local teaching stack or remain outside the default path.
 - CNPG optional stage: decide whether Postgres operators should be an opt-in
-  stage/profile for workloads such as Keycloak, Backstage, and Langfuse.
+  stage/profile for workloads such as Keycloak and Langfuse.
 - Scorecard depth: probes and requests/limits checks landed as catalog
   fields (2026-07-07). Remaining candidates, each needing a new data join:
-  Backstage-entry presence, observability scrape-config evidence, signed-image
+  observability scrape-config evidence, signed-image
   policy coverage, and per-app runbook links.
 - HPA example: add a minimal autoscaling example only if it improves the
   teaching path without increasing stage-900 fragility.
@@ -211,7 +217,7 @@ notes live under [`docs/plans/archive`](plans/archive/).
 | `plans/archive/variant-capable-kubernetes-workflow-architecture.md` | Variant-capable workflow architecture stress test. | Mostly done | Landed as workflow/variant contract direction. |
 | `2026-04-19-kubernetes-iac-boundary-plan.md` | IaC boundary/idempotence execution plan. | Mostly done | Canonical current record is `docs/iac-boundaries.md`. |
 | `apps-consistency-handoff.md` | App consistency handoff and next slices. | Mixed | App backlog; not part of archived `plans/` move. |
-| `apps-no-npm.md` | Decision record for sample apps without npm sprawl. | Current | Current convention with Backstage exception. |
+| `apps-no-npm.md` | Decision record for sample apps without npm sprawl. | Current | Current convention; the Backstage exception ended with ADR 0016. |
 | `iac-boundaries.md` | Current IaC ownership and runtime evidence. | Current | Still-accurate current state. |
 | `langfuse-observations.md` | Stage `920` Langfuse implementation observations. | Current + open | Operational notes plus polish backlog. |
 

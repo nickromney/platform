@@ -14,7 +14,7 @@ setup() {
   run bash -lc "cd '${REPO_ROOT}' && ls -A apps/sentiment | LC_ALL=C sort"
 
   [ "${status}" -eq 0 ]
-  expected=$'.gitea\nMODEL_CARD.md\nMakefile\nREADME.md\napp\ncatalog-info.yaml\ncompose.tls.yml\ncompose.yml\ndata\ndocs\nedge\nevaluation.jsonl\nmkdocs.yml\npki\ntests\ntls-proxy\nupdate-sentiment-image-tags.sh'
+  expected=$'.gitea\nMODEL_CARD.md\nMakefile\nREADME.md\napp\ncompose.tls.yml\ncompose.yml\ndata\ndocs\nedge\nevaluation.jsonl\npki\ntests\ntls-proxy\nupdate-sentiment-image-tags.sh'
   [ "${output}" = "${expected}" ]
 }
 

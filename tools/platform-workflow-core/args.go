@@ -40,7 +40,7 @@ type Selection struct {
 	Presets map[string]string
 	// Apps is app-id -> "app=on|off" override. Empty values are omitted.
 	Apps map[string]string
-	// Sets is terraform -var style key=value (worker_count, node_image, enable_backstage).
+	// Sets is terraform -var style key=value (worker_count, node_image, enable_*).
 	Sets        map[string]string
 	AutoApprove bool
 }
@@ -122,13 +122,13 @@ func Args(options Options, sel Selection, subcommand, standardFlag string) []str
 		args = append(args, "--preset", strings.TrimPrefix(group, "preset_")+"="+value)
 	}
 
-	for _, key := range []string{"worker_count", "node_image", "enable_backstage"} {
+	for _, key := range []string{"worker_count", "node_image"} {
 		if value := sel.Sets[key]; value != "" {
 			args = append(args, "--set", key+"="+value)
 		}
 	}
 	for key, value := range sel.Sets {
-		if key == "worker_count" || key == "node_image" || key == "enable_backstage" || value == "" {
+		if key == "worker_count" || key == "node_image" || value == "" {
 			continue
 		}
 		args = append(args, "--set", key+"="+value)

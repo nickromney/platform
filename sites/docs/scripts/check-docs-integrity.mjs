@@ -219,7 +219,7 @@ run('Nextra navigation includes current platform surfaces', () => {
   const meta = readFileSync(join(repo, 'app/_meta.global.tsx'), 'utf8')
   const required = [
     "'review-environments': 'Review environments'",
-    "'backstage-idp': 'Portal and IDP'",
+    "idp: 'IDP API, SDK, and MCP'",
   ]
   const missing = required.filter(snippet => !meta.includes(snippet))
   if (missing.length) {
@@ -232,7 +232,7 @@ run('repository map FileTree includes active source trees', () => {
   const map = readFileSync(mapPath, 'utf8')
   const tree = map.match(/<FileTree>[\s\S]*<\/FileTree>/)?.[0] ?? ''
   const required = [
-    'name="backstage"',
+    'name="templates"',
     'name="idp-core"',
     'name="idp-mcp"',
     'name="idp-sdk"',

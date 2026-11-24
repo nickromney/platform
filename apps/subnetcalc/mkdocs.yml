@@ -1,6 +1,0 @@
-site_name: SubnetCalc
-docs_dir: .
-plugins:
-  - techdocs-core
-nav:
-  - Overview: README.md

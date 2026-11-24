@@ -105,7 +105,6 @@ expected_argocd_apps() {
     if [[ "${EXPECT_APP_REPO_SENTIMENT}" == "true" ]]; then apps+=(oauth2-proxy-sentiment-dev oauth2-proxy-sentiment-uat); fi
     if [[ "${EXPECT_APP_REPO_SUBNET_CALC}" == "true" ]]; then apps+=(oauth2-proxy-subnetcalc-dev oauth2-proxy-subnetcalc-uat); fi
     if [[ "${EXPECT_APIM_EFFECTIVE}" == "true" ]]; then apps+=(oauth2-proxy-apim); fi
-    if [[ "${EXPECT_BACKSTAGE_EFFECTIVE}" == "true" ]]; then apps+=(oauth2-proxy-backstage); fi
   fi
 
   if [[ "${EXPECT_MCP_EFFECTIVE}" == "true" ]]; then
@@ -982,7 +981,6 @@ EXPECT_ACTIONS_RUNNER=$(expected_from_tfvars enable_actions_runner)
 EXPECT_APIM_SIMULATOR=$(expected_from_tfvars enable_apim_simulator)
 EXPECT_SUBNETCALC_APIM_GATEWAY=$(tfvar_or_default enable_subnetcalc_apim_gateway true)
 EXPECT_AGENTGATEWAY_AI_GATEWAY=$(expected_from_tfvars enable_agentgateway_ai_gateway)
-EXPECT_BACKSTAGE=$(tfvar_or_default enable_backstage false)
 EXPECT_APP_REPO_SUBNET_CALC=$(expected_from_tfvars enable_app_repo_subnetcalc)
 EXPECT_APP_REPO_SENTIMENT=$(expected_from_tfvars enable_app_repo_sentiment)
 EXPECT_UAT_APPS=$(expected_from_tfvars enable_uat_apps)
@@ -1000,10 +998,6 @@ fi
 EXPECT_MCP_EFFECTIVE="false"
 if [[ "${EXPECT_SSO}" == "true" && ( "${EXPECT_APIM_EFFECTIVE}" == "true" || "${EXPECT_AGENTGATEWAY_AI_GATEWAY}" == "true" ) ]]; then
   EXPECT_MCP_EFFECTIVE="true"
-fi
-EXPECT_BACKSTAGE_EFFECTIVE="false"
-if [[ "${EXPECT_BACKSTAGE}" == "true" && "${EXPECT_SSO}" == "true" && "${EXPECT_ARGOCD}" == "true" ]]; then
-  EXPECT_BACKSTAGE_EFFECTIVE="true"
 fi
 CURRENT_STAGE=$(detect_stage_from_tfvars)
 
@@ -1312,7 +1306,6 @@ expect_bool_json() {
 launchpad_toggles_json() {
   jq -cn \
     --argjson sso "$(expect_bool_json "${EXPECT_SSO}")" \
-    --argjson backstage "$(expect_bool_json "${EXPECT_BACKSTAGE_EFFECTIVE}")" \
     --argjson headlamp "$(expect_bool_json "${EXPECT_HEADLAMP}")" \
     --argjson sentiment "$(expect_bool_json "${EXPECT_APP_REPO_SENTIMENT}")" \
     --argjson subnetcalc "$(expect_bool_json "${EXPECT_APP_REPO_SUBNET_CALC}")" \
@@ -1321,7 +1314,6 @@ launchpad_toggles_json() {
     --argjson mcp "$(expect_bool_json "${EXPECT_MCP_EFFECTIVE}")" \
     '{
       ENABLE_SSO: $sso,
-      ENABLE_BACKSTAGE: $backstage,
       ENABLE_HEADLAMP: $headlamp,
       ENABLE_APP_REPO_SENTIMENT: $sentiment,
       ENABLE_APP_REPO_SUBNETCALC: $subnetcalc,

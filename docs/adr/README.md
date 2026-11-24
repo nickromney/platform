@@ -28,7 +28,7 @@ contracts. These ADRs explain why the repo ended up with that shape.
 - [ADR 0005: Vendor APIM simulator as a supporting context runtime](./0005-vendor-apim-simulator-runtime.md) (superseded)
 - [ADR 0006: Treat make, status, and TUI as the operator-facing application service boundary](./0006-operator-application-service-boundary.md)
 - [ADR 0007: Integrate APIM simulator as an in-repo supporting context](./0007-integrate-apim-simulator-supporting-context.md)
-- [ADR 0008: Default sample apps to minimal auditable runtimes](./0008-default-sample-apps-to-minimal-auditable-runtimes.md)
+- [ADR 0008: Default sample apps to minimal auditable runtimes](./0008-default-sample-apps-to-minimal-auditable-runtimes.md) (Backstage exception superseded by ADR 0016)
 - [ADR 0009: Treat idpauth as the auth+HTTP integration layer](./0009-idpauth-is-auth-http-integration-layer.md)
 - [ADR 0010: Concentrate the shared variant lifecycle and the guided-surface workflow core](./0010-share-variant-lifecycle-and-workflow-core.md)
 - [ADR 0011: Run the full gate locally, verified by a receipt, and take CI off pull requests](./0011-run-the-full-gate-locally-with-a-receipt.md)
@@ -36,6 +36,7 @@ contracts. These ADRs explain why the repo ended up with that shape.
 - [ADR 0013: Resource profiles reduce only, and every toggle carries a consumer tail](./0013-resource-profiles-reduce-only.md)
 - [ADR 0014: Browser E2E, not health checks, defines a working cluster](./0014-browser-e2e-defines-a-working-cluster.md)
 - [ADR 0015: Cilium's Gateway Envoy reaches backends as reserved:ingress](./0015-cilium-gateway-envoy-is-reserved-ingress.md)
+- [ADR 0016: Remove Backstage and keep the IDP as an API](./0016-remove-backstage.md)
 
 ## How To Read These
 

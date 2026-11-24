@@ -148,15 +148,6 @@ spec:
               protocol: TCP
     - toEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": idp
-            "k8s:app.kubernetes.io/name": backstage
-      toPorts:
-        - ports:
-            # Backstage catalog quality metrics
-            - port: "9465"
-              protocol: TCP
-    - toEndpoints:
-        - matchLabels:
             "k8s:io.kubernetes.pod.namespace": cert-manager
       toPorts:
         - ports:

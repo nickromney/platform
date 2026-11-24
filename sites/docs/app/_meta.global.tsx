@@ -71,7 +71,7 @@ const meta = {
       'patterns': 'Application patterns',
       'apim-simulator': 'APIM simulator',
       'platform-mcp': 'Platform MCP',
-      'backstage-idp': 'Portal and IDP',
+      idp: 'IDP API, SDK, and MCP',
       subnetcalc: 'Subnetcalc',
       sentiment: 'Sentiment'
     }

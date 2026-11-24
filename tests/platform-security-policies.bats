@@ -5,7 +5,7 @@ setup() {
   setup_repo_root
 }
 
-@test "IDP Cilium policy explicitly supports Backstage Kubernetes and OTel flows" {
+@test "IDP Cilium policy only admits SSO proxies and only resolves DNS" {
   run uv run --locked --project "${REPO_ROOT}" python - <<'PY'
 from __future__ import annotations
 
@@ -16,31 +16,33 @@ import yaml
 
 repo_root = Path(os.environ["REPO_ROOT"])
 policy = yaml.safe_load((repo_root / "terraform/kubernetes/cluster-policies/cilium/shared/idp-hardened.yaml").read_text())
+ingress = policy["spec"]["ingress"]
 egress = policy["spec"]["egress"]
 
-assert any("kube-apiserver" in rule.get("toEntities", []) for rule in egress), "idp must reach Kubernetes API for Backstage catalog discovery"
-assert any(
-    service.get("k8sService", {}).get("namespace") == "default"
-    and service.get("k8sService", {}).get("serviceName") == "kubernetes"
-    for rule in egress
-    for service in rule.get("toServices", [])
-), "idp must allow the default/kubernetes service path"
-
-otel_ports = {
+ingress_ports = {
     port["port"]
-    for rule in egress
-    for endpoint in rule.get("toEndpoints", [])
-    if endpoint.get("matchLabels", {}).get("k8s:io.kubernetes.pod.namespace") == "observability"
+    for rule in ingress
     for port_group in rule.get("toPorts", [])
     for port in port_group.get("ports", [])
 }
-assert {"4317", "4318"} <= otel_ports, otel_ports
+assert ingress_ports == {"8080"}, ingress_ports
+assert all(
+    endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "oauth2-proxy"
+    for rule in ingress
+    for endpoint in rule.get("fromEndpoints", [])
+), ingress
 
-print("validated idp cilium backstage flows")
+# idp-core mounts no service account token and calls nothing in-cluster, so
+# the namespace needs DNS and no other egress.
+assert len(egress) == 1, egress
+dns = egress[0]["toEndpoints"][0]["matchLabels"]
+assert dns.get("k8s:k8s-app") == "kube-dns", dns
+
+print("validated idp cilium flows")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated idp cilium backstage flows"* ]]
+  [[ "${output}" == *"validated idp cilium flows"* ]]
 }
 
 @test "MCP Cilium policy keeps tool egress to named platform dependencies" {

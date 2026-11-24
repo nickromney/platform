@@ -242,20 +242,11 @@ PY
   [ "${status}" -eq 0 ]
 }
 
-@test "developer portal and API have public portal gateway routes" {
-  for path in \
-    terraform/kubernetes/apps/platform-gateway-routes-sso/httproute-portal.yaml \
-    terraform/kubernetes/apps/platform-gateway-routes-sso/httproute-portal-api.yaml
-  do
-    [ -f "${REPO_ROOT}/${path}" ]
-  done
+@test "portal API has a public portal gateway route" {
+  [ -f "${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes-sso/httproute-portal-api.yaml" ]
 
-  run rg -n 'httproute-portal.yaml|httproute-portal-api.yaml' \
+  run rg -n 'httproute-portal-api.yaml' \
     "${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes-sso/kustomization.yaml"
-  [ "${status}" -eq 0 ]
-
-  run rg -n 'portal\.127\.0\.0\.1\.sslip\.io' \
-    "${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes-sso/httproute-portal.yaml"
   [ "${status}" -eq 0 ]
 
   run rg -n 'portal-api\.127\.0\.0\.1\.sslip\.io' \
@@ -267,7 +258,6 @@ PY
   grant="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes-sso/referencegrant-sso.yaml"
 
   for service in \
-    oauth2-proxy-backstage \
     oauth2-proxy-idp-core
   do
     run rg -n "name: ${service}" "${grant}"
@@ -307,7 +297,6 @@ ports = {
     for port in to_port.get("ports", [])
 }
 assert "8080" in ports, ports
-assert "7007" in ports, ports
 
 assert "idp-hardened.yaml" in kustomization["resources"]
 assert idp_policy["metadata"]["name"] == "idp-hardened"
@@ -330,7 +319,6 @@ ingress_ports = {
     for port in to_port.get("ports", [])
 }
 assert "8080" in ingress_ports, ingress_ports
-assert "7007" in ingress_ports, ingress_ports
 
 print("validated SSO auth proxy ingress and egress for IDP upstreams")
 PY

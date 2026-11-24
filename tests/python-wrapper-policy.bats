@@ -25,8 +25,7 @@ setup() {
 
 # Container and toolchain definitions that install or verify a python3.
 ALLOWED=".devcontainer/Dockerfile
-.devcontainer/check-toolchain-surface.sh
-apps/backstage/Dockerfile"
+.devcontainer/check-toolchain-surface.sh"
 
 # Audit tooling that names the pattern it audits, in the same way this file does.
 ALLOWED="${ALLOWED}

@@ -3,46 +3,6 @@
   "namespace": "platform",
   "platform_images": [
     {
-      "id": "backstage",
-      "hcl_key": "backstage",
-      "image_name": "backstage",
-      "default_tag": "1.0.0",
-      "build": {
-        "context": "generated-backstage",
-        "dockerfile": "Dockerfile",
-        "tag": "default"
-      },
-      "fingerprint_sources": [
-        "apps/subnetcalc/catalog-info.yaml",
-        "apps/subnetcalc/mkdocs.yml",
-        "apps/subnetcalc/README.md",
-        "apps/apim-simulator/catalog-info.yaml",
-        "apps/sentiment/catalog-info.yaml",
-        "apps/sentiment/docs",
-        "apps/sentiment/mkdocs.yml",
-        "apps/sentiment/MODEL_CARD.md",
-        "apps/sentiment/README.md",
-        "apps/backstage/.dockerignore",
-        "apps/backstage/.yarnrc.yml",
-        "apps/backstage/.yarn",
-        "apps/backstage/Dockerfile",
-        "apps/backstage/app-config.production.yaml",
-        "apps/backstage/app-config.yaml",
-        "apps/backstage/backstage.json",
-        "apps/backstage/catalog",
-        "apps/backstage/catalog-info.yaml",
-        "apps/backstage/package.json",
-        "apps/backstage/packages",
-        "apps/backstage/plugins",
-        "apps/backstage/tsconfig.json",
-        "apps/backstage/yarn.lock"
-      ],
-      "version_check": {
-        "mode": "local",
-        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
-      }
-    },
-    {
       "id": "grafana-victorialogs",
       "hcl_key": "grafana",
       "image_name": "grafana-victorialogs",

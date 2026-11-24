@@ -19,7 +19,7 @@ implementation, validation, and docs together.
 | IaC variables | `terraform/kubernetes/variables.tf` | Stage files, target files, operator overrides |
 | Runtime targets | `kubernetes/kind`, `kubernetes/lima`, `kubernetes/lima` | Operators choosing a host runtime |
 | GitOps source | In-cluster Gitea policies repo | Argo CD applications |
-| App source | `apps/*` | Image builds, GitOps manifests, Backstage catalog |
+| App source | `apps/*` | Image builds, GitOps manifests, IDP catalog |
 | Route surface | Gateway API `HTTPRoute`s and APIM config | Browser tests, smoke scripts, docs links |
 | Identity | Keycloak clients, groups, `oauth2-proxy`, RBAC scripts | Admin UIs, app routes, APIM, MCP |
 | Policy | Cilium and Kyverno policy trees | Workloads, gateway, observability, admission |
@@ -83,8 +83,7 @@ make -C kubernetes/kind gitea-sync AUTO_APPROVE=1
 ```
 
 Use `gitea-sync` after changing Terraform-rendered manifests, app GitOps
-content, Cilium policies, APIM resources, MCP routes, or Backstage catalog
-deployment files.
+content, Cilium policies, APIM resources, or MCP routes.
 
 ## Route And Identity Contract
 
@@ -106,13 +105,11 @@ App-owned facts should live beside the app:
 
 ```text
 apps/<name>/README.md
-apps/<name>/catalog-info.yaml
 apps/<name>/docs/
-apps/<name>/mkdocs.yml
 ```
 
-Backstage may carry copied catalog entries for the local Gitea runtime, but the
-app-owned docs and catalog metadata should be updated first.
+The platform-wide catalog the IDP API serves lives in `catalog/platform-apps.json`;
+update it alongside the app when routes, owners, or environments change.
 
 ## Documentation Contract
 

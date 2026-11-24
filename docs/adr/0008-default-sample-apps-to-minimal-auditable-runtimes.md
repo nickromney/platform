@@ -51,9 +51,10 @@ name remains only to avoid unnecessary compose and documentation path churn.
 The local IDP core keeps the same portal API contract, but its default shipped
 runtime is now a Go stdlib server under `apps/idp-core/app`.
 
-Backstage is the explicit exception. Portal demonstrates Backstage as a product,
-so its Yarn and plugin dependency graph is intentional and resource-gated
-rather than converted into a no-dependency sample app.
+Backstage was the explicit exception until ADR 0016 removed it. Portal
+demonstrated Backstage as a product, so its Yarn and plugin dependency graph was
+intentional and resource-gated rather than converted into a no-dependency
+sample app.
 
 The Platform MCP server now follows the same lightweight runtime direction. The
 active implementation is the Go server under `apps/platform-mcp/app`, using
@@ -68,7 +69,7 @@ HTTP and JSON directly.
 - `apps/sentiment/app` is the default sentiment runtime.
 - `apps/apim-simulator/app` is the default APIM simulator runtime.
 - `apps/idp-core/app` is the default portal API runtime.
-- `apps/backstage` is a documented Portal exception, not a sample-app template.
+- `apps/backstage` was a documented Portal exception, not a sample-app template; ADR 0016 removed it.
 - `apps/platform-mcp/app` is the active Platform MCP runtime.
 - `apps/idp-mcp` remains dependency-free.
 - `make -C apps/subnetcalc test` verifies the default Go two-service compose

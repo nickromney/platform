@@ -9,9 +9,9 @@ setup() {
 @test "docs site covers current platform app surfaces" {
   [ -f "${DOCS_CONTENT}/apps/apim-simulator.mdx" ]
   [ -f "${DOCS_CONTENT}/apps/platform-mcp.mdx" ]
-  [ -f "${DOCS_CONTENT}/apps/backstage-idp.mdx" ]
+  [ -f "${DOCS_CONTENT}/apps/idp.mdx" ]
 
-  run grep -R "apps/platform-mcp\\|apps/backstage\\|apps/idp-core\\|apps/idp-mcp\\|apps/idp-sdk" "${DOCS_CONTENT}/apps"
+  run grep -R "apps/platform-mcp\\|apps/idp-core\\|apps/idp-mcp\\|apps/idp-sdk" "${DOCS_CONTENT}/apps"
   [ "${status}" -eq 0 ]
 }
 

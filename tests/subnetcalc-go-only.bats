@@ -15,7 +15,7 @@ setup() {
   run bash -lc "cd '${REPO_ROOT}' && ls -A apps/subnetcalc | LC_ALL=C sort"
 
   [ "${status}" -eq 0 ]
-  expected=$'.dockerignore\n.gitea\n.gitignore\nMakefile\nREADME.md\napp\ncatalog-info.yaml\ncompose.yml\nedge\nmkdocs.yml\ntests\nupdate-subnetcalc-image-tags.sh'
+  expected=$'.dockerignore\n.gitea\n.gitignore\nMakefile\nREADME.md\napp\ncompose.yml\nedge\ntests\nupdate-subnetcalc-image-tags.sh'
   [ "${output}" = "${expected}" ]
 }
 

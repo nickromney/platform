@@ -368,17 +368,17 @@ check_platform_manifest_api_version_pins() {
   section "Platform manifest API version pins"
 
   check_manifest_api_version_pin \
-    "${REPO_ROOT}/apps/backstage/catalog/templates/platform-service/content/kubernetes/routing/httproutes.yaml" \
+    "${REPO_ROOT}/templates/platform-service/content/kubernetes/routing/httproutes.yaml" \
     "HTTPRoute" \
     "gateway.networking.k8s.io/v1"
 
   check_manifest_api_version_pin \
-    "${REPO_ROOT}/apps/backstage/catalog/templates/platform-service/content/kubernetes/routing/httproutes.yaml" \
+    "${REPO_ROOT}/templates/platform-service/content/kubernetes/routing/httproutes.yaml" \
     "ReferenceGrant" \
     "gateway.networking.k8s.io/v1beta1"
 
   check_manifest_api_version_pin \
-    "${REPO_ROOT}/apps/backstage/catalog/templates/platform-service/content/kubernetes/policies/cilium-frontend-backend.yaml" \
+    "${REPO_ROOT}/templates/platform-service/content/kubernetes/policies/cilium-frontend-backend.yaml" \
     "CiliumNetworkPolicy" \
     "cilium.io/v2"
 
@@ -616,49 +616,11 @@ bun_lock_resolved_version() {
   printf '%s\n' "${line}" | xargs || true
 }
 
-# Yarn Berry (v2+) lockfiles, as used by apps/backstage. Entry keys sit at
-# column 0 and may carry several comma-separated specs for the same package;
-# the resolved version is the indented "version:" line that follows.
-yarn_lock_resolved_version() {
-  local lockfile="$1"
-  local dep="$2"
-
-  if [ ! -f "${lockfile}" ]; then
-    printf '\n'
-    return 0
-  fi
-
-  awk -v dep="${dep}" '
-    /^[^[:space:]#]/ {
-      in_entry = 0
-      key = $0
-      sub(/:[[:space:]]*$/, "", key)
-      gsub(/"/, "", key)
-      n = split(key, specs, /,[[:space:]]*/)
-      for (i = 1; i <= n; i++) {
-        # A spec is "<name>@<protocol>:<range>". Anchoring on "<dep>@" compares
-        # the name only, and keeps "foo-bar@npm:" from matching dep "foo".
-        if (substr(specs[i], 1, length(dep) + 1) == dep "@") {
-          in_entry = 1
-          break
-        }
-      }
-      next
-    }
-    in_entry && $1 == "version:" {
-      gsub(/"/, "", $2)
-      print $2
-      exit
-    }
-  ' "${lockfile}" 2>/dev/null || true
-}
-
 # Resolve a direct dependency version from whichever lockfile the app uses.
 #
-# Walks up towards REPO_ROOT because workspace members (apps/backstage has
-# packages/* and plugins/*) carry a package.json but no lockfile of their own:
-# the single resolved lockfile lives at the workspace root. Stopping at the
-# package directory is what left the whole Backstage tree unverifiable.
+# Walks up towards REPO_ROOT because workspace members carry a package.json but
+# no lockfile of their own: the single resolved lockfile lives at the workspace
+# root, and stopping at the package directory would leave them unverifiable.
 js_lock_resolved_version() {
   local app_dir="$1"
   local dep="$2"
@@ -666,10 +628,6 @@ js_lock_resolved_version() {
 
   while :; do
     current="$(bun_lock_resolved_version "${dir}/bun.lock" "${dep}")"
-    if [ -n "${current}" ]; then
-      break
-    fi
-    current="$(yarn_lock_resolved_version "${dir}/yarn.lock" "${dep}")"
     if [ -n "${current}" ]; then
       break
     fi
@@ -1261,8 +1219,8 @@ pypi_latest_eligible_version() {
 
 # A dependency whose version could not be established is not a passing row, it
 # is an unanswered question. Left as ordinary output it reads like every other
-# line in a long report, which is how ~60 Backstage packages sat outside the
-# supply-chain policy without anyone noticing.
+# line in a long report, which is how a whole workspace of packages once sat
+# outside the supply-chain policy without anyone noticing.
 #
 # Rows are TSV: app, dependency, current, latest_eligible, latest_overall, status.
 unverifiable_dependency_rows() {
@@ -3118,7 +3076,6 @@ check_platform_application_inventory() {
     "${STACK_DIR}/apps"
     "${STACK_DIR}/config/platform-launchpad.apps.json"
     "${REPO_ROOT}/catalog/platform-apps.json"
-    "${REPO_ROOT}/apps/backstage/catalog"
   )
 
   if ! grep -R -q -E 'chatgpt-sim|chatgpt\.dev\.127\.0\.0\.1\.sslip\.io' "${inventory_paths[@]}" 2>/dev/null; then

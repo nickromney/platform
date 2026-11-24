@@ -711,7 +711,7 @@ contract_lines = [
 assert callable(local_platform_image_sync_contract_violations)
 assert "local_platform_image_sync_contract_violations" in content
 assert not any("sync-gitea-policies.sh" in line for line in contract_lines), "local platform image sync policy should move to tests/app_contracts.py"
-assert not any("EXTERNAL_PLATFORM_IMAGE_BACKSTAGE" in line for line in contract_lines), "local platform image sync policy should move to tests/app_contracts.py"
+assert not any("EXTERNAL_PLATFORM_IMAGE_IDP_CORE" in line for line in contract_lines), "local platform image sync policy should move to tests/app_contracts.py"
 assert not any("external_platform_idp_core" in line for line in contract_lines), "local platform image sync policy should move to tests/app_contracts.py"
 assert not any("GITEA_SYNC_TARGET_TFVARS_FILE" in line for line in contract_lines), "local platform image sync policy should move to tests/app_contracts.py"
 
@@ -1256,7 +1256,7 @@ test_file = Path("tests/validate-docker-optimization-contracts.bats")
 content = test_file.read_text(encoding="utf-8")
 test_body = content[
     content.index('\n@test "image catalog shared image builder adapter owns variant build mechanics"'):
-    content.index('\n@test "image catalog context adapter owns generated Backstage build context"')
+    content.index('\n@test "image catalog context adapter seam stays wired into the image builder"')
 ]
 contract_lines = [
     line
@@ -1278,7 +1278,7 @@ PY
   [[ "${output}" == *"validated shared image builder adapter helper usage"* ]]
 }
 
-@test "image catalog context adapter owns generated Backstage build context" {
+@test "image catalog context adapter seam stays wired into the image builder" {
   run python3 - <<'PY'
 from pathlib import Path
 import os
@@ -1289,11 +1289,11 @@ repo_root = Path(os.environ["REPO_ROOT"])
 violations = image_catalog_context_adapter_contract_violations(repo_root)
 assert not violations, violations
 
-print("validated image catalog Backstage context adapter")
+print("validated image catalog context adapter")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated image catalog Backstage context adapter"* ]]
+  [[ "${output}" == *"validated image catalog context adapter"* ]]
 }
 
 @test "docker optimization tests share image catalog context adapter helpers" {
@@ -1305,8 +1305,8 @@ from tests.app_contracts import image_catalog_context_adapter_contract_violation
 test_file = Path("tests/validate-docker-optimization-contracts.bats")
 content = test_file.read_text(encoding="utf-8")
 test_body = content[
-    content.index('\n@test "image catalog context adapter owns generated Backstage build context"'):
-    content.index('\n@test "generated Backstage image build passes a lean concrete Docker context"')
+    content.index('\n@test "image catalog context adapter seam stays wired into the image builder"'):
+    content.index('\n@test "image build prebuild hooks run once for identical commands"')
 ]
 contract_lines = [
     line
@@ -1318,7 +1318,6 @@ assert callable(image_catalog_context_adapter_contract_violations)
 assert "image_catalog_context_adapter_contract_violations" in content
 assert not any("context_lib =" in line for line in contract_lines), "image catalog context adapter policy should move to tests/app_contracts.py"
 assert not any("duplicated_fragment" in line for line in contract_lines), "image catalog context adapter policy should move to tests/app_contracts.py"
-assert not any("copy_backstage_app_catalog()" in line for line in contract_lines), "image catalog context adapter policy should move to tests/app_contracts.py"
 assert not any("image_catalog_prepare_build_context_adapter" in line and "assert" in line for line in contract_lines), "image catalog context adapter policy should move to tests/app_contracts.py"
 
 print("validated shared image catalog context adapter helper usage")
@@ -1326,47 +1325,6 @@ PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated shared image catalog context adapter helper usage"* ]]
-}
-
-@test "generated Backstage image build passes a lean concrete Docker context" {
-  run bash -lc '
-    set -euo pipefail
-    cd "${REPO_ROOT}"
-    source kubernetes/workflow/image-catalog-lib.sh
-    source kubernetes/workflow/image-catalog-context-lib.sh
-    source kubernetes/workflow/image-build-lib.sh
-
-    export CACHE_PUSH_HOST=127.0.0.1:5002
-    export IMAGE_NAMESPACE=platform
-    export TAG=latest
-    export FORCE_REBUILD=1
-    export IMAGE_BUILD_CONTEXT_ARGS_FILE="${BATS_TEST_TMPDIR}/docker-build-args.txt"
-    export IMAGE_BUILD_CONTEXT_PATH_FILE="${BATS_TEST_TMPDIR}/docker-build-context.txt"
-
-    tag_exists_in_cache() { return 1; }
-    docker_push_local_registry() { :; }
-    docker() { :; }
-    docker_build_local() {
-      printf "%s\n" "$@" >"${IMAGE_BUILD_CONTEXT_ARGS_FILE}"
-      printf "%s\n" "${@: -1}" >"${IMAGE_BUILD_CONTEXT_PATH_FILE}"
-    }
-
-    image_build_catalog_build_and_push platform backstage backstage src-test 1.0.0
-
-    context_dir="$(cat "${IMAGE_BUILD_CONTEXT_PATH_FILE}")"
-    test -d "${context_dir}"
-    test -f "${context_dir}/Dockerfile"
-    ! head -n 1 "${context_dir}/Dockerfile" | grep -Fq "# syntax=docker/dockerfile"
-    test -f "${context_dir}/package.json"
-    test -d "${context_dir}/catalog/apps/subnetcalc"
-    test ! -e "${context_dir}/node_modules"
-    test ! -e "${context_dir}/.yarn/cache"
-    tail -n 1 "${IMAGE_BUILD_CONTEXT_ARGS_FILE}" | grep -Fx "${context_dir}" >/dev/null
-    echo "validated generated Backstage Docker context"
-  '
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated generated Backstage Docker context"* ]]
 }
 
 @test "image build prebuild hooks run once for identical commands" {

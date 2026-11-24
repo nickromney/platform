@@ -9,49 +9,6 @@
   },
   "applications": [
     {
-      "name": "backstage",
-      "display_name": "Developer Portal",
-      "owner": "platform",
-      "lifecycle": "platform",
-      "source": {
-        "repo": "platform",
-        "path": "apps/backstage"
-      },
-      "deployment": {
-        "strategy": "gitops",
-        "controller": "argocd",
-        "applications": ["idp"]
-      },
-      "environments": [
-        {
-          "name": "local",
-          "type": "platform",
-          "namespace": "idp",
-          "route": "https://portal.127.0.0.1.sslip.io",
-          "rbac": {
-            "group": "platform-viewers",
-            "viewer": true,
-            "mutator": false
-          }
-        }
-      ],
-      "secrets": [
-        {
-          "name": "oauth2-proxy-oidc",
-          "binding": "sso",
-          "rotation": "platform"
-        }
-      ],
-      "scorecard": {
-        "runtime_profile": "restricted",
-        "has_health_endpoint": true,
-        "has_network_policy": false,
-        "has_owner": true,
-        "has_runtime_probes": true,
-        "has_resource_requests_limits": true
-      }
-    },
-    {
       "name": "idp-core",
       "display_name": "Portal API",
       "owner": "platform",

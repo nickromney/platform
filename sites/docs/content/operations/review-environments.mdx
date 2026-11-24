@@ -5,11 +5,10 @@ description: Branch preview environments for scaffolded platform services.
 
 # Review Environments
 
-Review environments are branch previews for services created from the Portal
-template. Backstage still owns the scaffolding experience internally, but the
-runtime path is a platform concern: Gitea Actions builds the branch image, the
-in-cluster runner applies Kubernetes resources, and the platform gateway exposes
-the branch URL.
+Review environments are branch previews for services created with
+`make -C kubernetes/kind scaffold-service`. The runtime path is a platform
+concern: Gitea Actions builds the branch image, the in-cluster runner applies
+Kubernetes resources, and the platform gateway exposes the branch URL.
 
 The URL shape is deterministic:
 
@@ -24,7 +23,7 @@ only the per-branch application objects.
 
 | Layer | Owner | Role |
 | --- | --- | --- |
-| Portal template | `apps/backstage/catalog/templates/platform-service` | Generates the service repo and `.gitea/workflows/review-environment.yaml`. |
+| Service template | `templates/platform-service` | Rendered by `scaffold-service` into the service repo, including `.gitea/workflows/review-environment.yaml`. |
 | Gitea Actions | `terraform/kubernetes/apps/gitea-actions-runner` | Runs the branch workflow on `self-hosted`, `in-cluster`, `review-env`. |
 | Review namespace | `terraform/kubernetes/namespaces.tf` | Hosts branch preview Deployments, Services, HTTPRoutes, and policies. |
 | Gateway TLS | `terraform/kubernetes/apps/cert-manager-config` | Issues the wildcard certificate for `*.review.127.0.0.1.sslip.io`. |
@@ -38,7 +37,7 @@ the matching review slug.
 
 Expect a review environment only when all of these are true:
 
-- The service was scaffolded from the Portal platform-service template.
+- The service was scaffolded from `templates/platform-service`.
 - A non-`main` branch was pushed to the generated Gitea repository.
 - The workflow can match a runner with `self-hosted`, `in-cluster`, and
   `review-env` labels.
@@ -77,7 +76,7 @@ the shared review substrate exists.
 
 ## Related Pages
 
-- [Portal and IDP](../apps/backstage-idp)
+- [IDP API, SDK, and MCP](../apps/idp)
 - [Health and URLs](./health-and-urls)
 - [Learn Gitea](../journeys/gitea-version-control)
 - [Learn GitOps with Argo CD](../journeys/argocd-gitops)

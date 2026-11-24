@@ -257,8 +257,8 @@ workflow_files() {
     if [[ -d "${REPO_ROOT}/.github/workflows" ]]; then
       find "${REPO_ROOT}/.github/workflows" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \)
     fi
-    if [[ -d "${REPO_ROOT}/apps/backstage/catalog/templates" ]]; then
-      find "${REPO_ROOT}/apps/backstage/catalog/templates" -path '*/.gitea/workflows/*' -type f \( -name '*.yml' -o -name '*.yaml' \)
+    if [[ -d "${REPO_ROOT}/templates" ]]; then
+      find "${REPO_ROOT}/templates" -path '*/.gitea/workflows/*' -type f \( -name '*.yml' -o -name '*.yaml' \)
     fi
   } | LC_ALL=C sort
 }
@@ -733,97 +733,6 @@ PY
   ok "All uv-managed pyproject.toml files set exclude-newer='${CHECK_VERSION_UV_EXCLUDE_NEWER}'"
 }
 
-check_backstage_catalog_pins() {
-  section "Backstage Catalog Pins"
-
-  local output status=0
-  if output="$(
-    run_inline_python "${REPO_ROOT}" <<'PY'
-import re
-import sys
-from pathlib import Path
-
-repo_root = Path(sys.argv[1])
-apps = ("subnetcalc", "sentiment")
-failures = 0
-
-def emit(kind: str, message: str) -> None:
-    print(f"{kind}\t{message}")
-
-for app in apps:
-    app_dir = repo_root / "apps" / app
-    catalog = app_dir / "catalog-info.yaml"
-    mkdocs = app_dir / "mkdocs.yml"
-
-    if not catalog.is_file():
-        emit("FAIL", f"{app}: missing app-owned catalog-info.yaml")
-        failures += 1
-        continue
-
-    catalog_text = catalog.read_text(encoding="utf-8")
-    if "apiVersion: backstage.io/v1alpha1" in catalog_text:
-        emit("OK", f"{app}: Backstage entity apiVersion is pinned to backstage.io/v1alpha1")
-    else:
-        emit("FAIL", f"{app}: Backstage entity apiVersion is not pinned to backstage.io/v1alpha1")
-        failures += 1
-
-    if "kind: API" not in catalog_text:
-        emit("FAIL", f"{app}: catalog-info.yaml is missing an API entity")
-        failures += 1
-    elif "openapi: 3.0.3" in catalog_text:
-        emit("OK", f"{app}: API definition is pinned to OpenAPI 3.0.3")
-    else:
-        emit("FAIL", f"{app}: API definition is not pinned to OpenAPI 3.0.3")
-        failures += 1
-
-    if re.search(r"^\s+version:\s+[0-9]+\.[0-9]+\.[0-9]+\s*$", catalog_text, re.MULTILINE):
-        emit("OK", f"{app}: API info.version is an explicit semver pin")
-    else:
-        emit("FAIL", f"{app}: API info.version must be an explicit semver pin")
-        failures += 1
-
-    if "backstage.io/techdocs-ref: dir:." in catalog_text:
-        emit("OK", f"{app}: TechDocs source is pinned to the app directory")
-    else:
-        emit("FAIL", f"{app}: TechDocs source must be pinned with backstage.io/techdocs-ref: dir:.")
-        failures += 1
-
-    if re.search(r":\s*latest(?:\s|$)", catalog_text):
-        emit("FAIL", f"{app}: catalog-info.yaml contains a floating latest tag")
-        failures += 1
-
-    if not mkdocs.is_file():
-        emit("FAIL", f"{app}: missing app-owned mkdocs.yml")
-        failures += 1
-    else:
-        mkdocs_text = mkdocs.read_text(encoding="utf-8")
-        if re.search(r"^\s*-\s+techdocs-core\s*$", mkdocs_text, re.MULTILINE):
-            emit("OK", f"{app}: TechDocs plugin is declared explicitly")
-        else:
-            emit("FAIL", f"{app}: mkdocs.yml must declare the techdocs-core plugin explicitly")
-            failures += 1
-        if re.search(r"^docs_dir:\s+\.\s*$", mkdocs_text, re.MULTILINE):
-            emit("OK", f"{app}: TechDocs docs_dir is pinned to the app root")
-        else:
-            emit("FAIL", f"{app}: mkdocs.yml must pin docs_dir to the app root")
-            failures += 1
-
-raise SystemExit(1 if failures else 0)
-PY
-  )"; then
-    status=0
-  else
-    status=$?
-  fi
-
-  emit_frontend_budget_lines "${output}"
-  if [[ "${status}" -ne 0 ]]; then
-    return
-  fi
-
-  ok "All Backstage catalog and TechDocs pins passed."
-}
-
 emit_frontend_budget_lines() {
   local output="$1"
   local kind="" message=""
@@ -1101,7 +1010,6 @@ check_vendored_assets
 check_npm_age_gates
 check_bun_age_gates
 check_uv_age_gates
-check_backstage_catalog_pins
 check_frontend_budgets
 
 printf '\n'

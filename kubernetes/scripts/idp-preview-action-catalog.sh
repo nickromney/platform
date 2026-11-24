@@ -21,7 +21,6 @@ USAGE
 
 catalog_records() {
   printf '%s\t%s\n' 'idp-api' 'IDP API preview'
-  printf '%s\t%s\n' 'backstage' 'Backstage preview'
   printf '%s\t%s\n' 'idp-sdk' 'IDP SDK preview'
   printf '%s\t%s\n' 'idp-mcp' 'IDP MCP preview'
 }
@@ -52,9 +51,6 @@ dry_run_message() {
     idp-api)
       printf 'INFO dry-run: would expose Go IDP core for %s at %s\n' "${runtime}" "${idp_api_public_url}"
       ;;
-    backstage)
-      printf 'INFO dry-run: would expose Backstage developer portal for %s at %s\n' "${runtime}" "${idp_public_url}"
-      ;;
     idp-sdk)
       printf 'INFO dry-run: would generate IDP SDK from FastAPI OpenAPI for %s\n' "${runtime}"
       ;;
@@ -79,9 +75,6 @@ run_command() {
     idp-api)
       printf 'Run: cd %s/apps/idp-core/app && IDP_RUNTIME=%s IDP_PUBLIC_URL=%s IDP_API_PUBLIC_URL=%s IDP_CATALOG_PATH=%s/catalog/platform-apps.json go run ./cmd/idp-core\n' \
         "${repo_root}" "${runtime}" "${idp_public_url}" "${idp_api_public_url}" "${repo_root}"
-      ;;
-    backstage)
-      printf 'Run: cd %s/apps/backstage && docker build -t platform/backstage:dev -f Dockerfile . && docker run --rm -p 7007:7007 -e BACKSTAGE_BASE_URL=http://127.0.0.1:7007 platform/backstage:dev\n' "${repo_root}"
       ;;
     idp-sdk)
       printf 'Run: cd %s/apps/idp-sdk && npm test\n' "${repo_root}"

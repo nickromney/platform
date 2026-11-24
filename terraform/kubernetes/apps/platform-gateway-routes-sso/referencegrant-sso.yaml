@@ -41,9 +41,6 @@ spec:
       name: oauth2-proxy-subnetcalc-uat
     - group: ""
       kind: Service
-      name: oauth2-proxy-backstage
-    - group: ""
-      kind: Service
       name: oauth2-proxy-idp-core
     - group: ""
       kind: Service

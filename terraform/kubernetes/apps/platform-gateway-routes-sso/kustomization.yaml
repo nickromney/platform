@@ -19,7 +19,6 @@ resources:
   - httproute-chatgpt-sim.yaml
   - httproute-mcp.yaml
   - httproute-mcp-console.yaml
-  - httproute-portal.yaml
   - httproute-portal-api.yaml
   - httproute-keycloak.yaml
   - referencegrant-headlamp.yaml

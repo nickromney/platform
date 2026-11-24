@@ -121,7 +121,7 @@ def lightweight_app_source_unknown_token_contract_violations(repo_root: Path) ->
             continue
         relative = path.relative_to(repo_root)
         parts = relative.parts
-        if "backstage" in parts or ".gitea" in parts:
+        if ".gitea" in parts:
             continue
         for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             # \bUnknown\b, not bare Unknown. Without the boundaries the second
@@ -139,10 +139,8 @@ def app_discovery_metadata_unknown_token_contract_violations(repo_root: Path) ->
     metadata_paths = [
         repo_root / "catalog" / "platform-apps.json",
         repo_root / "terraform" / "kubernetes" / "config" / "platform-launchpad.apps.json",
-        repo_root / "apps" / "backstage" / "catalog" / "entities.yaml",
     ]
     metadata_paths.extend(sorted((repo_root / "apps").glob("*/catalog-info.yaml")))
-    metadata_paths.extend(sorted((repo_root / "apps" / "backstage" / "catalog" / "apps").glob("*/catalog-info.yaml")))
     violations: list[str] = []
 
     for path in metadata_paths:
@@ -267,7 +265,7 @@ def platform_launchpad_rendered_dashboard_contract_violations(repo_root: Path) -
 
 
 def non_go_app_exception_contract_violations(repo_root: Path) -> tuple[str, ...]:
-    expected_exceptions = {"backstage", "idp-sdk"}
+    expected_exceptions = {"idp-sdk"}
     apps_root = repo_root / "apps"
     actual_exceptions = {
         path.name
@@ -292,20 +290,10 @@ def non_go_app_exception_contract_violations(repo_root: Path) -> tuple[str, ...]
         if "min-release-age=7" not in npmrc:
             violations.append("idp-sdk should keep npm min-release-age=7")
 
-    backstage = apps_root / "backstage"
-    if (backstage / "package.json").exists():
-        package = json.loads((backstage / "package.json").read_text(encoding="utf-8"))
-        if package.get("packageManager") != "yarn@4.18.1":
-            violations.append("backstage should pin yarn@4.18.1")
-        for required in (".yarn/releases/yarn-4.18.1.cjs", "yarn.lock"):
-            if not (backstage / required).exists():
-                violations.append(f"backstage missing {required}")
-
     readme = (apps_root / "README.md").read_text(encoding="utf-8")
     for fragment in (
         "idp-mcp/`](idp-mcp/) contains a small dependency-free Go MCP adapter",
         "idp-sdk/`](idp-sdk/) contains a dependency-free browser `fetch` wrapper",
-        "backstage/`](backstage/) contains Portal. It is an intentional Backstage",
     ):
         if fragment not in readme:
             violations.append(f"apps README missing non-Go exception note: {fragment}")
@@ -663,10 +651,6 @@ def kubernetes_workload_hardening_expectations() -> dict[str, dict[str, dict[str
                 "container": "api",
                 "mounts": {"/tmp": "emptyDir"},
             },
-            "backstage": {
-                "container": "backstage",
-                "mounts": {"/tmp": "emptyDir"},
-            },
         },
     }
 
@@ -830,7 +814,6 @@ def kubernetes_http_service_manifest_paths() -> tuple[str, ...]:
 
 def kubernetes_http_service_names() -> tuple[str, ...]:
     return (
-        "backstage",
         "chatgpt-sim",
         "idp-core",
         "sentiment-api",
@@ -944,7 +927,7 @@ def idp_proxy_cookie_contract_violations(repo_root: Path) -> tuple[str, ...]:
     if not proxies:
         return ("sso_idp_proxy_apps local not found",)
 
-    for proxy_name in ("portal", "api"):
+    for proxy_name in ("api",):
         body = proxies.get(proxy_name)
         if body is None:
             violations.append(f"sso_idp_proxy_apps missing {proxy_name} proxy")
@@ -969,18 +952,21 @@ def idp_proxy_cookie_contract_violations(repo_root: Path) -> tuple[str, ...]:
 
 
 def _terraform_object_map_block(content: str, local_name: str) -> dict[str, str]:
-    start_match = re.search(rf"^\s*{re.escape(local_name)}\s*=\s*merge\(", content, re.MULTILINE)
+    # Accepts both `name = merge(...)` and a plain `name = { ... }` object.
+    start_match = re.search(rf"^\s*{re.escape(local_name)}\s*=\s*(merge\(|\{{)", content, re.MULTILINE)
     if start_match is None:
         return {}
 
+    opener = start_match.group(1)[-1]
+    closer = ")" if opener == "(" else "}"
     start = start_match.end()
     depth = 1
     end = start
     while end < len(content) and depth:
         char = content[end]
-        if char == "(":
+        if char == opener:
             depth += 1
-        elif char == ")":
+        elif char == closer:
             depth -= 1
         end += 1
     block = content[start:end - 1]
@@ -1115,7 +1101,6 @@ def portal_public_fqdn_contract_violations(repo_root: Path) -> tuple[str, ...]:
     violations: list[str] = []
 
     expected_surfaces = {
-        "Developer Portal": ("backstage", "https://portal.127.0.0.1.sslip.io"),
         "Portal API": ("idp-core", "https://portal-api.127.0.0.1.sslip.io"),
     }
     for title, (app_name, expected_url) in expected_surfaces.items():
@@ -3583,7 +3568,6 @@ def local_platform_image_sync_contract_violations(repo_root: Path) -> tuple[str,
     }
     platform_images = (
         "idp-core",
-        "backstage",
         "platform-mcp",
     )
 
@@ -3603,7 +3587,6 @@ def local_platform_image_sync_contract_violations(repo_root: Path) -> tuple[str,
 
     required_fragments = {
         "sync script": (
-            "EXTERNAL_PLATFORM_IMAGE_BACKSTAGE",
             "EXTERNAL_PLATFORM_IMAGE_IDP_CORE",
             "EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP",
             "EXTERNAL_PLATFORM_IMAGE_ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN",
@@ -3611,7 +3594,6 @@ def local_platform_image_sync_contract_violations(repo_root: Path) -> tuple[str,
             "resolve_external_workload_image()",
         ),
         "policies sync script": (
-            "EXTERNAL_PLATFORM_IMAGE_BACKSTAGE",
             "EXTERNAL_PLATFORM_IMAGE_IDP_CORE",
             "EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP",
             "EXTERNAL_PLATFORM_IMAGE_ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN",
@@ -3629,7 +3611,6 @@ def local_platform_image_sync_contract_violations(repo_root: Path) -> tuple[str,
         ),
         "gitops terraform": ("GITOPS_RENDER_CONTRACT_FILE",),
         "locals terraform": (
-            "external_platform_backstage",
             "external_platform_idp_core",
             "external_platform_mcp",
             "external_platform_argo_rollouts_gatewayapi_plugin",
@@ -3647,7 +3628,6 @@ def local_platform_image_sync_contract_violations(repo_root: Path) -> tuple[str,
     forbidden_fragments = {
         "policies sync script": ("EXTERNAL_IMAGE_PLATFORM_MCP",),
         "gitops terraform": (
-            'EXTERNAL_PLATFORM_IMAGE_BACKSTAGE             = lookup(var.external_platform_image_refs, "backstage", "")',
             'EXTERNAL_PLATFORM_IMAGE_IDP_CORE              = lookup(var.external_platform_image_refs, "idp-core", "")',
             'EXTERNAL_IMAGE_PLATFORM_MCP                   = lookup(var.external_workload_image_refs, "platform-mcp", "")',
         ),
@@ -3687,7 +3667,7 @@ def local_platform_source_fingerprint_cache_contract_violations(repo_root: Path)
             "image_catalog_external_ids()",
         ),
         "build script": (
-            "for image_id in idp-core platform-mcp auth-chat chatgpt-sim backstage keycloak; do",
+            "for image_id in idp-core platform-mcp auth-chat chatgpt-sim keycloak; do",
             'image_selection_enabled platform "${image_id}"',
             'image_build_catalog_build_and_push platform "${image_id}" "${image_id}"',
         ),
@@ -3698,12 +3678,10 @@ def local_platform_source_fingerprint_cache_contract_violations(repo_root: Path)
         "render script": (
             "platform_mcp_image_tag=",
             "idp_core_image_tag=",
-            "backstage_image_tag=",
             "write_external_platform_images()",
             "prefer_external_platform_images = true",
             "external_platform_image_refs = {",
             "image_catalog_source_tag platform platform-mcp",
-            "image_catalog_source_tag platform backstage",
             "image_catalog_source_tag platform idp-core",
             "image_catalog_hcl_refs platform",
             "image_catalog_hcl_refs workload",
@@ -3716,8 +3694,6 @@ def local_platform_source_fingerprint_cache_contract_violations(repo_root: Path)
             "apps/idp-core/app/go.mod",
             "apps/idp-core/app/internal",
             "make -C apps/idp-core/app build-linux",
-            "apps/backstage/packages",
-            "apps/apim-simulator/catalog-info.yaml",
         ),
     }
 
@@ -4167,24 +4143,10 @@ def image_catalog_context_adapter_contract_violations(repo_root: Path) -> tuple[
 
     required_context_fragments = (
         "image_catalog_prepare_build_context_adapter()",
-        "image_catalog_prepare_backstage_build_context()",
-        "copy_backstage_app_catalog()",
-        "generated-backstage",
-        "apps/apim-simulator/catalog-info.yaml",
     )
     for fragment in required_context_fragments:
         if fragment not in context_lib:
             violations.append(f"image-catalog-context-lib missing {fragment}")
-
-    duplicated_fragments = (
-        "copy_backstage_app_catalog()",
-        "copy_backstage_apim_simulator_catalog()",
-        'cp -R "${REPO_ROOT}/apps/backstage/."',
-        'copy_backstage_app_catalog "${context_dir}" "subnetcalc"',
-    )
-    for fragment in duplicated_fragments:
-        if fragment in platform_builder:
-            violations.append(f"platform image builder should not duplicate {fragment}")
 
     if "kubernetes/workflow/image-catalog-context-lib.sh" not in platform_builder:
         violations.append("platform image builder should source image-catalog-context-lib.sh")
@@ -4228,11 +4190,6 @@ def local_platform_image_build_spec_contract_violations(repo_root: Path) -> tupl
             "dockerfile": "Dockerfile",
             "tag": "default",
             "prebuild": "make -C apps/chatgpt-sim/app build-linux",
-        },
-        "backstage": {
-            "context": "generated-backstage",
-            "dockerfile": "Dockerfile",
-            "tag": "default",
         },
         "keycloak": {
             "context": "apps/keycloak",
@@ -5580,93 +5537,6 @@ def load_yaml_all(path: Path) -> tuple[dict[str, Any] | None, ...]:
     return tuple(yaml.safe_load_all(path.read_text(encoding="utf-8")))
 
 
-def app_owned_catalog_files(repo_root: Path) -> tuple[Path, ...]:
-    return tuple(
-        sorted(
-            path
-            for path in (repo_root / "apps").glob("*/catalog-info.yaml")
-            if path.parent.name != "backstage"
-        )
-    )
-
-
-def backstage_local_catalog_files(repo_root: Path) -> tuple[Path, ...]:
-    return (
-        repo_root / "apps" / "backstage" / "catalog" / "entities.yaml",
-        *app_owned_catalog_files(repo_root),
-    )
-
-
-def backstage_production_catalog_files(repo_root: Path) -> tuple[Path, ...]:
-    bundled_app_catalogs = tuple(
-        sorted((repo_root / "apps" / "backstage" / "catalog" / "apps").glob("*/catalog-info.yaml"))
-    )
-    return (
-        repo_root / "apps" / "backstage" / "catalog" / "entities.yaml",
-        *bundled_app_catalogs,
-    )
-
-
-def backstage_production_catalog_targets(repo_root: Path) -> tuple[str, ...]:
-    catalog_root = repo_root / "apps" / "backstage"
-    return tuple(
-        f"./{catalog_file.relative_to(catalog_root).as_posix()}"
-        for catalog_file in backstage_production_catalog_files(repo_root)
-    )
-
-
-def backstage_catalog_documents(catalog_files: tuple[Path, ...]) -> tuple[dict[str, Any], ...]:
-    docs: list[dict[str, Any]] = []
-    for catalog_file in catalog_files:
-        docs.extend(doc for doc in load_yaml_all(catalog_file) if doc)
-    return tuple(docs)
-
-
-def backstage_local_catalog_documents(repo_root: Path) -> tuple[dict[str, Any], ...]:
-    return backstage_catalog_documents(backstage_local_catalog_files(repo_root))
-
-
-def backstage_production_catalog_documents(repo_root: Path) -> tuple[dict[str, Any], ...]:
-    return backstage_catalog_documents(backstage_production_catalog_files(repo_root))
-
-
-def canonical_go_app_catalog_ownership_contract_violations(repo_root: Path) -> tuple[str, ...]:
-    owned_catalog_app_names = {catalog.parent.name for catalog in app_owned_catalog_files(repo_root)}
-    violations: list[str] = []
-    for app_name in canonical_go_app_names():
-        if app_name not in owned_catalog_app_names:
-            violations.append(f"{app_name} should own apps/{app_name}/catalog-info.yaml")
-
-    return tuple(violations)
-
-
-def backstage_app_catalog_mirror_contract_violations(repo_root: Path) -> tuple[str, ...]:
-    production_config = (repo_root / "apps" / "backstage" / "app-config.production.yaml").read_text(
-        encoding="utf-8"
-    )
-    local_config = (repo_root / "apps" / "backstage" / "app-config.yaml").read_text(encoding="utf-8")
-    violations: list[str] = []
-
-    for app_catalog in app_owned_catalog_files(repo_root):
-        app_name = app_catalog.parent.name
-        bundled_catalog = repo_root / "apps" / "backstage" / "catalog" / "apps" / app_name / "catalog-info.yaml"
-        if not bundled_catalog.exists():
-            violations.append(f"{app_name} app-owned catalog missing Backstage bundled mirror")
-            continue
-        if bundled_catalog.read_text(encoding="utf-8") != app_catalog.read_text(encoding="utf-8"):
-            violations.append(f"{app_name} Backstage catalog copy drifted from app-owned catalog-info.yaml")
-
-        production_target = f"./catalog/apps/{app_name}/catalog-info.yaml"
-        if production_target not in production_config:
-            violations.append(f"{app_name} Backstage production catalog should register {production_target}")
-
-        local_target = f"../../../{app_name}/catalog-info.yaml"
-        if local_target not in local_config:
-            violations.append(f"{app_name} Backstage local catalog should register {local_target}")
-
-    return tuple(violations)
-
-
 def application_surface_projection_contract_violations(repo_root: Path) -> tuple[str, ...]:
     catalog = json.loads((repo_root / "catalog" / "platform-apps.json").read_text(encoding="utf-8"))
     surfaces = {
@@ -5680,18 +5550,6 @@ def application_surface_projection_contract_violations(repo_root: Path) -> tuple
         }
         for app in catalog["applications"]
         for environment in app.get("environments", [])
-    }
-    expected_selectors = {
-        "apim-simulator": "app.kubernetes.io/name=subnetcalc-apim-simulator",
-        # Omitted when the app was added, so the default `app=<name>` was
-        # expected while the catalog correctly used the same shape as its three
-        # siblings above. The catalog was right; this table had the gap.
-    }
-    docs = backstage_production_catalog_documents(repo_root)
-    components = {
-        doc["metadata"]["name"]: doc
-        for doc in docs
-        if doc.get("kind") == "Component"
     }
     launchpad = json.loads(
         (repo_root / "terraform" / "kubernetes" / "config" / "platform-launchpad.apps.json").read_text(
@@ -5707,26 +5565,6 @@ def application_surface_projection_contract_violations(repo_root: Path) -> tuple
 
     for app, environment in sorted(surfaces):
         surface = surfaces[(app, environment)]
-        component = components.get(app)
-        if component is None:
-            violations.append(f"{app} missing Backstage component")
-            continue
-
-        metadata = component.get("metadata", {})
-        annotations = metadata.get("annotations", {})
-        links = {link["url"]: link for link in metadata.get("links", [])}
-        expected_owner = f"group:default/{surface['owner']}"
-        expected_selector = expected_selectors.get(app, f"app={app}")
-
-        if metadata.get("title") != surface["display_name"]:
-            violations.append(f"{app} Backstage title should match platform app display_name")
-        if component.get("spec", {}).get("owner") != expected_owner:
-            violations.append(f"{app} Backstage owner should be {expected_owner}")
-        if annotations.get("backstage.io/kubernetes-label-selector") != expected_selector:
-            violations.append(f"{app} Backstage Kubernetes selector should be {expected_selector}")
-        if surface["route"] not in links:
-            violations.append(f"{app}/{environment} route missing from Backstage catalog links")
-
         route_tile = next(
             (
                 tile
@@ -5756,43 +5594,6 @@ def application_surface_projection_contract_violations(repo_root: Path) -> tuple
             violations.append(
                 f"{tile['service']}/{tile['environment']} Launchpad route tile missing from platform app catalog"
             )
-
-    backstage_surface = surfaces.get(("backstage", "local"))
-    backstage_observability = next((tile for tile in tiles if tile.get("title") == "Backstage Observability"), None)
-    if backstage_surface is None:
-        violations.append("backstage/local missing from platform app catalog")
-    elif backstage_observability is None:
-        violations.append("Backstage Observability tile missing from Launchpad tiles")
-    else:
-        if backstage_observability.get("service") != backstage_surface["app"]:
-            violations.append("Backstage Observability tile service should match backstage/local")
-        if backstage_observability.get("owner") != backstage_surface["owner"]:
-            violations.append("Backstage Observability tile owner should match backstage/local")
-        if backstage_observability.get("environment") != backstage_surface["environment"]:
-            violations.append("Backstage Observability tile environment should match backstage/local")
-        backstage_links = components.get("backstage", {}).get("metadata", {}).get("links", [])
-        if not any(
-            link.get("title") == backstage_observability.get("title")
-            and link.get("url") == backstage_observability.get("url")
-            for link in backstage_links
-        ):
-            violations.append("Backstage Observability tile missing from Backstage catalog links")
-
-    catalog_metrics = (
-        repo_root / "apps" / "backstage" / "packages" / "backend" / "src" / "modules" / "catalogMetrics.ts"
-    ).read_text(encoding="utf-8")
-    catalog_root = repo_root / "apps" / "backstage"
-    for catalog_file in backstage_production_catalog_files(repo_root):
-        relative_path = catalog_file.relative_to(catalog_root).as_posix()
-        if relative_path not in catalog_metrics:
-            violations.append(f"catalog metrics should ingest {relative_path}")
-    for fragment in (
-        "backstage_catalog_component_locality_total",
-        "backstage_catalog_component_links_total",
-        "normalizedUrl.includes('/d/')",
-    ):
-        if fragment not in catalog_metrics:
-            violations.append(f"catalog metrics missing {fragment}")
 
     return tuple(violations)
 
@@ -5886,9 +5687,6 @@ def external_runtime_image_ref_expectations() -> dict[str, dict[str, int]]:
     return {
         "apps/sentiment/app/Dockerfile": {
             "FROM dhi.io/static:20260413-alpine3.23": 1,
-        },
-        "apps/backstage/Dockerfile": {
-            "FROM dhi.io/node:22.23.4-debian13@sha256:b2191eda91feb8bcc6a8c3a055651216ddfed8239bd29c8c5e9fbcf43227a1bc AS runtime": 1,
         },
         "apps/sentiment/compose.yml": {
             "image: quay.io/keycloak/keycloak:26.6.4": 1,

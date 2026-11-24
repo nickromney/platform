@@ -1,0 +1,76 @@
+---
+title: IDP API, SDK, and MCP
+description: The portal API, its SDK and MCP clients, and how new platform services are scaffolded.
+---
+
+# IDP API, SDK, and MCP
+
+The local internal developer platform is an API, not a portal UI. IDP Core
+serves the catalog, runtime, environment, deployment, secret, and scorecard read
+models over HTTP, and every other surface is a client of that contract. There is
+no developer portal UI: on 8 to 16 GB machines the Launchpad dashboard, Headlamp,
+Grafana, and Argo CD already cover browsing, so the platform does not run a
+separate portal application.
+
+## Surfaces
+
+| Surface | Repo path | Role |
+| --- | --- | --- |
+| IDP Core | `apps/idp-core` | Go product API for catalog, runtime, environments, deployments, secrets, and actions. |
+| IDP SDK | `apps/idp-sdk` | TypeScript client for the IDP API. |
+| IDP MCP | `apps/idp-mcp` | MCP wrapper over the IDP API. |
+| Platform MCP | `apps/platform-mcp` | Learning and diagnostic MCP server for platform workflows. |
+| Service template | `templates/platform-service` | Starter repository for a new frontend/backend platform service. |
+
+## Runtime Shape
+
+IDP Core is routed at stage `900` behind the shared SSO proxy:
+
+```text
+https://portal-api.127.0.0.1.sslip.io
+```
+
+```bash
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+make -C kubernetes/kind idp-api
+make -C kubernetes/kind check-app APP=portal-api
+```
+
+The catalog that IDP Core serves is `catalog/platform-apps.json`. Launchpad
+tiles in `terraform/kubernetes/config/platform-launchpad.apps.json` must stay in
+step with its routes; `tests/application-surface-projection.bats` enforces that.
+
+## Scaffolding a Service
+
+`scaffold-service` renders `templates/platform-service` and pushes it to a new
+private repository in the in-cluster Gitea:
+
+```bash
+make -C kubernetes/kind scaffold-service NAME=orders ENVIRONMENTS=dev,uat
+```
+
+The repository gets a static frontend, a dependency-free backend, starter
+Kubernetes, Kyverno, and Cilium manifests, a Grafana golden-signals dashboard
+seed, and Gitea workflows for image builds and branch review environments. Use
+`DRY_RUN=1` to see what would be created, or run
+`terraform/kubernetes/scripts/scaffold-platform-service.sh --render-only DIR`
+to render the files without touching Gitea.
+
+## Review Environments
+
+The service template's Gitea Actions workflow creates a branch preview whenever
+a non-`main` branch is pushed. Kubernetes owns the shared runtime substrate: the
+`review` namespace, registry pull secret, wildcard gateway certificate, and
+policy baseline.
+
+The default Kind registry mode validates the substrate but leaves the Gitea
+runner disabled. Use a runner-capable image mode when you need branch pushes to
+create live preview URLs.
+
+## Related Pages
+
+- [Platform MCP](./platform-mcp)
+- [APIM simulator](./apim-simulator)
+- [Identity and access](../concepts/identity-and-access)
+- [Health and URLs](../operations/health-and-urls)
+- [Review environments](../operations/review-environments)

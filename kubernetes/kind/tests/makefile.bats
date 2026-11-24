@@ -289,24 +289,14 @@ EOF
 
   [ "${status}" -eq 0 ]
 
-  run grep -Fn 'SSO_E2E_ENABLE_BACKSTAGE="$${SSO_E2E_ENABLE_BACKSTAGE}" STAGE_TFVARS="$${STAGE_TFVARS}" STAGE_TFVARS_FILES="$${STAGE_TFVARS_FILES}"' \
+  run grep -Fn 'KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" STAGE_TFVARS="$${STAGE_TFVARS}" STAGE_TFVARS_FILES="$${STAGE_TFVARS_FILES}"' \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]
 }
 
-@test "kind apply rolls Backstage after rebuilding local platform images" {
-  run grep -Fn 'run_step "rollout-restart-backstage" env KUBECONFIG="$(KUBECONFIG_PATH)" kubectl --context "$(KUBECONFIG_CONTEXT)" -n idp rollout restart deployment/backstage' \
-    "${REPO_ROOT}/kubernetes/kind/Makefile"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'run_step "rollout-status-backstage" env KUBECONFIG="$(KUBECONFIG_PATH)" kubectl --context "$(KUBECONFIG_CONTEXT)" -n idp rollout status deployment/backstage --timeout=600s' \
-    "${REPO_ROOT}/kubernetes/kind/Makefile"
-  [ "${status}" -eq 0 ]
-}
-
-@test "Backstage platform service template includes Gateway API ingress starter manifests" {
-  template_root="${REPO_ROOT}/apps/backstage/catalog/templates/platform-service/content"
+@test "platform service template includes Gateway API ingress starter manifests" {
+  template_root="${REPO_ROOT}/templates/platform-service/content"
 
   run grep -Fn '../routing/httproutes.yaml' "${template_root}/kubernetes/base/kustomization.yaml"
   [ "${status}" -eq 0 ]
@@ -324,8 +314,8 @@ EOF
   [ "${status}" -eq 0 ]
 }
 
-@test "Backstage platform service template permits platform gateway ingress to the frontend" {
-  policy="${REPO_ROOT}/apps/backstage/catalog/templates/platform-service/content/kubernetes/policies/cilium-frontend-backend.yaml"
+@test "platform service template permits platform gateway ingress to the frontend" {
+  policy="${REPO_ROOT}/templates/platform-service/content/kubernetes/policies/cilium-frontend-backend.yaml"
 
   run grep -Fn 'k8s:io.kubernetes.pod.namespace: platform-gateway' "${policy}"
   [ "${status}" -eq 0 ]
@@ -334,79 +324,14 @@ EOF
   [ "${status}" -eq 0 ]
 }
 
-@test "Backstage demo app catalog entries are owned by the apps" {
-  subnetcalc_catalog="${REPO_ROOT}/apps/subnetcalc/catalog-info.yaml"
-  apim_catalog="${REPO_ROOT}/apps/apim-simulator/catalog-info.yaml"
-  sentiment_catalog="${REPO_ROOT}/apps/sentiment/catalog-info.yaml"
-  dev_config="${REPO_ROOT}/apps/backstage/app-config.yaml"
-  prod_config="${REPO_ROOT}/apps/backstage/app-config.production.yaml"
-  image_build="${REPO_ROOT}/kubernetes/scripts/build-local-platform-images.sh"
-
-  run grep -Fn 'backstage.io/techdocs-ref: dir:.' "${subnetcalc_catalog}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'kind: API' "${subnetcalc_catalog}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'kind: API' "${apim_catalog}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'apim-simulator-management-api' "${apim_catalog}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'components:' "${subnetcalc_catalog}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'backstage.io/techdocs-ref: dir:.' "${sentiment_catalog}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'kind: API' "${sentiment_catalog}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'components:' "${sentiment_catalog}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn '../../../subnetcalc/catalog-info.yaml' "${dev_config}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn '../../../apim-simulator/catalog-info.yaml' "${dev_config}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn './catalog/apps/subnetcalc/catalog-info.yaml' "${prod_config}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn './catalog/apps/apim-simulator/catalog-info.yaml' "${prod_config}"
-  [ "${status}" -eq 0 ]
-
-  context_lib="${REPO_ROOT}/kubernetes/workflow/image-catalog-context-lib.sh"
-
-  run grep -Fn 'copy_backstage_app_catalog "${context_dir}" "subnetcalc"' "${context_lib}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'copy_backstage_apim_simulator_catalog "${context_dir}"' "${context_lib}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'copy_backstage_app_catalog "${context_dir}" "sentiment"' "${context_lib}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'kubernetes/workflow/image-catalog-context-lib.sh' "${image_build}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'image_catalog_prepare_build_context_adapter' "${REPO_ROOT}/kubernetes/workflow/image-build-lib.sh"
-  [ "${status}" -eq 0 ]
-}
-
-@test "version checks cover Backstage catalog and generated platform API pins" {
+@test "version checks cover the service template workflows and generated platform API pins" {
   root_check="${REPO_ROOT}/scripts/check-repo-version.sh"
   stack_check="${REPO_ROOT}/terraform/kubernetes/scripts/check-component-version.sh"
 
-  run grep -Fn 'check_backstage_catalog_pins' "${root_check}"
+  run grep -Fn 'find "${REPO_ROOT}/templates" -path' "${root_check}"
   [ "${status}" -eq 0 ]
 
-  run grep -Fn 'openapi: 3.0.3' "${root_check}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'apps/backstage/catalog/templates" -path' "${root_check}"
+  run grep -Fn '${REPO_ROOT}/templates/platform-service/content/kubernetes/routing/httproutes.yaml' "${stack_check}"
   [ "${status}" -eq 0 ]
 
   run grep -Fn "uses floating ref" "${root_check}"
@@ -422,8 +347,8 @@ EOF
   [ "${status}" -eq 0 ]
 }
 
-@test "Backstage platform service template SHA-pins checkout action" {
-  workflow="${REPO_ROOT}/apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/build.yaml"
+@test "platform service template SHA-pins checkout action" {
+  workflow="${REPO_ROOT}/templates/platform-service/content/.gitea/workflows/build.yaml"
 
   run grep -Fn 'actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2' "${workflow}"
   [ "${status}" -eq 0 ]
@@ -435,34 +360,19 @@ EOF
   [ "${status}" -eq 0 ]
 }
 
-@test "Backstage platform service template registers generated catalog entry" {
-  template="${REPO_ROOT}/apps/backstage/catalog/templates/platform-service/template.yaml"
-  publish_module="${REPO_ROOT}/apps/backstage/packages/backend/src/modules/giteaRepoPublish.ts"
-  config="${REPO_ROOT}/apps/backstage/app-config.yaml"
+@test "kind scaffold-service target seeds a Gitea repo from the service template" {
+  makefile="${REPO_ROOT}/kubernetes/kind/Makefile"
 
-  run grep -Fn 'action: catalog:register' "${template}"
+  run grep -Fn '"$(STACK_DIR)/scripts/scaffold-platform-service.sh" $(READONLY_MODE_FLAG) --name "$(NAME)"' "${makefile}"
   [ "${status}" -eq 0 ]
 
-  run grep -Fn 'repoContentsUrl: ${{ steps.publish.output.repoContentsUrl }}' "${template}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'catalogInfoPath: catalog-info.yaml' "${template}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'catalogInfoPath: /catalog-info.yaml' "${template}"
+  run make -s -C "${REPO_ROOT}/kubernetes/kind" scaffold-service
   [ "${status}" -ne 0 ]
+  [[ "${output}" == *"NAME is required"* ]]
 
-  run grep -Fn 'entityRef: ${{ steps.register.output.entityRef }}' "${template}"
+  run make -s -C "${REPO_ROOT}/kubernetes/kind" scaffold-service NAME=orders DRY_RUN=1
   [ "${status}" -eq 0 ]
-
-  run grep -Fn "ctx.output('repoContentsUrl', repoContentsUrl)" "${publish_module}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'const repoContentsUrl = `${baseUrl}/${owner}/${input.repoName}/src/branch/${branch}/`;' "${publish_module}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'host: gitea-http.gitea.svc.cluster.local:3000' "${config}"
-  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"would create Gitea repository platform/orders from templates/platform-service"* ]]
 }
 
 @test "kind stage 900 apply runs browser SSO E2E inside the devcontainer" {
@@ -1493,14 +1403,6 @@ EOF
   headlamp_tf="${REPO_ROOT}/terraform/kubernetes/headlamp.tf"
 
   run bash -lc "grep -F 'count = var.enable_headlamp && var.enable_argocd && !var.enable_app_of_apps ? 1 : 0' '${headlamp_tf}'"
-
-  [ "${status}" -eq 0 ]
-}
-
-@test "kind apply treats Backstage as disabled when SSO is disabled" {
-  makefile="${REPO_ROOT}/kubernetes/kind/Makefile"
-
-  run grep -F 'enable_backstage=false' "${makefile}"
 
   [ "${status}" -eq 0 ]
 }
