@@ -14,6 +14,7 @@ quay.io/cilium/hubble-ui:v0.13.6
 
 # --- ArgoCD (chart 10.18.0) ---
 dhi.io/argocd:3.6.1-debian13
+ecr-public.aws.com/docker/library/redis:8.6.4-alpine
 ecr-public.aws.com/docker/library/redis:8.2.7-alpine
 
 # --- Gitea (chart 12.7.0) ---
