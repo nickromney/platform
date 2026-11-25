@@ -8,6 +8,10 @@ This repository was created by `make -C kubernetes/kind scaffold-service`. It co
 - `apps/backend`: dependency-free Node backend served by a hardened DHI Node image.
 - `kubernetes/base`: starter deployments and services with platform labels.
 - `kubernetes/policies`: starter Kyverno and Cilium policies.
+- `kubernetes/routing` and `kubernetes/observability`: Gateway API routes per
+  environment and the Prometheus scrape config.
+- `kubernetes/kustomization.yaml`: all of the above in one build, so
+  `kubectl apply -k kubernetes` deploys the service.
 - `observability/grafana-dashboard.json`: a golden-signals dashboard seed.
 - `.gitea/workflows/review-environment.yaml`: branch preview environments and
   branch-deletion cleanup in the platform-managed `review` namespace.
