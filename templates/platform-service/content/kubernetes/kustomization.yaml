@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Everything the service needs, kept below this directory so the default
+# kustomize load restrictor accepts it: kubectl apply -k kubernetes
+resources:
+  - base
+  - policies/cilium-frontend-backend.yaml
+  - policies/kyverno-container-baseline.yaml
+  - routing/httproutes.yaml
+  - observability/prometheus-scrape.yaml

@@ -30,6 +30,7 @@ expected_files = {
     "kubernetes/base/frontend.yaml",
     "kubernetes/base/backend.yaml",
     "kubernetes/base/kustomization.yaml",
+    "kubernetes/kustomization.yaml",
     "kubernetes/observability/prometheus-scrape.yaml",
     "kubernetes/policies/cilium-frontend-backend.yaml",
     "kubernetes/policies/kyverno-container-baseline.yaml",

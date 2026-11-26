@@ -128,3 +128,26 @@ EOF
   [ -f "${out}/.gitea/workflows/build.yaml" ]
   [ ! -e "${CURL_LOG}" ]
 }
+
+@test "scaffold-service renders a repository that kubectl kustomize builds as is" {
+  command -v kubectl >/dev/null 2>&1 || skip "kubectl not installed"
+  out="${BATS_TEST_TMPDIR}/rendered"
+
+  run "${SCRIPT}" --execute --name orders --environments dev,uat --render-only "${out}"
+  [ "${status}" -eq 0 ]
+
+  # Default load restrictor: every resource must sit below kubernetes/.
+  run kubectl kustomize "${out}/kubernetes"
+  [ "${status}" -eq 0 ]
+  for resource in \
+    "kind: Deployment" \
+    "name: orders-frontend" \
+    "name: orders-backend" \
+    "kind: CiliumNetworkPolicy" \
+    "name: orders-container-baseline" \
+    "name: orders-dev" \
+    "name: orders-uat" \
+    "name: orders-prometheus-scrape"; do
+    [[ "${output}" == *"${resource}"* ]] || { echo "missing: ${resource}"; return 1; }
+  done
+}

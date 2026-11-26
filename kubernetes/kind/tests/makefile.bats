@@ -298,7 +298,7 @@ EOF
 @test "platform service template includes Gateway API ingress starter manifests" {
   template_root="${REPO_ROOT}/templates/platform-service/content"
 
-  run grep -Fn '../routing/httproutes.yaml' "${template_root}/kubernetes/base/kustomization.yaml"
+  run grep -Fxn '  - routing/httproutes.yaml' "${template_root}/kubernetes/kustomization.yaml"
   [ "${status}" -eq 0 ]
 
   run grep -Fn 'kind: HTTPRoute' "${template_root}/kubernetes/routing/httproutes.yaml"
