@@ -1035,6 +1035,47 @@ EOF
   [ -z "${output}" ]
 }
 
+@test "kind start leaves already-running nodes alone instead of failing the port check" {
+  docker_log="${BATS_TEST_TMPDIR}/docker.log"
+
+  # Both nodes are already up and publish the cluster's own host ports.
+  cat >"${TEST_BIN}/docker" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\$*" >>"${docker_log}"
+case "\${1:-}" in
+  info) exit 0 ;;
+  ps) printf '%s\n' kind-local-control-plane kind-local-worker ;;
+  start) exit 0 ;;
+  *) exit 1 ;;
+esac
+EOF
+  chmod +x "${TEST_BIN}/docker"
+
+  # Every port looks taken, so running the host port check would fail.
+  cat >"${TEST_BIN}/lsof" <<'EOF'
+#!/usr/bin/env bash
+printf 'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\n'
+printf 'com.docke 1 user 1u IPv4 0x1 0t0 TCP 127.0.0.1:443 (LISTEN)\n'
+EOF
+  chmod +x "${TEST_BIN}/lsof"
+
+  for stub in limactl ps; do
+    printf '#!/usr/bin/env bash\nexit 0\n' >"${TEST_BIN}/${stub}"
+    chmod +x "${TEST_BIN}/${stub}"
+  done
+
+  run make -C "${REPO_ROOT}/kubernetes/kind" start-kind \
+    ENSURE_NODE_HOST_ALIAS=true \
+    ENSURE_KIND_KUBECONFIG=true
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"kind-local node containers are already running."* ]]
+  [[ "${output}" != *"already in use"* ]]
+  run grep -c '^start' "${docker_log}"
+  [ "${output}" = "0" ]
+}
+
 @test "kind check-kind-state refuses to continue when a local terraform lock remains" {
   state_file="${BATS_TEST_TMPDIR}/terraform.tfstate"
   cat >"${state_file}" <<'EOF'
