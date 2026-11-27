@@ -1114,11 +1114,20 @@ start-kind:
 		echo "No kind-local node containers found."; \
 		exit 1; \
 	fi; \
-	if [ "$${SKIP_KIND_HOST_PORT_CHECK:-0}" != "1" ]; then \
-		$(MAKE) check-kind-host-ports STAGE="$(STAGE)"; \
+	running="$$(docker ps --format '{{.Names}}')"; \
+	stopped=""; \
+	for node in $$nodes; do \
+		printf '%s\n' "$$running" | grep -qx "$$node" || stopped="$$stopped $$node"; \
+	done; \
+	if [ -z "$$stopped" ]; then \
+		echo "kind-local node containers are already running."; \
+	else \
+		if [ "$${SKIP_KIND_HOST_PORT_CHECK:-0}" != "1" ]; then \
+			$(MAKE) check-kind-host-ports STAGE="$(STAGE)"; \
+		fi; \
+		echo "Starting kind-local node containers..."; \
+		docker start $$stopped >/dev/null; \
 	fi; \
-	echo "Starting kind-local node containers..."; \
-	docker start $$nodes >/dev/null; \
 	$(MAKE) ensure-node-host-alias; \
 	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)" --execute || true; \
 	echo "Started: $$nodes"; \
